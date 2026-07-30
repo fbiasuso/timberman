@@ -1,12 +1,13 @@
 context: >
-  Betting pool (prode) prototype. Single HTML file with vanilla JS + localStorage.
-  Goal: refactor to React+Vite+TS (frontend) + Fastify+TS+Drizzle+PostgreSQL (backend)
-  with full hexagonal architecture. Multiple users, admin panel, match scheduling,
-  bet placement, points calculation, ranking, PDF tickets.
+  Full-stack betting pool (prode) application with React+Vite+TS frontend and
+  Fastify+TS+Drizzle+PostgreSQL backend using hexagonal architecture. Multiple
+  users with JWT auth, admin panel, match scheduling, bet placement, points
+  calculation, ranking, PDF tickets. 138 tests across all layers.
 
 strict_tdd: false
-testing_runner: null
+testing_runner: vitest
 testing_runner_detected_at: "2026-07-30"
+total_tests: 138
 
 quality:
   linter: null
@@ -28,3 +29,10 @@ phases:
     required: false
   archive:
     required: false
+
+archive:
+  refactor-hexagonal:
+    archived_at: "2026-07-30"
+    status: complete
+    total_tests: 138
+    prs: 5

@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TIMBERMAN - APK PROFESIONAL PREMIUM</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            /* PALETA DE COLORES PREMIUM (ESTILO BET365) */
+            --fondo: #132421;              
+            --tarjeta: #1a2f2b;            
+            --header-bg: #005a42;          
+            --verde-bet: #00a826;          
+            --amarillo-bet: #ffdf1b;       
+            --blanco: #ffffff;             
+            --texto-secundario: #a3b8b5;   
+            --rojo: #ff4d4d;
+            --glow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            
+            /* Preservamos nombres de variables anteriores para no romper referencias del código */
+            --morado: #005a42;             
+            --celeste: #ffdf1b;            
+            --verde: #00a826;              
+            --rojo-fluor: #ff4d4d;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            background: var(--fondo); 
+            color: var(--blanco); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; 
+            overflow-x: hidden;
+            overscroll-behavior-y: contain;
+            font-size: 14px;
+        }
+        
+        /* PANTALLA DE CARGA FLUIDA */
+        #splash-screen {
+            position: fixed; inset: 0; background: var(--fondo); z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        .splash-logo { width: 60%; max-width: 240px; animation: pulse 1.8s infinite ease-in-out; }
+        .spinner { width: 30px; height: 30px; border: 3px solid rgba(255, 223, 27, 0.1); border-top-color: var(--amarillo-bet); border-radius: 50%; animation: spin 0.8s linear infinite; margin-top: 24px; }
+        
+        @keyframes pulse { 0%, 100% { transform: scale(0.96); opacity: 0.8; } 50% { transform: scale(1.02); opacity: 1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .app { 
+            width: 100%; 
+            max-width: 480px; 
+            min-height: 100vh; 
+            margin: auto; 
+            display: flex; 
+            flex-direction: column; 
+            background: var(--fondo);
+            height: 100vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .hidden { display: none !important; }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-card { 
+            opacity: 0; 
+            animation: fadeInUp 0.35s cubic-bezier(0.1, 1, 0.1, 1) forwards;
+            will-change: transform, opacity;
+            contain: content;
+        }
+
+        .progress-bar-container {
+            position: fixed; top: 0; left: 0; right: 0; height: 3px; 
+            background: rgba(255,255,255,0.04); z-index: 1001; width: 100%; max-width: 480px; margin: 0 auto;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 0%; background: var(--amarillo-bet);
+            box-shadow: 0 0 8px var(--amarillo-bet); transition: width 0.3s cubic-bezier(0.1, 1, 0.1, 1);
+        }
+
+        /* SOPORTE PARA MUESCA / NOTCH E ISLA DINÁMICA */
+        .header { 
+            background: var(--header-bg); 
+            padding: 16px;
+            padding-top: calc(16px + env(safe-area-inset-top)); 
+            position: sticky; 
+            top: 0; 
+            z-index: 100; 
+            border-bottom: 2px solid var(--amarillo-bet);
+            box-shadow: var(--glow);
+        }
+        
+        .logo-img { object-fit: contain; display: block; margin: 0 auto; }
+        .logo-login { width: 85%; max-width: 280px; margin-bottom: 30px; }
+        .logo-header-user { height: 22px; width: auto; max-width: 130px; margin: 0; }
+        .logo-header-admin { height: 22px; width: auto; max-width: 130px; margin: 0; }
+        .logo-ticket { width: 75%; max-width: 180px; margin-bottom: 12px; }
+
+        /* INTERFAZ DE PERFIL: Contenedor relativo */
+        .user-profile-bar {
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            margin-bottom: 14px;
+            background: rgba(0,0,0,0.2); 
+            padding: 8px 14px; 
+            border-radius: 50px; 
+            border: 1px solid rgba(255,255,255,0.06);
+            position: relative;
+        }
+        
+        .user-info { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            min-width: 0; 
+            flex: 1; 
+            padding-right: 75px; 
+        }
+        .user-icon {
+            width: 30px; height: 30px; background: var(--amarillo-bet); border-radius: 50%; color: #000;
+            display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+        }
+        
+        /* CORRECCIÓN: Botón Salir posicionado en la esquina derecha exacta sin romper flex */
+        .logout-btn { 
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 77, 77, 0.08); 
+            border: 1px solid rgba(255,77,77,0.4); 
+            color: var(--rojo); 
+            padding: 5px 12px; 
+            border-radius: 20px; 
+            font-size: 0.72rem; 
+            font-weight: 800; 
+            cursor: pointer; 
+            flex-shrink: 0;
+            letter-spacing: 0.3px;
+            transition: all 0.2s;
+            width: auto !important;
+            height: auto !important;
+        }
+        .logout-btn:active { background: rgba(255,77,77,0.2); transform: translateY(-50%) scale(0.95); }
+
+        .stats-bar { background: rgba(0,0,0,0.15); border-radius: 14px; padding: 12px; border: 1px solid #243f3b; text-align: center; }
+        .pozo-monto { font-size: 2rem; font-weight: 900; color: var(--amarillo-bet); text-shadow: 0 0 15px rgba(255,223,27,0.2); }
+        
+        .nav-tabs { display: flex; gap: 6px; margin-top: 14px; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 12px; }
+        .nav-btn { flex: 1; background: var(--tarjeta); border: 1px solid #243f3b; color: var(--blanco); padding: 10px 5px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; touch-action: manipulation; text-transform: uppercase; }
+        .nav-btn.active { background: var(--header-bg); color: var(--amarillo-bet); border-color: var(--amarillo-bet); }
+
+        .filter-container { padding: 10px 14px 4px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .search-input-wrapper { position: relative; width: 100%; }
+        .search-input { background: rgba(0,0,0,0.2); border: 1px solid #243f3b; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; color: white; }
+        .filter-pills { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .pill { background: rgba(0,0,0,0.15); border: 1px solid #243f3b; color: var(--texto-secundario); padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+        .pill.active { background: var(--header-bg); color: var(--amarillo-bet); border-color: var(--amarillo-bet); }
+
+        #cont-prode, #cont-apuestas, #cont-ranking { padding-bottom: 120px; }
+        .card, .partido-card { background: var(--tarjeta); margin: 10px 14px; border-radius: 8px; padding: 14px; border: 1px solid #243f3b; box-shadow: var(--glow); position: relative; }
+        .event-time { font-size: 0.75rem; font-weight: 700; text-align: center; color: var(--texto-secundario); margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .teams { display: grid; grid-template-columns: 1fr 75px 1fr; align-items: center; gap: 5px; }
+        .team { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
+        .team.local { justify-content: flex-end; text-align: right; }
+        .team.visita { justify-content: flex-start; text-align: left; }
+        .team span { font-size: 0.95rem; font-weight: 700; color: var(--blanco); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        /* CORRECCIÓN: Dimensiones explícitas fijas en CSS para evitar que tiemblen las filas al renderizar */
+        .escudo { 
+            width: 36px !important; 
+            height: 36px !important; 
+            object-fit: contain; 
+            display: inline-block; 
+            background: transparent; 
+            border: none;
+            padding: 0; 
+            border-radius: 0;
+            content-visibility: auto;
+        }
+        
+        .vs-center { text-align: center; font-size: 0.75rem; font-weight: 800; color: rgba(255,255,255,0.2); }
+        
+        .marcador-badge { background: #000; border: 1px solid #243f3b; color: var(--amarillo-bet); font-size: 0.9rem; font-weight: 900; padding: 4px 8px; border-radius: 6px; letter-spacing: 1px; text-shadow: 0 0 6px rgba(255,223,27,0.3); }
+
+        .bet-row { display: flex; gap: 8px; margin-top: 14px; justify-content: center; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 12px; }
+        .bet-btn { flex: 1; max-width: 100px; height: 38px; background: rgba(0,0,0,0.2); border: 1px solid #243f3b; color: var(--texto-secundario); border-radius: 6px; font-weight: 800; font-size: 0.9rem; cursor: pointer; transition: all 0.15s cubic-bezier(0.1, 1, 0.1, 1); display: flex; align-items: center; justify-content: center; will-change: transform; touch-action: manipulation; }
+        .bet-btn:active { transform: scale(0.92); }
+        .bet-btn:disabled { opacity: 0.15; filter: grayscale(1); transform: none !important; }
+
+        .sel-L { background: rgba(0, 90, 66, 0.3) !important; color: var(--blanco) !important; border-color: var(--header-bg) !important; box-shadow: inset 0 0 8px rgba(0, 90, 66, 0.5); }
+        .sel-E { background: rgba(255, 223, 27, 0.15) !important; color: var(--amarillo-bet) !important; border-color: var(--amarillo-bet) !important; box-shadow: inset 0 0 8px rgba(255, 223, 27, 0.2); }
+        .sel-V { background: rgba(0, 168, 38, 0.2) !important; color: var(--blanco) !important; border-color: var(--verde-bet) !important; box-shadow: inset 0 0 8px rgba(0, 168, 38, 0.3); }
+        .locked-badge { position: absolute; top: 12px; right: 14px; font-size: 0.85rem; opacity: 0.6; color: var(--amarillo-bet); }
+
+        .pass-wrapper { position: relative; margin-top: 10px; width: 100%; }
+        .pass-toggle { position: absolute; right: 0; top: 0; bottom: 0; width: 46px; background: transparent; border: none; color: var(--texto-secundario); cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; z-index: 5; pointer-events: auto; }
+
+        .footer { position: fixed; bottom: 0; width: 100%; max-width: 480px; padding: 14px 16px 20px 16px; background: linear-gradient(0deg, var(--fondo) 80%, transparent); z-index: 90; }
+        .btn-main, button, .btn { background: var(--verde-bet); color: var(--blanco); border: none; padding: 15px; border-radius: 6px; font-weight: 800; font-size: 0.95rem; width: 100%; cursor: pointer; transition: background 0.2s ease; touch-action: manipulation; text-transform: uppercase; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-main.incomplete { background: #2e4a45; color: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.03); cursor: not-allowed; }
+
+        .grid-backups { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .btn-backup { background: #2e4a45; border: 1px solid #243f3b; color: white; padding: 12px 6px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; text-transform: uppercase; }
+
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        .admin-table th { background: #0f1d1b; color: var(--amarillo-bet); text-align: left; padding: 10px; font-weight: bold; font-size: 12px; text-transform: uppercase; }
+        .admin-table td { padding: 12px 10px; border-bottom: 1px solid #243f3b; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        #ticket-capture { background: white; color: black; padding: 22px; width: 100%; max-width: 290px; border-radius: 4px; font-family: 'Courier New', monospace; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .admin-card-edit, .admin-section { background: var(--tarjeta); margin: 10px 14px; border-radius: 8px; padding: 14px; border: 1px solid #243f3b; }
+        .grid-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .grid-buttons-saldo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        input, select { background: rgba(0,0,0,0.3); border: 1px solid #243f3b; color: white; padding: 12px; border-radius: 6px; width: 100%; font-size: 0.9rem; outline: none; }
+        input:focus, select:focus { border-color: var(--amarillo-bet); }
+        .btn-danger { background: rgba(255, 77, 77, 0.1); border: 1px solid var(--rojo); color: white; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 6px; text-transform: uppercase; }
+        th { padding: 10px; font-size: 12px; text-transform: uppercase; color: var(--amarillo-bet); letter-spacing: 0.5px; background: #0f1d1b; }
+        
+        .ranking-row { border-bottom: 1px solid #243f3b; cursor: pointer; transition: background 0.2s; }
+        .ranking-row:active { background: rgba(255,255,255,0.04); }
+        .desglose-puntos-td { background: rgba(0,0,0,0.25); padding: 0 !important; border-bottom: 1px solid #243f3b; }
+        .desglose-box { padding: 10px 14px; font-size: 0.8rem; color: var(--texto-secundario); display: flex; flex-direction: column; gap: 4px; border-left: 3px solid var(--amarillo-bet); }
+
+        .section-separator-title { font-size: 0.75rem; font-weight: 800; color: var(--texto-secundario); margin: 18px 14px 4px 14px; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .section-separator-title::after { content: ''; flex: 1; height: 1px; background: #243f3b; }
+
+        .btn-delete-history { background: rgba(255,77,77,0.06); border: 1px solid rgba(255,77,77,0.2); color: var(--rojo); font-size: 0.75rem; font-weight: bold; padding: 8px; width: 100%; border-radius: 6px; margin-top: 12px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 4px; touch-action: manipulation; text-transform: uppercase; }
+        .btn-delete-history:active { background: rgba(255,77,77,0.2); }
+
+        .badge-fecha {
+            background: var(--header-bg);
+            color: var(--amarillo-bet);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 12px;
+            border: 1px solid var(--amarillo-bet);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--blanco);
+        }
+        
+        .text-destacado, .puntos-perfil, .monto-saldo {
+            color: var(--amarillo-bet) !important;
+            font-weight: bold;
+        }
+
+        .pass-cell {
+            cursor: pointer;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="splash-screen">
+    <img src="logotipo timberman.png" class="splash-logo" alt="TIMBERMAN">
+    <div class="spinner"></div>
+</div>
+
+<div class="progress-bar-container hidden" id="progreso-flotante-cont"><div class="progress-bar-fill" id="progreso-flotante-fill"></div></div>
+
+<div class="app">
+    <div id="sec-login" style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px; text-align:center;">
+        <img src="logotipo timberman.png" class="logo-img logo-login" alt="TIMBERMAN">
+        
+        <input type="text" id="user-in" placeholder="Nombre de usuario" style="text-align:center; height:52px; margin-top: 10px; text-transform: lowercase;">
+        
+        <div class="pass-wrapper">
+            <input type="password" id="pass-generic" placeholder="Contraseña de acceso" style="text-align:center; height:52px; padding-right:48px;">
+            <div class="pass-toggle" onclick="togglePasswordVisibility('pass-generic')">👁️</div>
+        </div>
+
+        <button class="btn-main" onclick="login()" style="margin-top:24px;">ENTRAR AL SISTEMA</button>
+    </div>
+
+    <div id="sec-jugador" class="hidden">
+        <div class="header">
+            <div class="user-profile-bar">
+                <div class="user-info">
+                    <img src="logotipo timberman.png" class="logo-img logo-header-user" alt="TIMBERMAN">
+                    <div style="width:1px; height:16px; background:rgba(255,255,255,0.1); margin: 0 4px;"></div>
+                    <div class="user-icon" id="user-initial">U</div>
+                    <div style="display:flex; flex-direction:column; min-width:0; flex: 1;">
+                        <span id="display-username" style="font-weight:700; font-size:0.85rem; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; width: 100%;">USUARIO</span>
+                        <span id="txt-saldo" class="monto-saldo" style="font-size:0.75rem;">$0.00</span>
+                    </div>
+                </div>
+                <button class="logout-btn" onclick="logout()">SALIR</button>
+            </div>
+            <div class="stats-bar">
+                <div style="font-size: 10px; color:var(--texto-secundario); font-weight:700; margin-bottom:2px;">POZO ACUMULADO ESTIMADO</div>
+                <div class="pozo-monto" id="txt-pozo">$0</div>
+            </div>
+            <div class="nav-tabs">
+                <button class="nav-btn active" id="btn-tab-prode" onclick="changeTab('prode')">CARTELERA</button>
+                <button class="nav-btn" id="btn-tab-apuestas" onclick="changeTab('apuestas')">MIS TICKETS</button>
+                <button class="nav-btn" id="btn-tab-ranking" onclick="changeTab('ranking')">TOP RANKING</button>
+            </div>
+        </div>
+
+        <div id="cont-prode" class="tab-content">
+            <div class="filter-container">
+                <div class="search-input-wrapper">
+                    <input type="text" id="cartelera-search" class="search-input" placeholder="🔍 Buscar equipo..." oninput="filtrarCartelera()">
+                </div>
+                <div class="filter-pills">
+                    <button class="pill active" id="pill-all" onclick="setFiltroCartelera('all')">Todos</button>
+                    <button class="pill" id="pill-open" onclick="setFiltroCartelera('open')">Pendientes</button>
+                    <button class="pill" id="pill-locked" onclick="setFiltroCartelera('locked')">Cerrados 🔒</button>
+                </div>
+            </div>
+            <div id="lista-partidos-jugador"></div>
+        </div>
+
+        <div id="cont-apuestas" class="tab-content hidden">
+            <div style="padding:14px 14px 4px 14px;">
+                <select id="sel-filtro-fecha-apuestas" onchange="renderApuestas()" style="background:var(--tarjeta); border-color:#243f3b; font-weight:bold; color:white;"></select>
+            </div>
+            <div id="lista-apuestas"></div>
+        </div>
+
+        <div id="cont-ranking" class="tab-content hidden" style="padding: 16px; padding-bottom: 100px;">
+            <table>
+                <thead>
+                    <tr><th style="padding:10px; text-align:left; width:50px;">POS</th><th style="text-align:left;">PLAYER (TOCAR PARA DETALLE)</th><th style="text-align:center; width:60px;">PTS</th></tr>
+                </thead>
+                <tbody id="table-ranking-body"></tbody>
+            </table>
+        </div>
+        <div class="footer" id="footer-jugador"><button class="btn-main" id="btn-pagar-dinamico" onclick="pagar()">PAGAR JUGADA ($1.500)</button></div>
+    </div>
+
+    <div id="sec-admin" class="hidden">
+        <div class="header">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <img src="logotipo timberman.png" class="logo-img logo-header-admin" alt="TIMBERMAN">
+                <h3 style="margin:0; color:var(--amarillo-bet); font-size: 1rem; font-weight: 800;">MODO ADMIN</h3>
+            </div>
+            <div class="nav-tabs">
+                <button class="nav-btn active" id="btn-adm-1" onclick="changeTabAdmin('1')">PARTIDOS</button>
+                <button class="nav-btn" id="btn-adm-2" onclick="changeTabAdmin('2')">RESULTADOS</button>
+                <button class="nav-btn" id="btn-adm-3" onclick="changeTabAdmin('3')">SISTEMA</button>
+            </div>
+        </div>
+        
+        <div id="cont-adm-1" class="adm-section" style="padding:10px; padding-bottom:80px;">
+            <div id="editor-eventos-lista"></div>
+            <div style="padding:0 14px;"><button class="btn-main" onclick="guardarAdmin()">GUARDAR CAMBIOS</button></div>
+        </div>
+        
+        <div id="cont-adm-2" class="adm-section hidden" style="padding:10px; padding-bottom:80px;">
+            <div style="padding: 10px 14px 4px 14px;">
+                <button class="btn-main" onclick="ejecutarRecalculoMasivoManual()" style="background:var(--verde-bet); box-shadow: 0 0 10px rgba(0,168,38,0.4);">🔄 PROCESAR Y CERRAR PUNTOS DE LA FECHA</button>
+            </div>
+            <div id="resultados-lista-admin"></div>
+        </div>
+        
+        <div id="cont-adm-3" class="adm-section hidden" style="padding:10px; padding-bottom: 80px;">
+            
+            <div class="card" style="border: 1px solid var(--verde-bet);">
+                <h3 style="margin-top:0; color:var(--amarillo-bet);">Movimientos de Caja / Saldo</h3>
+                <p style="font-size:0.75rem; color:var(--texto-secundario); margin:0 0 10px 0;">Seleccioná el jugador e ingresá el monto para sumar o corregir restando dinero.</p>
+                <select id="sel-u-admin"></select>
+                <input type="number" id="monto-admin" placeholder="Monto $" style="margin-top:8px;">
+                <div class="grid-buttons-saldo">
+                    <button class="btn-main" onclick="modificarSaldoAdmin('cargar')" style="padding:12px; font-size:0.85rem;">➕ CARGAR SALDO</button>
+                    <button class="btn-danger" onclick="modificarSaldoAdmin('descargar')" style="margin-top:0; padding:12px; font-size:0.85rem;">➖ DESCARGAR SALDO</button>
+                </div>
+            </div>
+
+            <div class="card" style="border: 1px solid var(--header-bg);">
+                <h3 style="margin-top:0; color:var(--amarillo-bet);">Registrar Nuevo Player</h3>
+                <input type="text" id="new-u-name" placeholder="Nombre de usuario..." style="text-transform:lowercase;">
+                <input type="text" id="new-u-pass" placeholder="Asignar Contraseña inicial..." style="margin-top:8px;">
+                <button class="btn-main" onclick="crearU()" style="margin-top:10px; padding:12px;">REGISTRAR CON CLAVE</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-top:0; font-size:1rem; color:var(--amarillo-bet);">Boletas Recibidas (Fecha Activa)</h3>
+                <div style="font-size:1.3rem; font-weight:800; color:white; margin: 5px 0;" id="txt-total-boletas-admin">Total: 0 boletas</div>
+                <div id="lista-boletas-usuarios-admin" style="max-height:200px; overflow-y:auto; font-size:0.85rem; color:white; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; display:flex; flex-direction:column; gap:6px;"></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-top:0; font-size:1rem; color:var(--amarillo-bet);">Visor General de Usuarios</h3>
+                <p style="font-size:0.7rem; color:var(--texto-secundario); margin:0 0 6px 0;">* Tocá sobre las contraseñas ocultas para visualizarlas temporalmente.</p>
+                <div style="max-height: 180px; overflow-y: auto;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr><th>PLAYER</th><th>CLAVE</th><th>SALDO</th><th>PTS</th></tr>
+                        </thead>
+                        <tbody id="tabla-usuarios-admin-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Gestión de Fechas Torneo</h3>
+                <p style="font-size: 0.8rem; color: #888; margin:4px 0;">Activa actualmente: <b id="current-fecha-display">1</b></p>
+                <div class="grid-inputs"><input type="number" id="input-nueva-fecha" placeholder="N°"><button class="nav-btn" onclick="crearNuevaFecha()" style="background:var(--verde-bet); color:white;">CREAR</button></div>
+                <select id="sel-cambiar-fecha-activa" style="margin-top:6px;" onchange="setFechaActiva(this.value)"></select>
+                <button class="btn-danger" onclick="eliminarFecha()">ELIMINAR FECHA SELECCIONADA</button>
+            </div>
+
+            <div class="card" style="border: 1px solid rgba(255, 223, 27, 0.25);">
+                <h3 style="margin-top:0; font-size:1rem; color:var(--amarillo-bet); margin-bottom: 4px;">Seguridad y Respaldos (DB)</h3>
+                <p style="font-size:0.75rem; color:var(--texto-secundario); margin:0 0 10px 0;">Guardá copias o migrá el sistema entero a otro celular sin perder datos ni claves.</p>
+                <div class="grid-backups">
+                    <button class="btn-backup" onclick="exportarBaseDeDatos()">📥 EXPORTAR JSON</button>
+                    <button class="btn-backup" onclick="document.getElementById('input-import-db').click()">📤 IMPORTAR JSON</button>
+                </div>
+                <input type="file" id="input-import-db" class="hidden" accept=".json" onchange="importarBaseDeDatos(this)">
+            </div>
+
+            <div class="card" style="border: 1px dashed rgba(255,77,77,0.3);">
+                <h3 style="margin-top:0; color:var(--rojo);">Zona de Peligro (Herramientas Reset)</h3>
+                <button class="btn-danger" style="margin-top:0;" onclick="eliminarUsuario()">ELIMINAR USUARIO SELECCIONADO ARRIBA</button>
+                <button class="btn-danger" onclick="resetPuntosGeneral()">REINICIAR PUNTOS A 0 (TODO EL TORNEO)</button>
+                <button class="btn-danger" onclick="resetSaldosGeneral()">REINICIAR SALDOS A 0 (TODO EL TORNEO)</button>
+            </div>
+        </div>
+        <div style="padding:14px;"><button class="btn-danger" onclick="logout()">CERRAR SESIÓN ADMIN</button></div>
+    </div>
+
+    <div id="overlay-visor-admin" class="overlay hidden">
+        <div style="background:var(--tarjeta); color:white; padding:18px; width:100%; max-width:320px; border-radius:14px; border:1px solid #243f3b; max-height:80vh; overflow-y:auto;">
+            <h3 style="margin-top:0; color:var(--amarillo-bet); font-size:1.1rem; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:8px;" id="visor-admin-titulo">DETALLE JUGADOR</h3>
+            <div id="visor-admin-contenido" style="font-size:0.85rem; display:flex; flex-direction:column; gap:10px; margin-top:12px;"></div>
+            <button class="btn-main" onclick="cerrarModalPulido('overlay-visor-admin')" style="margin-top:18px; background:#2e4a45;">CERRAR VENTANA</button>
+        </div>
+    </div>
+
+    <div id="overlay-ticket" class="overlay hidden">
+        <div id="ticket-capture">
+            <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:12px; margin-bottom:12px;">
+                <img src="logotipo timberman.png" class="logo-img logo-ticket" style="filter: brightness(0); opacity:0.8;" alt="TIMBERMAN">
+                <div style="font-size:10px; font-weight:bold; margin-top:4px;">COMPROBANTE OFICIAL DE JUGADA</div>
+                <div style="font-size:9px; color:#555;" id="ticket-date-time">00/00/0000 00:00</div>
+            </div>
+            <div style="font-size:11px; margin-bottom:10px;">
+                <div><b>ID BOLETA:</b> <span id="ticket-id" style="font-size:10px;">000000</span></div>
+                <div><b>PLAYER:</b> <span id="ticket-user" style="text-transform:uppercase; font-weight:bold;">---</span></div>
+                <div><b>FECHA TORNEO:</b> N° <span id="ticket-fecha-torneo">0</span></div>
+            </div>
+            <div style="border-bottom:1px dashed #000; padding-bottom:4px; margin-bottom:8px; font-size:10px; font-weight:bold; display:grid; grid-template-columns: 1fr 30px; text-align:left;">
+                <span>PARTIDO</span>
+                <span style="text-align:center;">PRED</span>
+            </div>
+            <div id="ticket-partidos-list" style="font-size:10px; display:flex; flex-direction:column; gap:5px; border-bottom:1px dashed #000; padding-bottom:8px; margin-bottom:8px;"></div>
+            <div style="text-align:center; font-size:11px; font-weight:bold; margin-top:4px;">
+                <div>COSTO DE JUGADA: $1.500</div>
+                <div style="font-size:9px; font-weight:normal; color:#444; margin-top:10px;">¡Gracias por confiar en TIMBERMAN!</div>
+            </div>
+        </div>
+        <div style="width:100%; max-width:290px; margin-top:14px; display:flex; flex-direction:column; gap:8px;">
+            <button class="btn-main" onclick="descargarTicketPDF()" style="box-shadow: 0 4px 12px rgba(0,168,38,0.3);">📥 DESCARGAR COMPROBANTE PDF</button>
+            <button class="btn-main" onclick="cerrarTicketYVerApuestas()" style="background:#2e4a45;">ENTENDIDO / VER HISTORIAL</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DEFAULT_ESCUDO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'><circle cx='18' cy='18' r='18' fill='%231a2f2b'/><text x='18' y='22' font-family='sans-serif' font-size='11' font-weight='bold' fill='%23ffffff' text-anchor='middle' dominant-baseline='middle'>TMB</text></svg>";
+    const DB_NAME = "SPACE_PRODE_V13_PASSPORDS";
+    
+    let db = JSON.parse(localStorage.getItem(DB_NAME)) || {
+        config: { fechaActual: 1 },
+        fechas: {
+            "1": Array.from({length: 10}, (_, i) => ({
+                id: Date.now() + "_" + i + "_" + Math.floor(Math.random() * 1000),
+                l: `Equipo L`,
+                v: `Equipo V`,
+                imgL: DEFAULT_ESCUDO,
+                imgV: DEFAULT_ESCUDO,
+                fecha: '2026-05-15',
+                hora: '20:00',
+                oficial: '-',
+                marcador: ''
+            }))
+        },
+        usuarios: { "test": {saldo: 15000, jugadas:[], puntos:0, pass: "123"} },
+        pozo: 0
+    };
+
+    let userActual = "";
+    let votosTemp = {};
+    let filtroCarteleraEstado = 'all';
+
+    function sync() {
+        localStorage.setItem(DB_NAME, JSON.stringify(db));
+    }
+
+    window.addEventListener('popstate', function(event) {
+        const modalTicket = document.getElementById('overlay-ticket');
+        const modalVisor = document.getElementById('overlay-visor-admin');
+        let modalCerrado = false;
+        if (modalTicket && !modalTicket.classList.contains('hidden')) {
+            modalTicket.classList.add('hidden');
+            modalCerrado = true;
+        }
+        if (modalVisor && !modalVisor.classList.contains('hidden')) {
+            modalVisor.classList.add('hidden');
+            modalCerrado = true;
+        }
+        if (modalCerrado) window.history.pushState({ modalAbierto: true }, "");
+    });
+
+    function abrirModalPulido(idModal) {
+        document.getElementById(idModal).classList.remove('hidden');
+        window.history.pushState({ modalAbierto: true }, "");
+    }
+
+    function cerrarModalPulido(idModal) {
+        document.getElementById(idModal).classList.add('hidden');
+    }
+
+    /* LÓGICA DE INICIALIZACIÓN 100% FIEL A TU VERSIÓN ORIGINAL (No cambia tus funciones ni accesos) */
+    window.addEventListener('DOMContentLoaded', () => {
+        window.history.pushState({ modalAbierto: false }, "");
+        setTimeout(() => {
+            const splash = document.getElementById('splash-screen');
+            splash.style.opacity = '0';
+            setTimeout(() => splash.classList.add('hidden'), 500);
+        }, 2200);
+
+        const savedUser = localStorage.getItem("TIMBERMAN_ACTIVE_SESSION");
+        if(savedUser && db.usuarios[savedUser]) {
+            userActual = savedUser;
+            document.getElementById('sec-login').classList.add('hidden');
+            document.getElementById('sec-jugador').classList.remove('hidden');
+            renderJugador();
+        }
+        calcularPozoEstimado();
+    });
+
+    function calcularPozoEstimado() {
+        let count = 0;
+        const fAct = db.config.fechaActual;
+        for(let u in db.usuarios) {
+            if(u !== 'admin') {
+                const jf = db.usuarios[u].jugadas.filter(j => j.fechaTorneo == fAct);
+                count += jf.length;
+            }
+        }
+        db.pozo = count * 1500;
+        document.getElementById('txt-pozo').innerText = `$${db.pozo.toLocaleString()}`;
+    }
+
+    function login() {
+        const u = document.getElementById('user-in').value.trim().toLowerCase();
+        const p = document.getElementById('pass-generic').value.trim();
+        
+        if(!u || !p) {
+            alert("Completá todos los datos.");
+            return;
+        }
+
+        if(u === 'admin' && p === 'admin77') {
+            userActual = 'admin';
+            document.getElementById('sec-login').classList.add('hidden');
+            document.getElementById('sec-admin').classList.remove('hidden');
+            inicializarFiltrosHistorial();
+            renderAdmin();
+            return;
+        }
+
+        if(db.usuarios[u] && db.usuarios[u].pass === p) {
+            userActual = u;
+            localStorage.setItem("TIMBERMAN_ACTIVE_SESSION", u);
+            document.getElementById('sec-login').classList.add('hidden');
+            document.getElementById('sec-jugador').classList.remove('hidden');
+            votosTemp = {};
+            changeTab('prode');
+            return;
+        }
+
+        alert("Usuario o Contraseña incorrectos.");
+    }
+
+    function logout() {
+        userActual = "";
+        localStorage.removeItem("TIMBERMAN_ACTIVE_SESSION");
+        document.getElementById('sec-jugador').classList.add('hidden');
+        document.getElementById('sec-admin').classList.add('hidden');
+        document.getElementById('sec-login').classList.remove('hidden');
+        document.getElementById('user-in').value = "";
+        document.getElementById('pass-generic').value = "";
+    }
+
+    function togglePasswordVisibility(id) {
+        const input = document.getElementById(id);
+        if(input.type === 'password') input.type = 'text';
+        else input.type = 'password';
+    }
+
+    function changeTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.querySelectorAll('.nav-tabs .nav-btn').forEach(b => b.classList.remove('active'));
+        
+        if(tab === 'prode') {
+            document.getElementById('cont-prode').classList.remove('hidden');
+            document.getElementById('btn-tab-prode').classList.add('active');
+            renderJugador();
+        } else if(tab === 'apuestas') {
+            document.getElementById('cont-apuestas').classList.remove('hidden');
+            document.getElementById('btn-tab-apuestas').classList.add('active');
+            inicializerFiltroFechasApuestas();
+            renderApuestas();
+        } else if(tab === 'ranking') {
+            document.getElementById('cont-ranking').classList.remove('hidden');
+            document.getElementById('btn-tab-ranking').classList.add('active');
+            renderRanking();
+        }
+    }
+
+    function changeTabAdmin(num) {
+        document.querySelectorAll('.adm-section').forEach(c => c.classList.add('hidden'));
+        document.querySelectorAll('.nav-tabs .nav-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`cont-adm-${num}`).classList.remove('hidden');
+        document.getElementById(`btn-adm-${num}`).classList.add('active');
+        renderAdmin();
+    }
+
+    function inicializarFiltrosHistorial() {
+        const sel = document.getElementById('sel-cambiar-fecha-activa');
+        sel.innerHTML = "";
+        Object.keys(db.fechas).sort((a,b)=>a-b).forEach(f => {
+            sel.innerHTML += `<option value="${f}">FECHA TORNEO ${f}</option>`;
+        });
+        sel.value = db.config.fechaActual;
+        document.getElementById('current-fecha-display').innerText = db.config.fechaActual;
+    }
+
+    function inicializerFiltroFechasApuestas() {
+        const sel = document.getElementById('sel-filtro-fecha-apuestas');
+        const prevVal = sel.value;
+        sel.innerHTML = "";
+        Object.keys(db.fechas).sort((a,b)=>a-b).forEach(f => {
+            sel.innerHTML += `<option value="${f}">HISTORIAL: FECHA ${f}</option>`;
+        });
+        if(db.fechas[prevVal]) sel.value = prevVal;
+        else sel.value = db.config.fechaActual;
+    }
+
+    function setFechaActiva(f) {
+        db.config.fechaActual = parseInt(f);
+        sync();
+        document.getElementById('current-fecha-display').innerText = f;
+        calcularPozoEstimado();
+        renderAdmin();
+    }
+
+    function crearNuevaFecha() {
+        const n = document.getElementById('input-nueva-fecha').value.trim();
+        if(!n) return;
+        if(db.fechas[n]) {
+            alert("La fecha ya existe.");
+            return;
+        }
+        db.fechas[n] = Array.from({length: 10}, (_, i) => ({
+            id: Date.now() + "_" + i + "_" + Math.floor(Math.random() * 10000),
+            l: `Equipo L`,
+            v: `Equipo V`,
+            imgL: DEFAULT_ESCUDO,
+            imgV: DEFAULT_ESCUDO,
+            fecha: '',
+            hora: '',
+            oficial: '-',
+            marcador: ''
+        }));
+        db.config.fechaActual = parseInt(n);
+        sync();
+        inicializarFiltrosHistorial();
+        document.getElementById('input-nueva-fecha').value = "";
+        renderAdmin();
+        alert(`F${n} Creada y seleccionada como Activa.`);
+    }
+
+    function renderJugador() {
+        if(!userActual || userActual === 'admin') return;
+        calcularPozoEstimado();
+        
+        document.getElementById('display-username').innerText = userActual;
+        document.getElementById('user-initial').innerText = userActual.charAt(0).toUpperCase();
+        document.getElementById('txt-saldo').innerText = `$${db.usuarios[userActual].saldo.toLocaleString()}`;
+        
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        const lista = document.getElementById('lista-partidos-jugador');
+        
+        lista.innerHTML = `<div class="section-separator-title">FECHA ACTIVA N° ${fAct}</div>`;
+        
+        if(partidos.length === 0) {
+            lista.innerHTML += `<div style="text-align:center; padding:40px; color:var(--texto-secundario);">No hay partidos cargados en esta fecha.</div>`;
+            actualizarBotonPagarIncompleto(0);
+            return;
+        }
+
+        partidos.forEach(p => {
+            const vTemp = votosTemp[p.id] || "";
+            const isExp = p.oficial !== '-' || isExpired(p.fecha, p.hora);
+            
+            let htmlPartido = `
+                <div class="card animate-card" style="animation-delay: 50ms;">
+                    <div class="event-time">
+                        <span>📅 ${p.fecha || 'Sin fecha'} - ⏰ ${p.hora || 'S/H'} hs</span>
+                    </div>
+                    ${isExp ? `<div class="locked-badge">🔒 CERRADO</div>` : ''}
+                    <div class="teams">
+                        <div class="team local">
+                            <span>${p.l}</span>
+                            <img src="${p.imgL || DEFAULT_ESCUDO}" class="escudo" loading="lazy" width="36" height="36" alt="L">
+                        </div>
+                        <div class="vs-center">
+                            ${p.marcador ? `<span class="marcador-badge">${p.marcador}</span>` : 'VS'}
+                        </div>
+                        <div class="team visita">
+                            <img src="${p.imgV || DEFAULT_ESCUDO}" class="escudo" loading="lazy" width="36" height="36" alt="V">
+                            <span>${p.v}</span>
+                        </div>
+                    </div>
+                    <div class="bet-row">
+                        <button class="bet-btn ${vTemp==='L'?'sel-L':''}" ${isExp?'disabled':''} onclick="votar('${p.id}', 'L')">L</button>
+                        <button class="bet-btn ${vTemp==='E'?'sel-E':''}" ${isExp?'disabled':''} onclick="votar('${p.id}', 'E')">E</button>
+                        <button class="bet-btn ${vTemp==='V'?'sel-V':''}" ${isExp?'disabled':''} onclick="votar('${p.id}', 'V')">V</button>
+                    </div>
+                </div>
+            `;
+            lista.innerHTML += htmlPartido;
+        });
+
+        actualizarBotonPagarIncompleto(partidos.length);
+        const query = document.getElementById('cartelera-search').value.toLowerCase().trim();
+        aplicarFiltrosCarteleraCompleto(query, filtroCarteleraEstado);
+    }
+
+    function actualizarBotonPagarIncompleto(totalPartidos) {
+        let totalVotosFechaActiva = 0;
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        partidos.forEach(p => {
+            if(votosTemp[p.id] && votosTemp[p.id] !== "") totalVotosFechaActiva++;
+        });
+        
+        const btnPag = document.getElementById('btn-pagar-dinamico');
+        if(totalVotosFechaActiva < partidos.length) {
+            btnPag.classList.add('incomplete');
+            btnPag.innerText = `FALTAN SELECCIONAR ${partidos.length - totalVotosFechaActiva} PARTIDOS`;
+        } else {
+            btnPag.classList.remove('incomplete');
+            btnPag.innerText = `PAGAR JUGADA ($1.500)`;
+        }
+    }
+
+    function votar(pid, opcion) {
+        if(votosTemp[pid] === opcion) votosTemp[pid] = "";
+        else votosTemp[pid] = opcion;
+        renderJugador();
+    }
+
+    function filtrarCartelera() {
+        const query = document.getElementById('cartelera-search').value.toLowerCase().trim();
+        aplicarFiltrosCarteleraCompleto(query, filtroCarteleraEstado);
+    }
+
+    function setFiltroCartelera(estado) {
+        filtroCarteleraEstado = estado;
+        document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+        document.getElementById(`pill-${estado}`).classList.add('active');
+        const query = document.getElementById('cartelera-search').value.toLowerCase().trim();
+        aplicarFiltrosCarteleraCompleto(query, estado);
+    }
+
+    function aplicarFiltrosCarteleraCompleto(query, estado) {
+        const cards = document.querySelectorAll('#lista-partidos-jugador .card');
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        cards.forEach((card, idx) => {
+            const p = partidos[idx];
+            if(!p) return;
+            const matchQuery = p.l.toLowerCase().includes(query) || p.v.toLowerCase().includes(query);
+            const exp = p.oficial !== '-' || isExpired(p.fecha, p.hora);
+            let matchEstado = true;
+            if(estado === 'open') matchEstado = !exp;
+            if(estado === 'locked') matchEstado = exp;
+            
+            if(matchQuery && matchEstado) card.classList.remove('hidden');
+            else card.classList.add('hidden');
+        });
+    }
+
+    function pagar() {
+        const btnPag = document.getElementById('btn-pagar-dinamico');
+        if(btnPag.classList.contains('incomplete')) return;
+        
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        
+        if(db.usuarios[userActual].saldo < 1500) {
+            alert("❌ Saldo insuficiente. Cargá dinero con el Administrator.");
+            return;
+        }
+
+        if(!confirm("¿Confirmás que querés pagar $1.500 por esta boleta?")) return;
+
+        db.usuarios[userActual].saldo -= 1500;
+        
+        const nuevaJugada = {
+            idBoleta: "TMB_" + Date.now() + "_" + Math.floor(Math.random()*100),
+            fechaTorneo: fAct,
+            timestamp: new Date().toLocaleString(),
+            predicciones: { ...votosTemp }
+        };
+
+        db.usuarios[userActual].jugadas.unshift(nuevaJugada);
+        sync();
+        
+        votosTemp = {};
+        renderJugador();
+        
+        document.getElementById('ticket-date-time').innerText = nuevaJugada.timestamp;
+        document.getElementById('ticket-id').innerText = nuevaJugada.idBoleta;
+        document.getElementById('ticket-user').innerText = userActual;
+        document.getElementById('ticket-fecha-torneo').innerText = fAct;
+        
+        const tList = document.getElementById('ticket-partidos-list');
+        tList.innerHTML = "";
+        partidos.forEach(p => {
+            const pred = nuevaJugada.predicciones[p.id] || '-';
+            tList.innerHTML += `
+                <div style="display:grid; grid-template-columns: 1fr 30px; align-items:center;">
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">• ${p.l} vs ${p.v}</span>
+                    <span style="text-align:center; font-weight:bold; background:#000; color:#ffdf1b; border-radius:3px; font-size:9px; padding:1px 0;">${pred}</span>
+                </div>
+            `;
+        });
+        
+        abrirModalPulido('overlay-ticket');
+    }
+
+    function descargarTicketPDF() {
+        const fill = document.getElementById('progreso-flotante-fill');
+        const cont = document.getElementById('progreso-flotante-cont');
+        cont.classList.remove('hidden');
+        fill.style.width = '20%';
+        
+        setTimeout(() => {
+            fill.style.width = '60%';
+            const target = document.getElementById('ticket-capture');
+            html2canvas(target, { scale: 2, useCORS: true }).then(canvas => {
+                fill.style.width = '90%';
+                const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', [80, 160]);
+                pdf.addImage(imgData, 'JPEG', 0, 0, 80, 160);
+                pdf.save(`Ticket_Timberman_${Date.now()}.pdf`);
+                fill.style.width = '100%';
+                setTimeout(() => {
+                    cont.classList.add('hidden');
+                    fill.style.width = '0%';
+                }, 300);
+            });
+        }, 400);
+    }
+
+    function cerrarTicketYVerApuestas() {
+        cerrarModalPulido('overlay-ticket');
+        changeTab('apuestas');
+    }
+
+    function renderApuestas() {
+        const targetFecha = document.getElementById('sel-filtro-fecha-apuestas').value;
+        const lista = document.getElementById('lista-apuestas');
+        lista.innerHTML = "";
+        
+        if(!userActual || !db.usuarios[userActual]) return;
+        
+        const jugadasFiltradas = db.usuarios[userActual].jugadas.filter(j => j.fechaTorneo == targetFecha);
+        
+        if(jugadasFiltradas.length === 0) {
+            lista.innerHTML = `<div style="text-align:center; padding:40px 20px; color:var(--texto-secundario); font-size:0.9rem;">No tenés boletas registradas por la Fecha ${targetFecha}.</div>`;
+            return;
+        }
+
+        jugadasFiltradas.forEach((j, idx) => {
+            const partidos = db.fechas[j.fechaTorneo] || [];
+            let aciertosBoleta = 0;
+            let totalValidados = 0;
+            
+            let htmlDetalle = `<div style="display:flex; flex-direction:column; gap:6px; margin-top:10px; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; border:1px solid #243f3b;">`;
+            
+            partidos.forEach(p => {
+                const pred = j.predicciones[p.id] || '⚙';
+                let colorPred = 'white';
+                let checkSymbol = '';
+                
+                if(p.oficial !== '-') {
+                    totalValidados++;
+                    if(pred === p.oficial) {
+                        aciertosBoleta++;
+                        colorPred = 'var(--verde-bet)';
+                        checkSymbol = ' ✓';
+                    } else {
+                        colorPred = 'var(--rojo)';
+                        checkSymbol = ' ❌';
+                    }
+                }
+                
+                htmlDetalle += `
+                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; border-bottom:1px solid rgba(255,255,255,0.02); padding-bottom:3px;">
+                        <span style="color:var(--texto-secundario); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:230px;">• ${p.l} vs ${p.v} ${p.marcador?`[${p.marcador}]`:''}</span>
+                        <span style="font-weight:bold; color:${colorPred};">[ ${pred} ]${checkSymbol}</span>
+                    </div>
+                `;
+            });
+            
+            htmlDetalle += `</div>`;
+            
+            let resumenEstado = `<span style="color:var(--amarillo-bet);">⏳ Pendiente de Cierre</span>`;
+            if(partidos.length > 0 && totalValidados === partidos.length) {
+                resumenEstado = `<span style="color:var(--verde-bet); font-weight:900;">🎯 Finalizada: ${aciertosBoleta} Aciertos</span>`;
+            } else if (totalValidados > 0) {
+                resumenEstado = `<span style="color:var(--amarillo-bet);">⚡ En Curso: ${aciertosBoleta} aciertos parciales</span>`;
+            }
+
+            lista.innerHTML += `
+                <div class="card" style="margin-top:10px;">
+                    <div style="font-size:0.75rem; color:var(--texto-secundario); font-weight:bold; display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px; margin-bottom:6px;">
+                        <span>🎫 BOLETA #${jugadasFiltradas.length - idx}</span>
+                        <span>📅 ${j.timestamp.split(' ')[0]}</span>
+                    </div>
+                    <div style="font-size:0.85rem; margin-top:4px;"><b>ID:</b> <span style="font-family:monospace; font-size:0.75rem;">${j.idBoleta}</span></div>
+                    <div style="font-size:0.85rem; margin-top:2px;"><b>Estado:</b> ${resumenEstado}</div>
+                    ${htmlDetalle}
+                </div>
+            `;
+        });
+    }
+
+    function renderRanking() {
+        const body = document.getElementById('table-ranking-body');
+        body.innerHTML = "";
+        
+        let lista = [];
+        for(let u in db.usuarios) {
+            if(u !== 'admin') {
+                lista.push({ name: u, puntos: db.usuarios[u].puntos || 0 });
+            }
+        }
+
+        lista.sort((a,b) => b.puntos - a.puntos);
+
+        if(lista.length === 0) {
+            body.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.5;">No hay usuarios registrados.</td></tr>`;
+            return;
+        }
+
+        lista.forEach((item, index) => {
+            let medalla = index + 1;
+            if(index === 0) medalla = "🥇";
+            if(index === 1) medalla = "🥈";
+            if(index === 2) medalla = "🥉";
+            
+            body.innerHTML += `
+                <tr class="ranking-row" onclick="toggleDesgloseRanking('${item.name}')">
+                    <td style="padding:14px 10px; font-weight:bold; color:var(--amarillo-bet); text-align:left;">${medalla}</td>
+                    <td style="font-weight:700; text-transform:uppercase; color:white;">${item.name}</td>
+                    <td style="text-align:center; font-weight:900; color:var(--verde-bet); font-size:1rem;">${item.puntos}</td>
+                </tr>
+                <tr id="desglose-${item.name}" class="hidden">
+                    <td colspan="3" class="desglose-puntos-td">
+                        <div class="desglose-box" id="box-inside-${item.name}">
+                            Cargando desglose...
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function toggleDesgloseRanking(username) {
+        const el = document.getElementById(`desglose-${username}`);
+        if(!el.classList.contains('hidden')) {
+            el.classList.add('hidden');
+            return;
+        }
+        
+        document.querySelectorAll('[id^="desglose-"]').forEach(r => r.classList.add('hidden'));
+        el.classList.remove('hidden');
+        
+        const inside = document.getElementById(`box-inside-${username}`);
+        inside.innerHTML = `<b>HISTORIAL DE LOGROS DE ${username.toUpperCase()}:</b><br>`;
+        
+        const uData = db.usuarios[username];
+        if(!uData || !uData.jugadas || uData.jugadas.length === 0) {
+            inside.innerHTML += `<span style="opacity:0.5;">No tiene boletas procesadas en el torneo.</span>`;
+            return;
+        }
+
+        let cacheFechasCalculadas = {};
+        uData.jugadas.forEach(j => {
+            if(!cacheFechasCalculadas[j.idBoleta]) {
+                let aciertos = 0;
+                const partidos = db.fechas[j.fechaTorneo] || [];
+                partidos.forEach(p => {
+                    if(p.oficial !== '-' && j.predicciones[p.id] === p.oficial) aciertos++;
+                });
+                cacheFechasCalculadas[j.idBoleta] = { fecha: j.fechaTorneo, aciertos };
+            }
+        });
+
+        let mapFechasPuntos = {};
+        Object.values(cacheFechasCalculadas).forEach(obj => {
+            if(!mapFechasPuntos[obj.fecha]) mapFechasPuntos[obj.fecha] = 0;
+            if(obj.aciertos > mapFechasPuntos[obj.fecha]) {
+                mapFechasPuntos[obj.fecha] = obj.aciertos;
+            }
+        });
+
+        Object.keys(mapFechasPuntos).sort((a,b)=>a-b).forEach(f => {
+            inside.innerHTML += `<div style="display:flex; justify-content:space-between; margin-top:2px; border-bottom:1px solid rgba(255,255,255,0.02);"><span>• Mejor boleta Fecha Torneo N° ${f}:</span> <b style="color:var(--amarillo-bet);">${mapFechasPuntos[f]} pts</b></div>`;
+        });
+    }
+
+    function isExpired(fStr, hStr) {
+        if(!fStr || !hStr) return false;
+        try {
+            const now = new Date();
+            const target = new Date(`${fStr}T${hStr}:00`);
+            return now > target;
+        } catch(e) { return false; }
+    }
+
+    function renderAdmin() {
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        
+        const listEd = document.getElementById('editor-eventos-lista');
+        listEd.innerHTML = `<div class="badge-fecha" style="margin:10px 14px; display:inline-block;">CONFIGURAR PARTIDOS: FECHA TORNEO ${fAct}</div>`;
+        
+        partidos.forEach((p, idx) => {
+            listEd.innerHTML += `
+                <div class="admin-card-edit">
+                    <div style="font-weight:bold; font-size:12px; color:var(--amarillo-bet); margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;">EVENTO #${idx+1}</div>
+                    <div class="grid-inputs">
+                        <input type="text" id="ed-l-${p.id}" value="${p.l}" placeholder="Local">
+                        <input type="text" id="ed-v-${p.id}" value="${p.v}" placeholder="Visitante">
+                    </div>
+                    <div class="grid-inputs">
+                        <input type="text" id="ed-imgl-${p.id}" value="${p.imgL||''}" placeholder="URL Escudo Local">
+                        <input type="text" id="ed-imgv-${p.id}" value="${p.imgV||''}" placeholder="URL Escudo Visita">
+                    </div>
+                    <div class="grid-inputs">
+                        <input type="date" id="ed-f-${p.id}" value="${p.fecha||''}">
+                        <input type="time" id="ed-h-${p.id}" value="${p.hora||''}">
+                    </div>
+                </div>
+            `;
+        });
+
+        const listRes = document.getElementById('resultados-lista-admin');
+        listRes.innerHTML = `<div class="badge-fecha" style="margin:10px 14px; display:inline-block;">CARGA DE MARCADORES: FECHA ${fAct}</div>`;
+        
+        if(partidos.length === 0) {
+            listRes.innerHTML += `<div style="text-align:center; padding:30px; opacity:0.5;">No hay partidos cargados.</div>`;
+        }
+
+        partidos.forEach(p => {
+            listRes.innerHTML += `
+                <div class="admin-card-edit" style="border-left: 3px solid var(--amarillo-bet);">
+                    <div style="font-weight:bold; font-size:13px; margin-bottom:8px;">
+                        <span>${p.l} vs ${p.v}</span>
+                        <span style="color:var(--amarillo-bet);">ACTUAL: [ ${p.oficial} ]</span>
+                    </div>
+                    <div class="grid-inputs">
+                        <input type="text" id="adm-marcador-${p.id}" value="${p.marcador || ''}" placeholder="Ej: 2 - 1" style="text-align:center;">
+                        <select id="adm-res-${p.id}" style="font-weight:bold; color:var(--amarillo-bet);">
+                            <option value="-" ${p.oficial==='-'?'selected':''}>PENDIENTE / ABIERTO</option>
+                            <option value="L" ${p.oficial==='L'?'selected':''}>GANÓ LOCAL (L)</option>
+                            <option value="E" ${p.oficial==='E'?'selected':''}>EMPATE (E)</option>
+                            <option value="V" ${p.oficial==='V'?'selected':''}>GANÓ VISITA (V)</option>
+                        </select>
+                    </div>
+                    <button class="btn-main" onclick="guardarResultadoUnico('${p.id}')" style="background:var(--header-bg); color:white; padding:8px; font-size:0.75rem; margin-top:4px; height:34px;">GUARDAR MARCADOR PARCIAL</button>
+                </div>
+            `;
+        });
+
+        const comboU = document.getElementById('sel-u-admin');
+        const prevSel = comboU.value;
+        comboU.innerHTML = "";
+        for(let u in db.usuarios) {
+            if(u !== 'admin') comboU.innerHTML += `<option value="${u}">${u.toUpperCase()}</option>`;
+        }
+        if(db.usuarios[prevSel]) comboU.value = prevSel;
+
+        const tableBody = document.getElementById('tabla-usuarios-admin-body');
+        tableBody.innerHTML = "";
+        for(let u in db.usuarios) {
+            if(u !== 'admin') {
+                tableBody.innerHTML += `
+                    <tr>
+                        <td style="font-weight:bold; text-transform:uppercase;">${u}</td>
+                        <td class="pass-cell" style="font-family:monospace;" onclick="toggleAdminUserPassDisplay(this, '${db.usuarios[u].pass || '---'}')">••••</td>
+                        <td style="color:var(--verde-bet); font-weight:bold;">$${db.usuarios[u].saldo.toLocaleString()}</td>
+                        <td style="color:var(--amarillo-bet); font-weight:bold; text-align:center;">${db.usuarios[u].puntos || 0}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        recalcularBoletasRecibidasAdmin();
+        inicializarFiltrosHistorial();
+    }
+
+    function toggleAdminUserPassDisplay(elemento, realPass) {
+        if(elemento.innerText === '••••') {
+            elemento.innerText = realPass;
+            elemento.style.color = 'var(--amarillo-bet)';
+            setTimeout(() => {
+                elemento.innerText = '••••';
+                elemento.style.color = 'inherit';
+            }, 3000);
+        }
+    }
+
+    function recalcularBoletasRecibidasAdmin() {
+        const fAct = db.config.fechaActual;
+        const box = document.getElementById('lista-boletas-usuarios-admin');
+        box.innerHTML = "";
+        
+        let counter = 0;
+        for(let u in db.usuarios) {
+            if(u === 'admin') continue;
+            const boletasFecha = db.usuarios[u].jugadas.filter(j => j.fechaTorneo == fAct);
+            counter += boletasFecha.length;
+            if(boletasFecha.length > 0) {
+                box.innerHTML += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.02); padding-bottom:2px;" onclick="abrirVisorDetalleBoletaMasivo('${u}')">
+                        <span style="text-transform:uppercase; font-weight:bold; color:var(--texto-secundario); cursor:pointer;">• ${u}</span>
+                        <span style="background:var(--header-bg); padding:1px 6px; font-weight:bold; border-radius:10px; font-size:11px;">${boletasFecha.length} boleta(s)</span>
+                    </div>
+                `;
+            }
+        }
+        document.getElementById('txt-total-boletas-admin').innerText = `Total: ${counter} boletas recibidas`;
+        if(counter === 0) box.innerHTML = `<span style="opacity:0.4; font-size:11px; text-align:center; padding:10px 0;">No se registraron boletas en la F${fAct}</span>`;
+    }
+
+    function abrirVisorDetalleBoletaMasivo(username) {
+        const fAct = db.config.fechaActual;
+        const uData = db.usuarios[username];
+        if(!uData) return;
+        const bFecha = uData.jugadas.filter(j => j.fechaTorneo == fAct);
+        
+        document.getElementById('visor-admin-titulo').innerText = `BOLETAS DE ${username.toUpperCase()}`;
+        const cont = document.getElementById('visor-admin-contenido');
+        cont.innerHTML = "";
+        
+        bFecha.forEach((b, index) => {
+            let matchesHtml = `<div style="background:rgba(0,0,0,0.4); padding:8px; border-radius:6px; font-size:11px; margin-top:4px; display:flex; flex-direction:column; gap:3px;">`;
+            const partidos = db.fechas[fAct] || [];
+            partidos.forEach(p => {
+                const pr = b.predicciones[p.id] || '-';
+                matchesHtml += `<div>• ${p.l} vs ${p.v}: <b style="color:var(--amarillo-bet);">[ ${pr} ]</b></div>`;
+            });
+            matchesHtml += `</div>`;
+            
+            cont.innerHTML += `
+                <div style="border-bottom:1px dashed #243f3b; padding-bottom:8px;">
+                    <div style="font-weight:bold; color:var(--verde-bet);">BOLETA N° ${bFecha.length - index}</div>
+                    <div style="font-size:10px; opacity:0.6;">ID: ${b.idBoleta}</div>
+                    ${matchesHtml}
+                </div>
+            `;
+        });
+        abrirModalPulido('overlay-visor-admin');
+    }
+
+    function guardarAdmin() {
+        const fAct = db.config.fechaActual;
+        const partidos = db.fechas[fAct] || [];
+        
+        partidos.forEach(p => {
+            p.l = document.getElementById(`ed-l-${p.id}`).value.trim();
+            p.v = document.getElementById(`ed-v-${p.id}`).value.trim();
+            p.imgL = document.getElementById(`ed-imgl-${p.id}`).value.trim() || DEFAULT_ESCUDO;
+            p.imgV = document.getElementById(`ed-imgv-${p.id}`).value.trim() || DEFAULT_ESCUDO;
+            p.fecha = document.getElementById(`ed-f-${p.id}`).value;
+            p.hora = document.getElementById(`ed-h-${p.id}`).value;
+        });
+
+        sync();
+        alert("✓ Parámetros y partidos de la Fecha actual guardados correctamente.");
+        renderAdmin();
+    }
+
+    function guardarResultadoUnico(partidoId) {
+        const fAct = db.config.fechaActual;
+        const p = db.fechas[fAct].find(item => item.id === partidoId);
+        if(!p) return;
+        
+        p.marcador = document.getElementById(`adm-marcador-${partidoId}`).value.trim();
+        p.oficial = document.getElementById(`adm-res-${partidoId}`).value;
+        sync();
+        alert(`✓ Cambios guardados para ${p.l} vs ${p.v}. Recordá pulsar el botón superior para recalcular la tabla general.`);
+    }
+
+    function ejecutarRecalculoMasivoManual() {
+        recalcularPuntajesGlobales();
+        renderAdmin();
+        alert("📊 ¡Éxito! Los puntajes de todos los usuarios y el TOP RANKING general se han actualizado correctamente.");
+    }
+
+    function recalcularPuntajesGlobales() {
+        for(let u in db.usuarios) {
+            if(u !== 'admin') {
+                db.usuarios[u].puntos = 0;
+            }
+        }
+        
+        for(let u in db.usuarios) {
+            if(u !== 'admin') {
+                const uData = db.usuarios[u];
+                let maxPuntosPorFecha = {};
+                
+                uData.jugadas.forEach(j => {
+                    let aciertosBoleta = 0;
+                    const partidos = db.fechas[j.fechaTorneo] || [];
+                    partidos.forEach(p => {
+                        if(p.oficial !== '-' && j.predicciones[p.id] === p.oficial) {
+                            aciertosBoleta++;
+                        }
+                    });
+                    
+                    if(!maxPuntosPorFecha[j.fechaTorneo]) {
+                        maxPuntosPorFecha[j.fechaTorneo] = 0;
+                    }
+                    if(aciertosBoleta > maxPuntosPorFecha[j.fechaTorneo]) {
+                        maxPuntosPorFecha[j.fechaTorneo] = aciertosBoleta;
+                    }
+                });
+
+                let totalPuntosAcumulados = 0;
+                for(let f in maxPuntosPorFecha) {
+                    totalPuntosAcumulados += maxPuntosPorFecha[f];
+                }
+                db.usuarios[u].puntos = totalPuntosAcumulados;
+            }
+        }
+        sync();
+    }
+
+    function modificarSaldoAdmin(tipo) {
+        const target = document.getElementById('sel-u-admin').value;
+        const monto = parseFloat(document.getElementById('monto-admin').value);
+        if(!target || isNaN(monto) || monto <= 0) {
+            alert("Ingresá un monto válido.");
+            return;
+        }
+
+        if(tipo === 'cargar') {
+            db.usuarios[target].saldo += monto;
+            alert(`✓ Se cargaron $${monto} a ${target.toUpperCase()}`);
+        } else {
+            if(db.usuarios[target].saldo < monto) {
+                if(!confirm("El usuario quedará con saldo negativo. ¿Proceder?")) return;
+            }
+            db.usuarios[target].saldo -= monto;
+            alert(`✓ Se descontaron $${monto} a ${target.toUpperCase()}`);
+        }
+        
+        document.getElementById('monto-admin').value = "";
+        sync();
+        renderAdmin();
+    }
+
+    function crearU() {
+        const name = document.getElementById('new-u-name').value.trim().toLowerCase();
+        const pass = document.getElementById('new-u-pass').value.trim();
+        
+        if(!name || !pass) {
+            alert("Completá nombre y clave.");
+            return;
+        }
+        if(db.usuarios[name] || name === 'admin') {
+            alert("El usuario ya existe en la base.");
+            return;
+        }
+
+        db.usuarios[name] = { saldo: 0, jugadas: [], puntos: 0, pass: pass };
+        sync();
+        
+        document.getElementById('new-u-name').value = "";
+        document.getElementById('new-u-pass').value = "";
+        alert(`✓ Player "${name.toUpperCase()}" registrado con éxito.`);
+        renderAdmin();
+    }
+
+    function eliminarUsuario() {
+        const target = document.getElementById('sel-u-admin').value;
+        if(!target) return;
+        if(confirm(`¿Estás COMPLETAMENTE seguro de eliminar al usuario ${target.toUpperCase()}? Se perderán sus boletas, saldo y puntos para siempre.`)) {
+            delete db.usuarios[target];
+            sync();
+            renderAdmin();
+            alert("Usuario eliminado.");
+        }
+    }
+
+    function eliminarFecha() {
+        const fAct = db.config.fechaActual;
+        if(Object.keys(db.fechas).length <= 1) {
+            alert("No podés eliminar la última fecha del sistema.");
+            return;
+        }
+        if(confirm(`¿Seguro que querés ELIMINAR la Fecha ${fAct} completa con todos sus partidos?`)) {
+            delete db.fechas[fAct];
+            const restantes = Object.keys(db.fechas);
+            db.config.fechaActual = parseInt(restantes[restantes.length - 1]);
+            sync();
+            inicializarFiltrosHistorial();
+            renderAdmin();
+            alert("Fecha eliminada.");
+        }
+    }
+
+    function resetPuntosGeneral() {
+        if(confirm("¿Querés reiniciar los puntos de TODOS los usuarios a 0?") && confirm("¿Confirmás reseteo total de puntajes?")) {
+            for(let u in db.usuarios) if(u !== 'admin') db.usuarios[u].puntos = 0;
+            sync();
+            renderAdmin();
+        }
+    }
+
+    function resetSaldosGeneral() {
+        if(confirm("¿Querés reiniciar el dinero de TODOS los usuarios a 0?") && confirm("¿Confirmás reseteo total de dinero?")) {
+            for(let u in db.usuarios) if(u !== 'admin') db.usuarios[u].saldo = 0;
+            sync();
+            renderAdmin();
+        }
+    }
+
+    function exportarBaseDeDatos() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", dataStr);
+        dlAnchor.setAttribute("download", `TIMBERMAN_DB_BACKUP_${Date.now()}.json`);
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
+    }
+
+    function importarBaseDeDatos(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                if(parsed.config && parsed.fechas && parsed.usuarios) {
+                    db = parsed;
+                    sync();
+                    inicializarFiltrosHistorial();
+                    renderAdmin();
+                    alert("✓ Base de datos importada y sincronizada correctamente.");
+                } else {
+                    alert("Archivo JSON inválido.");
+                }
+            } catch(err) {
+                alert("Error al leer el archivo JSON.");
+            }
+        };
+        reader.readAsText(file);
+    }
+</script>
+</body>
+</html>

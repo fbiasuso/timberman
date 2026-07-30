@@ -1,0 +1,30 @@
+context: >
+  Betting pool (prode) prototype. Single HTML file with vanilla JS + localStorage.
+  Goal: refactor to React+Vite+TS (frontend) + Fastify+TS+Drizzle+PostgreSQL (backend)
+  with full hexagonal architecture. Multiple users, admin panel, match scheduling,
+  bet placement, points calculation, ranking, PDF tickets.
+
+strict_tdd: false
+testing_runner: null
+testing_runner_detected_at: "2026-07-30"
+
+quality:
+  linter: null
+  type_checker: null
+  formatter: null
+
+phases:
+  proposal:
+    required: true
+  spec:
+    required: true
+  design:
+    required: true
+  tasks:
+    required: true
+  apply:
+    required: true
+  verify:
+    required: false
+  archive:
+    required: false

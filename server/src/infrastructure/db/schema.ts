@@ -10,6 +10,14 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 
+// ── System Config ────────────────────────────────────────────────
+export const systemConfig = pgTable('system_config', {
+  id: serial('id').primaryKey(),
+  commission: numeric('commission', { precision: 5, scale: 2 }).default('15.00').notNull(),
+  allowRegistration: boolean('allow_registration').default(true).notNull(),
+  defaultBetAmount: integer('default_bet_amount').default(1500).notNull(), // cents
+});
+
 // ── Users ──────────────────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -26,6 +34,7 @@ export const tournaments = pgTable('tournaments', {
   name: text('name').notNull(),
   commission: numeric('commission', { precision: 5, scale: 2 }).default('15.00').notNull(),
   isActive: boolean('is_active').default(true).notNull(),
+  carryover: integer('carryover').default(0).notNull(), // cents — unpaid pozo rolled to next date
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -37,6 +46,7 @@ export const matchDates = pgTable('match_dates', {
   status: text('status', { enum: ['open', 'closed', 'results'] }).default('open').notNull(),
   pozo: integer('pozo').default(0).notNull(),
   betAmount: integer('bet_amount').default(1500).notNull(), // cents
+  commission: numeric('commission', { precision: 5, scale: 2 }).default('0.00').notNull(), // % snapshot at close
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('idx_match_dates_tournament').on(table.tournamentId),
@@ -64,6 +74,7 @@ export const tickets = pgTable('tickets', {
   userId: uuid('user_id').references(() => users.id).notNull(),
   matchDateId: integer('match_date_id').references(() => matchDates.id).notNull(),
   betAmount: integer('bet_amount').notNull(),
+  prizeWon: integer('prize_won'), // cents — set when results are published
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('idx_tickets_user_date').on(table.userId, table.matchDateId),

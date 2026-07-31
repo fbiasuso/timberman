@@ -87,6 +87,17 @@ The app is mobile-first (max-width 480px) and organized into these views:
 | **Pozo** | Estimated prize pool = (tickets × bet amount) × commission, shown for the active date. |
 | **Ticket modal / PDF** | Receipt shown after paying a bet, with match predictions and a PDF download. |
 
+## Splash screen logo
+
+The app shows a brief splash on start (dark BET-green background, pulsing **TIMBERMAN** text, yellow spinner). The original `logotipo timberman.png` from the legacy prototype was never committed to the repo, so the splash currently renders the brand as styled text.
+
+To add the real logo later:
+
+1. Copy the PNG to `client/public/logotipo-timberman.png`.
+2. In `client/src/components/layout/SplashScreen.tsx`, replace the text logo `<div className="splash-logo">TIMBERMAN</div>` with `<img src="/logotipo-timberman.png" className="splash-logo" alt="TIMBERMAN" />`, and in `client/src/styles/global.css` change the `.splash-logo` rule from `font-size: 2rem; font-weight: 900; ...` to `width: 60%; max-width: 240px;` (keep the `pulse` animation).
+
+The splash timing already matches the legacy: fade-out at ~2.2s, unmount at ~2.8s.
+
 ## Tests
 
 ```bash

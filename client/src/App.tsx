@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import SplashScreen from './components/layout/SplashScreen';
 import LoginPage from './components/auth/LoginPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminProtectedRoute from './components/admin/AdminProtectedRoute';
@@ -22,6 +23,7 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <SplashScreen />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

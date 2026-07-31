@@ -38,7 +38,9 @@ export const matchDates = pgTable('match_dates', {
   pozo: integer('pozo').default(0).notNull(),
   betAmount: integer('bet_amount').default(1500).notNull(), // cents
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('idx_match_dates_tournament').on(table.tournamentId),
+]);
 
 // ── Matches ────────────────────────────────────────────────────
 export const matches = pgTable('matches', {
@@ -52,7 +54,9 @@ export const matches = pgTable('matches', {
   result: text('result', { enum: ['L', 'E', 'V'] }),
   score: text('score'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('idx_matches_date').on(table.matchDateId),
+]);
 
 // ── Tickets ────────────────────────────────────────────────────
 export const tickets = pgTable('tickets', {
@@ -61,7 +65,9 @@ export const tickets = pgTable('tickets', {
   matchDateId: integer('match_date_id').references(() => matchDates.id).notNull(),
   betAmount: integer('bet_amount').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('idx_tickets_user_date').on(table.userId, table.matchDateId),
+]);
 
 // ── Ticket Predictions ─────────────────────────────────────────
 export const ticketPredictions = pgTable('ticket_predictions', {
@@ -69,7 +75,9 @@ export const ticketPredictions = pgTable('ticket_predictions', {
   ticketId: integer('ticket_id').references(() => tickets.id).notNull(),
   matchId: integer('match_id').references(() => matches.id).notNull(),
   prediction: text('prediction', { enum: ['L', 'E', 'V'] }).notNull(),
-});
+}, (table) => [
+  index('idx_predictions_ticket').on(table.ticketId),
+]);
 
 // ── Audit Logs ─────────────────────────────────────────────────
 export const auditLogs = pgTable('audit_logs', {
@@ -80,20 +88,6 @@ export const auditLogs = pgTable('audit_logs', {
   amount: integer('amount'),
   reason: text('reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
-// ── Indexes ────────────────────────────────────────────────────
-export const idxTicketsUserDate = index('idx_tickets_user_date')
-  .on(tickets.userId, tickets.matchDateId);
-
-export const idxPredictionsTicket = index('idx_predictions_ticket')
-  .on(ticketPredictions.ticketId);
-
-export const idxMatchesDate = index('idx_matches_date')
-  .on(matches.matchDateId);
-
-export const idxMatchDatesTournament = index('idx_match_dates_tournament')
-  .on(matchDates.tournamentId);
-
-export const idxAuditAdmin = index('idx_audit_admin')
-  .on(auditLogs.adminId);
+}, (table) => [
+  index('idx_audit_admin').on(table.adminId),
+]);

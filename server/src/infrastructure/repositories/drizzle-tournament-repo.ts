@@ -23,6 +23,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       name: row.name,
       commission: Number(row.commission),
       isActive: row.isActive,
+      carryover: row.carryover,
       createdAt: row.createdAt,
     } as TournamentSnapshot);
   }
@@ -38,6 +39,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       name: row.name,
       commission: Number(row.commission),
       isActive: row.isActive,
+      carryover: row.carryover,
       createdAt: row.createdAt,
     } as TournamentSnapshot);
   }
@@ -50,6 +52,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
         name: row.name,
         commission: Number(row.commission),
         isActive: row.isActive,
+        carryover: row.carryover,
         createdAt: row.createdAt,
       } as TournamentSnapshot),
     );
@@ -66,6 +69,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       name: row.name,
       commission: Number(row.commission),
       isActive: row.isActive,
+      carryover: row.carryover,
       createdAt: row.createdAt,
     } as TournamentSnapshot);
   }
@@ -78,6 +82,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
         name: snap.name,
         commission: String(snap.commission),
         isActive: snap.isActive,
+        carryover: snap.carryover,
       })
       .where(eq(schema.tournaments.id, snap.id))
       .returning();
@@ -86,11 +91,19 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       name: row.name,
       commission: Number(row.commission),
       isActive: row.isActive,
+      carryover: row.carryover,
       createdAt: row.createdAt,
     } as TournamentSnapshot);
   }
 
   // ── MatchDate ──────────────────────────────────────────────────
+
+  private toMatchDate(row: any): MatchDate {
+    return MatchDate.create({
+      ...row,
+      commission: Number(row.commission),
+    } as unknown as MatchDateSnapshot);
+  }
 
   async findMatchDateById(id: number): Promise<MatchDate | null> {
     const [row] = await this.db
@@ -98,7 +111,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .from(schema.matchDates)
       .where(eq(schema.matchDates.id, id));
     if (!row) return null;
-    return MatchDate.create(row as unknown as MatchDateSnapshot);
+    return this.toMatchDate(row);
   }
 
   async findMatchDatesByTournamentId(tournamentId: number): Promise<MatchDate[]> {
@@ -106,7 +119,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .select()
       .from(schema.matchDates)
       .where(eq(schema.matchDates.tournamentId, tournamentId));
-    return rows.map((row) => MatchDate.create(row as unknown as MatchDateSnapshot));
+    return rows.map((row) => this.toMatchDate(row));
   }
 
   async findOpenMatchDates(): Promise<MatchDate[]> {
@@ -114,7 +127,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .select()
       .from(schema.matchDates)
       .where(eq(schema.matchDates.status, 'open'));
-    return rows.map((row) => MatchDate.create(row as unknown as MatchDateSnapshot));
+    return rows.map((row) => this.toMatchDate(row));
   }
 
   async saveMatchDate(matchDate: MatchDate): Promise<MatchDate> {
@@ -123,7 +136,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .insert(schema.matchDates)
       .values(snap as any)
       .returning();
-    return MatchDate.create(row as unknown as MatchDateSnapshot);
+    return this.toMatchDate(row);
   }
 
   async updateMatchDate(matchDate: MatchDate): Promise<MatchDate> {
@@ -134,9 +147,10 @@ export class DrizzleTournamentRepo implements TournamentRepo {
         status: snap.status,
         pozo: snap.pozo,
         betAmount: snap.betAmount,
+        commission: String(snap.commission),
       })
       .where(eq(schema.matchDates.id, snap.id))
       .returning();
-    return MatchDate.create(row as unknown as MatchDateSnapshot);
+    return this.toMatchDate(row);
   }
 }

@@ -72,6 +72,15 @@ export class DateNotOpenError extends DomainError {
   get statusCode(): number { return 422; }
 }
 
+export class DateNotClosedError extends DomainError {
+  constructor(matchDateId: number, status: string) {
+    super(`Match date ${matchDateId} is not closed. Current status: "${status}"`);
+  }
+
+  get code(): string { return 'DATE_NOT_CLOSED'; }
+  get statusCode(): number { return 409; }
+}
+
 export class BetModificationNotAllowedError extends DomainError {
   constructor(ticketId: number) {
     super(`Bet ${ticketId} cannot be modified after submission`);

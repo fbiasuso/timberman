@@ -277,6 +277,7 @@ describe('API Integration Tests', () => {
           status: 'results' as const,
           pozo: 5000,
           betAmount: 1500,
+          commission: 0,
           createdAt: new Date(),
         }),
       );

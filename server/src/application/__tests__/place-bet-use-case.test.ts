@@ -73,6 +73,7 @@ describe('PlaceBetUseCase', () => {
     status: 'open',
     pozo: 0,
     betAmount: 1500,
+    commission: 0,
     createdAt: new Date(),
   });
 
@@ -163,6 +164,7 @@ describe('PlaceBetUseCase', () => {
         status: 'closed',
         pozo: 0,
         betAmount: 1500,
+        commission: 0,
         createdAt: new Date(),
       });
       vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);

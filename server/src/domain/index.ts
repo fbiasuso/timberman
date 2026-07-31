@@ -50,6 +50,7 @@ export {
   InvalidPredictionError,
   DuplicateBetError,
   DateNotOpenError,
+  DateNotClosedError,
   BetModificationNotAllowedError,
   RegistrationDisabledError,
   UserNotFoundError,

@@ -54,4 +54,33 @@ describe('Ticket', () => {
       expect(snapshot.betAmount).toBe(1500);
     });
   });
+
+  describe('withPrize', () => {
+    const ticket = Ticket.new({
+      id: 1,
+      userId: 'user-1',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions,
+    });
+
+    it('returns a new instance with the prize set', () => {
+      const updated = ticket.withPrize(334);
+      expect(updated).not.toBe(ticket);
+      expect(updated.prizeWon).toBe(334);
+      expect(updated.id).toBe(ticket.id);
+      expect(updated.betAmount.cents).toBe(1500);
+      expect(updated.totalPredictions()).toBe(3);
+    });
+
+    it('does not mutate the original instance', () => {
+      ticket.withPrize(999);
+      expect(ticket.prizeWon).toBeNull();
+    });
+
+    it('round-trips prizeWon through the snapshot', () => {
+      const updated = ticket.withPrize(750);
+      expect(updated.toSnapshot().prizeWon).toBe(750);
+    });
+  });
 });

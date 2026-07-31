@@ -6,6 +6,7 @@ export interface TicketSnapshot {
   userId: string;
   matchDateId: number;
   betAmount: number; // cents
+  prizeWon: number | null; // cents — set when results are published
   createdAt: Date;
 }
 
@@ -15,6 +16,7 @@ export class Ticket {
     public readonly userId: string,
     public readonly matchDateId: number,
     private readonly _betAmount: number,
+    private readonly _prizeWon: number | null,
     public readonly createdAt: Date,
     public readonly predictions: TicketPrediction[],
   ) {}
@@ -24,10 +26,28 @@ export class Ticket {
     return Money.fromCents(this._betAmount);
   }
 
+  /** Prize won in cents, or null when results have not been published */
+  get prizeWon(): number | null {
+    return this._prizeWon;
+  }
+
   // ── Behavior ─────────────────────────────────────────────────
 
   totalPredictions(): number {
     return this.predictions.length;
+  }
+
+  /** Set the prize won — returns a NEW Ticket instance (immutable) */
+  withPrize(prizeCents: number): Ticket {
+    return new Ticket(
+      this.id,
+      this.userId,
+      this.matchDateId,
+      this._betAmount,
+      prizeCents,
+      this.createdAt,
+      this.predictions,
+    );
   }
 
   // ── Factory ──────────────────────────────────────────────────
@@ -38,6 +58,7 @@ export class Ticket {
       snapshot.userId,
       snapshot.matchDateId,
       snapshot.betAmount,
+      snapshot.prizeWon,
       snapshot.createdAt,
       predictions,
     );
@@ -55,6 +76,7 @@ export class Ticket {
       props.userId,
       props.matchDateId,
       props.betAmount,
+      null,
       new Date(),
       props.predictions,
     );
@@ -66,6 +88,7 @@ export class Ticket {
       userId: this.userId,
       matchDateId: this.matchDateId,
       betAmount: this._betAmount,
+      prizeWon: this._prizeWon,
       createdAt: this.createdAt,
     };
   }

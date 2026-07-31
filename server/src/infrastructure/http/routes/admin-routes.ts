@@ -7,7 +7,7 @@ import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
-import type { SystemConfig } from '../../../application/admin/get-config-use-case.js';
+import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import { ListUsersUseCase } from '../../../application/admin/list-users-use-case.js';
 import { CreateUserUseCase } from '../../../application/admin/create-user-use-case.js';
 import { AdjustBalanceUseCase } from '../../../application/admin/adjust-balance-use-case.js';

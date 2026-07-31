@@ -1,10 +1,4 @@
-// ── DTOs ──────────────────────────────────────────────────────────
-
-export interface SystemConfig {
-  commission: number;
-  allowRegistration: boolean;
-  defaultBetAmount: number; // cents
-}
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 
 // ── Use Case ──────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
-import type { SystemConfig } from '../../../application/admin/get-config-use-case.js';
+import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
 import { Ticket } from '../../../domain/entities/ticket.js';

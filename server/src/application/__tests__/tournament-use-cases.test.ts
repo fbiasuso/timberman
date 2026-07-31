@@ -15,6 +15,7 @@ import { PozoCalculator } from '../betting/pozo-calculator.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
+  DateNotClosedError,
 } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ describe('CloseDateUseCase', () => {
     status: 'open',
     pozo: 0,
     betAmount: 1500,
+    commission: 0,
     createdAt: new Date(),
   });
 
@@ -155,6 +157,7 @@ describe('CloseDateUseCase', () => {
       status: 'closed',
       pozo: 5000,
       betAmount: 1500,
+      commission: 0,
       createdAt: new Date(),
     });
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
@@ -176,6 +179,7 @@ describe('PublishResultsUseCase', () => {
     status: 'closed',
     pozo: 6000,
     betAmount: 1500,
+    commission: 0,
     createdAt: new Date(),
   });
 
@@ -250,6 +254,7 @@ describe('PublishResultsUseCase', () => {
       status: 'open',
       pozo: 0,
       betAmount: 1500,
+      commission: 0,
       createdAt: new Date(),
     });
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
@@ -260,7 +265,7 @@ describe('PublishResultsUseCase', () => {
       createTicketRepoMocks(),
       new PointsCalculator(),
     );
-    await expect(uc.execute(10)).rejects.toThrow('Cannot publish results');
+    await expect(uc.execute(10)).rejects.toThrow(DateNotClosedError);
   });
 });
 

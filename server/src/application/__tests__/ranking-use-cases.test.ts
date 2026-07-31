@@ -159,10 +159,10 @@ describe('GetRankingUseCase', () => {
     // MatchDate 10 belongs to tournament 1, matchDate 20 belongs to tournament 2
     vi.mocked(tournamentRepo.findMatchDateById).mockImplementation(async (id: number) => {
       if (id === 10) return MatchDate.create({
-        id: 10, tournamentId: 1, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, createdAt: new Date(),
+        id: 10, tournamentId: 1, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, commission: 0, createdAt: new Date(),
       });
       if (id === 20) return MatchDate.create({
-        id: 20, tournamentId: 2, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, createdAt: new Date(),
+        id: 20, tournamentId: 2, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, commission: 0, createdAt: new Date(),
       });
       return null;
     });
@@ -214,7 +214,7 @@ describe('GetUserDetailUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(
       MatchDate.create({
         id: 10, tournamentId: 1, dateNumber: 3, status: 'results' as const,
-        pozo: 5000, betAmount: 1500, createdAt: new Date(),
+        pozo: 5000, betAmount: 1500, commission: 0, createdAt: new Date(),
       }),
     );
 
@@ -251,10 +251,10 @@ describe('GetUserDetailUseCase', () => {
 
     vi.mocked(tournamentRepo.findMatchDateById).mockImplementation(async (id: number) => {
       if (id === 10) return MatchDate.create({
-        id: 10, tournamentId: 1, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, createdAt: new Date(),
+        id: 10, tournamentId: 1, dateNumber: 1, status: 'results' as const, pozo: 5000, betAmount: 1500, commission: 0, createdAt: new Date(),
       });
       if (id === 20) return MatchDate.create({
-        id: 20, tournamentId: 1, dateNumber: 5, status: 'results' as const, pozo: 5000, betAmount: 1500, createdAt: new Date(),
+        id: 20, tournamentId: 1, dateNumber: 5, status: 'results' as const, pozo: 5000, betAmount: 1500, commission: 0, createdAt: new Date(),
       });
       return null;
     });

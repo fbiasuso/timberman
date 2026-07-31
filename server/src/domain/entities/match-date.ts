@@ -1,4 +1,5 @@
 import { Money } from '../value-objects/money.js';
+import { DateNotClosedError } from '../errors/index.js';
 
 export type MatchDateStatus = 'open' | 'closed' | 'results';
 
@@ -9,6 +10,7 @@ export interface MatchDateSnapshot {
   status: MatchDateStatus;
   pozo: number; // cents
   betAmount: number; // cents
+  commission: number; // percent — snapshotted at close, never recomputed
   createdAt: Date;
 }
 
@@ -20,6 +22,7 @@ export class MatchDate {
     private readonly _status: MatchDateStatus,
     private readonly _pozo: number, // cents
     private readonly _betAmount: number, // cents
+    private readonly _commission: number, // percent
     public readonly createdAt: Date,
   ) {}
 
@@ -35,6 +38,11 @@ export class MatchDate {
   /** Get bet amount as Money */
   get betAmount(): Money {
     return Money.fromCents(this._betAmount);
+  }
+
+  /** Commission percent applied at close (snapshot, never recomputed) */
+  get commission(): number {
+    return this._commission;
   }
 
   // ── Behavior ─────────────────────────────────────────────────
@@ -65,6 +73,7 @@ export class MatchDate {
       'closed',
       this._pozo,
       this._betAmount,
+      this._commission,
       this.createdAt,
     );
   }
@@ -72,9 +81,7 @@ export class MatchDate {
   /** Publish results — only closed dates can transition to results */
   publishResults(): MatchDate {
     if (!this.isClosed()) {
-      throw new Error(
-        `Cannot publish results for match date ${this.id}: current status is "${this._status}"`,
-      );
+      throw new DateNotClosedError(this.id, this._status);
     }
     return new MatchDate(
       this.id,
@@ -83,6 +90,7 @@ export class MatchDate {
       'results',
       this._pozo,
       this._betAmount,
+      this._commission,
       this.createdAt,
     );
   }
@@ -96,6 +104,21 @@ export class MatchDate {
       this._status,
       pozo.cents,
       this._betAmount,
+      this._commission,
+      this.createdAt,
+    );
+  }
+
+  /** Set the applied commission percent — returns a NEW MatchDate (immutable) */
+  withCommission(pct: number): MatchDate {
+    return new MatchDate(
+      this.id,
+      this.tournamentId,
+      this.dateNumber,
+      this._status,
+      this._pozo,
+      this._betAmount,
+      pct,
       this.createdAt,
     );
   }
@@ -110,6 +133,7 @@ export class MatchDate {
       snapshot.status,
       snapshot.pozo,
       snapshot.betAmount,
+      snapshot.commission,
       snapshot.createdAt,
     );
   }
@@ -127,6 +151,7 @@ export class MatchDate {
       'open',
       0,
       props.betAmount ?? 1500,
+      0,
       new Date(),
     );
   }
@@ -139,6 +164,7 @@ export class MatchDate {
       status: this._status,
       pozo: this._pozo,
       betAmount: this._betAmount,
+      commission: this._commission,
       createdAt: this.createdAt,
     };
   }

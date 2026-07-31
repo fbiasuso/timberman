@@ -18,3 +18,6 @@ export type { TicketPredictionSnapshot } from './ticket-prediction.js';
 
 export { AuditLog } from './audit-log.js';
 export type { AuditLogSnapshot } from './audit-log.js';
+
+export { DEFAULT_SYSTEM_CONFIG } from './system-config.js';
+export type { SystemConfig } from './system-config.js';

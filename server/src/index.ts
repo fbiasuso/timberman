@@ -12,7 +12,7 @@ import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
 import { errorHandler } from './infrastructure/http/middlewares/error-handler.js';
-import type { SystemConfig } from './application/admin/get-config-use-case.js';
+import type { SystemConfig } from './domain/entities/system-config.js';
 
 const app = Fastify({ logger: true });
 

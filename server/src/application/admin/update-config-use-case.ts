@@ -1,4 +1,4 @@
-import type { SystemConfig } from './get-config-use-case.js';
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 
 // ── Error ──────────────────────────────────────────────────────────
 

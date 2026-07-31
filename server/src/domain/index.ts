@@ -7,6 +7,7 @@ export {
   Ticket,
   TicketPrediction,
   AuditLog,
+  DEFAULT_SYSTEM_CONFIG,
 } from './entities/index.js';
 export type {
   UserRole,
@@ -18,6 +19,7 @@ export type {
   TicketSnapshot,
   TicketPredictionSnapshot,
   AuditLogSnapshot,
+  SystemConfig,
 } from './entities/index.js';
 
 // ── Value Objects ─────────────────────────────────────────────────
@@ -37,6 +39,7 @@ export type {
   MatchRepo,
   TicketRepo,
   AuditLogRepo,
+  SystemConfigRepo,
 } from './ports/index.js';
 
 // ── Domain Errors ─────────────────────────────────────────────────

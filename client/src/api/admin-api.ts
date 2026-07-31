@@ -58,12 +58,12 @@ export const adminApi = {
 
   /** GET /api/admin/users — all users (no password hashes) */
   getUsers() {
-    return client.get<AdminUserDTO[]>('/admin/users').then((r) => r.data);
+    return client.get<{ users: AdminUserDTO[] }>('/admin/users').then((r) => r.data.users);
   },
 
   /** POST /api/admin/users — create a new user */
   createUser(payload: CreateUserPayload) {
-    return client.post<AdminUserDTO>('/admin/users', payload).then((r) => r.data);
+    return client.post<{ user: AdminUserDTO }>('/admin/users', payload).then((r) => r.data.user);
   },
 
   /** PATCH /api/admin/users/:userId/balance — adjust user balance */
@@ -80,17 +80,23 @@ export const adminApi = {
 
   /** GET /api/admin/tournaments — all tournaments with their match dates */
   getTournaments() {
-    return client.get<AdminTournamentDTO[]>('/admin/tournaments').then((r) => r.data);
+    return client
+      .get<{ tournaments: AdminTournamentDTO[] }>('/admin/tournaments')
+      .then((r) => r.data.tournaments);
   },
 
   /** POST /api/admin/tournaments — create a new tournament */
   createTournament(payload: CreateTournamentPayload) {
-    return client.post<AdminTournamentDTO>('/admin/tournaments', payload).then((r) => r.data);
+    return client
+      .post<{ tournament: AdminTournamentDTO }>('/admin/tournaments', payload)
+      .then((r) => r.data.tournament);
   },
 
   /** PATCH /api/admin/matches/:matchId/result — set match result */
   setMatchResult(matchId: number, payload: SetMatchResultPayload) {
-    return client.patch(`/admin/matches/${matchId}/result`, payload).then((r) => r.data);
+    return client
+      .patch(`/admin/matches/${matchId}/result`, payload)
+      .then((r) => r.data.match);
   },
 
   /** POST /api/admin/dates/:dateId/close — close a match date and process points */
@@ -102,11 +108,15 @@ export const adminApi = {
 
   /** GET /api/admin/config — get system config */
   getConfig() {
-    return client.get<AdminConfigDTO>('/admin/config').then((r) => r.data);
+    return client
+      .get<{ config: AdminConfigDTO }>('/admin/config')
+      .then((r) => r.data.config);
   },
 
   /** PATCH /api/admin/config — update a single config key */
   updateConfig(payload: UpdateConfigPayload) {
-    return client.patch<AdminConfigDTO>('/admin/config', payload).then((r) => r.data);
+    return client
+      .patch<{ config: AdminConfigDTO }>('/admin/config', payload)
+      .then((r) => r.data.config);
   },
 };

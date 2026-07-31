@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useRanking, useUserDetail } from '../../hooks/use-ranking';
 import type { RankingEntry } from '../../types';
 
@@ -302,16 +302,30 @@ export default function RankingPage() {
 
                 {detailData && detailData.length > 0 && (
                   <div>
-                    {detailData.map((bd, i) => (
-                      <div key={i} style={styles.breakdownItem}>
-                        <span style={styles.breakdownLabel}>
-                          Fecha {bd.dateNumber}
-                        </span>
-                        <span style={styles.breakdownValue}>
-                          {bd.points} pts
-                        </span>
-                      </div>
-                    ))}
+                    {detailData.map((bd, i) => {
+                      const totalMatches = bd.totalMatches ?? 0;
+                      const correctPredictions = bd.correctPredictions ?? 0;
+                      const matchesText =
+                        totalMatches > 0
+                          ? `acertó ${correctPredictions} de ${totalMatches} partidos`
+                          : 'Sin partidos con resultado';
+
+                      return (
+                        <Fragment key={i}>
+                          <div style={styles.breakdownItem}>
+                            <span style={styles.breakdownLabel}>
+                              Fecha {bd.dateNumber}
+                            </span>
+                            <span style={styles.breakdownValue}>
+                              {bd.points} pts
+                            </span>
+                          </div>
+                          <div style={styles.breakdownItem}>
+                            <span style={styles.breakdownLabel}>{matchesText}</span>
+                          </div>
+                        </Fragment>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import RankingPage from '../ranking/RankingPage';
 
 // Mock the ranking hooks
@@ -77,5 +77,20 @@ describe('RankingPage', () => {
     expect(screen.getByText('Posición')).toBeDefined();
     expect(screen.getByText('Usuario')).toBeDefined();
     expect(screen.getByText('Puntos')).toBeDefined();
+  });
+
+  it('shows match prediction breakdown when a row is expanded', () => {
+    vi.mocked(useRanking).mockReturnValue({ data: mockRankingData, isLoading: false, error: null } as any);
+    vi.mocked(useUserDetail).mockReturnValue({
+      data: [{ dateNumber: 1, points: 5, totalMatches: 3, correctPredictions: 2 }],
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(<RankingPage />);
+    fireEvent.click(screen.getByText('Alice'));
+
+    expect(screen.getByText('Fecha 1')).toBeDefined();
+    expect(screen.getByText(/acertó 2 de 3 partidos/)).toBeDefined();
   });
 });

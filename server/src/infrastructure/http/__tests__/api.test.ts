@@ -8,6 +8,10 @@ import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { SystemConfig } from '../../../application/admin/get-config-use-case.js';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
+import { Ticket } from '../../../domain/entities/ticket.js';
+import { TicketPrediction } from '../../../domain/entities/ticket-prediction.js';
+import { Match } from '../../../domain/entities/match.js';
+import { MatchDate } from '../../../domain/entities/match-date.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -241,6 +245,77 @@ describe('API Integration Tests', () => {
       });
 
       expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET /api/ranking/users/:userId', () => {
+    it('returns user detail for a non-admin authenticated user', async () => {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+      vi.mocked(services.userRepo.findById).mockResolvedValue({ id: 'user-1' } as any);
+
+      const ticket = Ticket.new({
+        id: 1,
+        userId: 'user-1',
+        matchDateId: 10,
+        betAmount: 1500,
+        predictions: [
+          TicketPrediction.new({ matchId: 1, prediction: 'L' }),
+          TicketPrediction.new({ matchId: 2, prediction: 'V' }),
+        ],
+      });
+      vi.mocked(services.ticketRepo.findByUserId).mockResolvedValue([ticket]);
+
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+        MatchDate.create({
+          id: 10,
+          tournamentId: 1,
+          dateNumber: 3,
+          status: 'results' as const,
+          pozo: 5000,
+          betAmount: 1500,
+          createdAt: new Date(),
+        }),
+      );
+
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
+        Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }).setResult('L', '1-0'),
+        Match.new({ id: 2, matchDateId: 10, localTeam: 'C', visitorTeam: 'D' }).setResult('E', '1-1'),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking/users/user-1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.userDetail).toEqual([
+        { dateNumber: 3, points: 1, totalMatches: 2, correctPredictions: 1 },
+      ]);
+    });
+
+    it('returns 404 for an unknown userId', async () => {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+      vi.mocked(services.userRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking/users/ghost-user',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('USER_NOT_FOUND');
     });
   });
 });

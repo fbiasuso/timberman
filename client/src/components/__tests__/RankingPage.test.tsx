@@ -9,11 +9,6 @@ const mockRankingData = [
   { userId: 'u3', username: 'Charlie', totalPoints: 3, position: 3 },
 ];
 
-const mockUserDetailData = [
-  { dateNumber: 1, points: 5, date: 'Fecha 1' },
-  { dateNumber: 2, points: 5, date: 'Fecha 2' },
-];
-
 vi.mock('../../hooks/use-ranking', () => ({
   useRanking: vi.fn(),
   useUserDetail: vi.fn(() => ({

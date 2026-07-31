@@ -26,6 +26,31 @@ export default function CarteleraPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [ticketModal, setTicketModal] = useState<TicketDTO | null>(null);
 
+  // Derived data — must run before any early return to respect the Rules of Hooks
+  const matches = data?.matches ?? [];
+
+  // Filtered matches
+  const filteredMatches = useMemo(() => {
+    return matches.filter((m) => {
+      // Search filter
+      if (search) {
+        const q = search.toLowerCase();
+        if (
+          !m.localTeam.toLowerCase().includes(q) &&
+          !m.visitorTeam.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+
+      // Status filter
+      if (filter === 'pendientes' && predictions[m.id.toString()]) return false;
+      if (filter === 'cerrados' && !predictions[m.id.toString()]) return false;
+
+      return true;
+    });
+  }, [matches, search, filter, predictions]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -56,31 +81,9 @@ export default function CarteleraPage() {
     );
   }
 
-  const { matchDate, matches } = data;
+  const { matchDate } = data;
   const matchDateId = matchDate.id;
   const isExpired = matchDate.status !== 'open';
-
-  // Filtered matches
-  const filteredMatches = useMemo(() => {
-    return matches.filter((m) => {
-      // Search filter
-      if (search) {
-        const q = search.toLowerCase();
-        if (
-          !m.localTeam.toLowerCase().includes(q) &&
-          !m.visitorTeam.toLowerCase().includes(q)
-        ) {
-          return false;
-        }
-      }
-
-      // Status filter
-      if (filter === 'pendientes' && predictions[m.id.toString()]) return false;
-      if (filter === 'cerrados' && !predictions[m.id.toString()]) return false;
-
-      return true;
-    });
-  }, [matches, search, filter, predictions]);
 
   const totalMatches = matches.length;
   const predictedCount = Object.keys(predictions).length;

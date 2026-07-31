@@ -52,9 +52,10 @@ export interface RankingEntry {
   position: number;
 }
 
-/** Per-date points breakdown for a user */
+/** Per-date points breakdown for a user (matches server UserDateDetail DTO) */
 export interface UserDateBreakdown {
   dateNumber: number;
   points: number;
-  date: string;
+  totalMatches: number;
+  correctPredictions: number;
 }

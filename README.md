@@ -59,6 +59,34 @@ pnpm --recursive dev      # server on :3001 + client on :5173 (Vite proxies /api
 | Admin | `admin`  | `admin77`| Full admin panel    |
 | User  | `test`   | `test123`| $150.00 balance, 2 sample tickets |
 
+## App sections
+
+The app is mobile-first (max-width 480px) and organized into these views:
+
+### Player views (any authenticated user)
+
+| Section | Route | Purpose |
+|---------|-------|---------|
+| **Cartelera** | `/` | Match card for the active tournament date. Search by team, filter by state (Todos / Pendientes / Cerrados). Pick **L** (local), **E** (empate) or **V** (visita) on each match — selections are kept locally in the bet slip until you pay. Expired matches (date/time passed or result published) are locked. |
+| **Mis Tickets** | `/tickets` | Bet history. Filter by tournament date and review each ticket's predictions with status: pending close, in progress (partial results), or finalized with hit count. |
+| **Top Ranking** | `/ranking` | Global leaderboard ordered by total points (top 3 get 🥇🥈🥉). Click a row to expand the per-date breakdown (best ticket points per tournament date). |
+
+### Admin views (role `admin` only)
+
+| Section | Tab | Purpose |
+|---------|-----|---------|
+| **Admin** | Partidos | Edit the active date's matches: team names, shield image URLs, date/time. Save changes for the current tournament date. |
+| **Admin** | Resultados | Enter results per match (score + L/E/V outcome) and close the tournament date — closing calculates the pozo and finalizes points. |
+| **Admin** | Sistema | User management (create users, adjust balances with audit log, delete users), system config (commission %, self-registration toggle, default bet amount), tournament date management (create/switch/delete dates), and danger-zone resets (points or balances). |
+
+### Shared UI
+
+| Piece | Purpose |
+|-------|---------|
+| **Header** | Logged-in user, balance, logout. |
+| **Pozo** | Estimated prize pool = (tickets × bet amount) × commission, shown for the active date. |
+| **Ticket modal / PDF** | Receipt shown after paying a bet, with match predictions and a PDF download. |
+
 ## Tests
 
 ```bash

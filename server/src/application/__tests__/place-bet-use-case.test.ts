@@ -59,6 +59,7 @@ function createMocks() {
       snapshot.id = 42;
       return Promise.resolve(Ticket.create(snapshot, ticket.predictions));
     }),
+    update: vi.fn(),
     countByMatchDateId: vi.fn(),
   };
 

@@ -13,5 +13,6 @@ export interface TicketRepo {
   findByMatchDateId(matchDateId: number): Promise<Ticket[]>;
   findByUserAndDate(userId: string, matchDateId: number): Promise<Ticket | null>;
   save(ticket: Ticket, predictions: TicketPrediction[]): Promise<Ticket>;
+  update(ticket: Ticket): Promise<Ticket>;
   countByMatchDateId(matchDateId: number): Promise<number>;
 }

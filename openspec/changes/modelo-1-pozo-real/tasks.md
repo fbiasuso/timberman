@@ -26,14 +26,14 @@ Chain strategy: pending
 
 ## Phase 1: Foundation
 
-- [ ] 1.1 `schema.ts`: add `system_config` (id=1, commission numeric(5,2) default '15.00', allow_registration boolean default true, default_bet_amount integer default 1500); add `matchDates.commission` numeric default '0.00', `tournaments.carryover` int default 0, `tickets.prizeWon` int null (sys-config: Persisted; betting-engine: snapshot).
-- [ ] 1.2 Run `npm run db:generate` → `server/drizzle/0001_*.sql`; commit migration + meta snapshot.
-- [ ] 1.3 Create `domain/entities/system-config.ts`: `SystemConfig` + `DEFAULT_SYSTEM_CONFIG` (15/true/1500); delete interface from `get-config-use-case.ts`; export via barrels.
-- [ ] 1.4 Create `domain/ports/system-config-repo.ts`: `get(): Promise<SystemConfig|null>`, `upsert(config)`; add to ports barrel.
-- [ ] 1.5 Create `infrastructure/repositories/drizzle-system-config-repo.ts`: read id=1; `upsert` via insert `onConflictDoUpdate` id=1.
-- [ ] 1.6 Entities: `Tournament.withCarryover(cents)` + snapshot field; `MatchDate.withCommission(pct)` + field; `Ticket.withPrize(cents)` + `prizeWon`.
-- [ ] 1.7 `errors/index.ts`: add `DateNotClosedError` (DATE_NOT_CLOSED, 409); `MatchDate.publishResults()` throws it when not closed.
-- [ ] 1.8 `TicketRepo.update(ticket)` (port + Drizzle impl); `DrizzleTournamentRepo.update`/`updateMatchDate` persist carryover/commission.
+- [x] 1.1 `schema.ts`: add `system_config` (id=1, commission numeric(5,2) default '15.00', allow_registration boolean default true, default_bet_amount integer default 1500); add `matchDates.commission` numeric default '0.00', `tournaments.carryover` int default 0, `tickets.prizeWon` int null (sys-config: Persisted; betting-engine: snapshot).
+- [x] 1.2 Run `npm run db:generate` → `server/drizzle/0001_*.sql`; commit migration + meta snapshot.
+- [x] 1.3 Create `domain/entities/system-config.ts`: `SystemConfig` + `DEFAULT_SYSTEM_CONFIG` (15/true/1500); delete interface from `get-config-use-case.ts`; export via barrels.
+- [x] 1.4 Create `domain/ports/system-config-repo.ts`: `get(): Promise<SystemConfig|null>`, `upsert(config)`; add to ports barrel.
+- [x] 1.5 Create `infrastructure/repositories/drizzle-system-config-repo.ts`: read id=1; `upsert` via insert `onConflictDoUpdate` id=1.
+- [x] 1.6 Entities: `Tournament.withCarryover(cents)` + snapshot field; `MatchDate.withCommission(pct)` + field; `Ticket.withPrize(cents)` + `prizeWon`.
+- [x] 1.7 `errors/index.ts`: add `DateNotClosedError` (DATE_NOT_CLOSED, 409); `MatchDate.publishResults()` throws it when not closed.
+- [x] 1.8 `TicketRepo.update(ticket)` (port + Drizzle impl); `DrizzleTournamentRepo.update`/`updateMatchDate` persist carryover/commission.
 
 ## Phase 2: Config Persistence + Wiring
 

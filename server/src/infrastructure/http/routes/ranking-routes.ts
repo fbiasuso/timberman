@@ -9,7 +9,6 @@ import { GetRankingUseCase } from '../../../application/ranking/get-ranking-use-
 import { GetUserDetailUseCase } from '../../../application/ranking/get-user-detail-use-case.js';
 import { PointsCalculator } from '../../../application/tournament/points-calculator.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
-import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
 
 // ── Validation Schemas ────────────────────────────────────────────
 
@@ -28,7 +27,6 @@ export function createRankingRoutes(
 ): FastifyPluginAsync {
   return async (fastify) => {
     const authMiddleware = createAuthMiddleware(jwtService);
-    const adminMiddleware = createAdminMiddleware();
     const pointsCalculator = new PointsCalculator();
     const getRankingUseCase = new GetRankingUseCase(
       userRepo,
@@ -55,7 +53,7 @@ export function createRankingRoutes(
 
     // ── GET /api/ranking/users/:userId ───────────────────────────
     fastify.get('/api/ranking/users/:userId', {
-      preHandler: [authMiddleware, adminMiddleware],
+      preHandler: [authMiddleware],
     }, async (request, _reply) => {
       const { userId } = request.params as { userId: string };
       const details = await getUserDetailUseCase.execute(userId);

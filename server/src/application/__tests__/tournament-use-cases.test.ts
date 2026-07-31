@@ -54,6 +54,7 @@ function createTicketRepoMocks() {
     findByMatchDateId: vi.fn(),
     findByUserAndDate: vi.fn(),
     save: vi.fn(),
+    update: vi.fn(),
     countByMatchDateId: vi.fn(),
   };
   return repo;

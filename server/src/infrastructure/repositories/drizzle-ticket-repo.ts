@@ -93,6 +93,21 @@ export class DrizzleTicketRepo implements TicketRepo {
     return Ticket.create(ticketRow as unknown as TicketSnapshot, loadedPredictions);
   }
 
+  async update(ticket: Ticket): Promise<Ticket> {
+    const snap = ticket.toSnapshot();
+    const [row] = await this.db
+      .update(schema.tickets)
+      .set({
+        betAmount: snap.betAmount,
+        prizeWon: snap.prizeWon,
+      })
+      .where(eq(schema.tickets.id, snap.id))
+      .returning();
+
+    const predictions = await this.loadPredictions(row.id);
+    return Ticket.create(row as unknown as TicketSnapshot, predictions);
+  }
+
   async countByMatchDateId(matchDateId: number): Promise<number> {
       const result = await this.db
         .select({ value: count() })

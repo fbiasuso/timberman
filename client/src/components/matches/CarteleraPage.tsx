@@ -8,6 +8,7 @@ import TicketModal from '../bets/TicketModal';
 import { formatMoney } from '../../utils/format';
 import type { FilterValue } from './Filters';
 import type { TicketDTO } from '../../types';
+import theme from '../../styles/theme';
 
 /**
  * CarteleraPage — main betting page.
@@ -54,7 +55,7 @@ export default function CarteleraPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: 48, color: '#6b7280' }}>
+      <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
         Cargando cartelera...
       </div>
     );
@@ -63,7 +64,7 @@ export default function CarteleraPage() {
   // Error state
   if (error) {
     return (
-      <div style={{ textAlign: 'center', padding: 48, color: '#dc2626' }}>
+      <div style={{ textAlign: 'center', padding: 48, color: theme.rojo }}>
         Error al cargar la cartelera. Intenta de nuevo.
       </div>
     );
@@ -72,8 +73,8 @@ export default function CarteleraPage() {
   // No open date
   if (!data?.matchDate) {
     return (
-      <div style={{ textAlign: 'center', padding: 48, color: '#6b7280' }}>
-        <h2>No hay cartelera disponible</h2>
+      <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
+        <h2 style={{ color: theme.blanco }}>No hay cartelera disponible</h2>
         <p style={{ fontSize: 14, marginTop: 8 }}>
           Espera a que el administrador publique una nueva fecha.
         </p>
@@ -114,10 +115,10 @@ export default function CarteleraPage() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 22, color: '#1e293b' }}>
+        <h2 style={{ margin: 0, fontSize: 22, color: theme.blanco }}>
           Cartelera — Fecha {matchDate.dateNumber}
         </h2>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
           {matchDate.status === 'open'
             ? 'Seleccioná tus pronósticos'
             : `Estado: ${matchDate.status}`}
@@ -131,7 +132,7 @@ export default function CarteleraPage() {
       {/* Match list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {filteredMatches.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 32, color: '#9ca3af', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', padding: 32, color: theme.textoSecundario, fontSize: 14 }}>
             No hay partidos que coincidan con los filtros.
           </div>
         )}
@@ -155,8 +156,8 @@ export default function CarteleraPage() {
               padding: '14px 0',
               border: 'none',
               borderRadius: 10,
-              background: allPredicted ? '#16a34a' : '#d1d5db',
-              color: allPredicted ? '#fff' : '#9ca3af',
+              background: allPredicted ? theme.verdeBet : theme.disabled,
+              color: allPredicted ? theme.blanco : theme.textoSecundario,
               fontSize: 16,
               fontWeight: 700,
               cursor: allPredicted ? 'pointer' : 'not-allowed',
@@ -174,18 +175,19 @@ export default function CarteleraPage() {
           style={{
             marginTop: 24,
             padding: 20,
-            background: '#fff',
+            background: theme.tarjeta,
             borderRadius: 12,
-            border: '1px solid #e5e7eb',
+            border: `1px solid ${theme.border}`,
+            boxShadow: theme.glow,
           }}
         >
-          <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#1e293b' }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 16, color: theme.blanco }}>
             Confirmar jugada
           </h3>
-          <p style={{ fontSize: 14, color: '#6b7280', margin: '0 0 4px' }}>
+          <p style={{ fontSize: 14, color: theme.textoSecundario, margin: '0 0 4px' }}>
             Fecha: {matchDate.dateNumber} — Monto: {formatMoney(matchDate.betAmount)}
           </p>
-          <p style={{ fontSize: 14, color: '#6b7280', margin: '0 0 16px' }}>
+          <p style={{ fontSize: 14, color: theme.textoSecundario, margin: '0 0 16px' }}>
             {totalMatches} partidos seleccionados
           </p>
 
@@ -199,7 +201,7 @@ export default function CarteleraPage() {
                   justifyContent: 'space-between',
                   fontSize: 13,
                   padding: '4px 8px',
-                  background: '#f9fafb',
+                  background: theme.searchBg,
                   borderRadius: 6,
                 }}
               >
@@ -216,11 +218,11 @@ export default function CarteleraPage() {
           {placeBet.error && (
             <div
               style={{
-                color: '#dc2626',
+                color: theme.rojo,
                 fontSize: 14,
                 marginBottom: 12,
                 padding: '8px 12px',
-                background: '#fee2e2',
+                background: theme.dangerBg,
                 borderRadius: 6,
               }}
             >
@@ -239,10 +241,10 @@ export default function CarteleraPage() {
               style={{
                 flex: 1,
                 padding: '10px 0',
-                border: '1px solid #d1d5db',
+                border: `1px solid ${theme.border}`,
                 borderRadius: 8,
-                background: '#fff',
-                color: '#374151',
+                background: theme.tarjeta,
+                color: theme.blanco,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -258,8 +260,8 @@ export default function CarteleraPage() {
                 padding: '10px 0',
                 border: 'none',
                 borderRadius: 8,
-                background: placeBet.isPending ? '#93c5fd' : '#2563eb',
-                color: '#fff',
+                background: placeBet.isPending ? theme.disabled : theme.verdeBet,
+                color: theme.blanco,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: placeBet.isPending ? 'not-allowed' : 'pointer',

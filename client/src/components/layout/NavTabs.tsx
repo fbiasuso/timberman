@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth-store';
+import theme from '../../styles/theme';
 
 const baseTabs = [
   { path: '/', label: 'Cartelera' },
@@ -19,8 +20,8 @@ export default function NavTabs() {
     <nav
       style={{
         display: 'flex',
-        borderBottom: '1px solid #e5e7eb',
-        background: '#fff',
+        borderBottom: `1px solid ${theme.border}`,
+        background: theme.tarjeta,
       }}
     >
       {tabs.map((tab) => (
@@ -31,9 +32,9 @@ export default function NavTabs() {
           style={({ isActive }) => ({
             padding: '12px 24px',
             textDecoration: 'none',
-            color: isActive ? '#2563eb' : '#6b7280',
+            color: isActive ? theme.amarilloBet : theme.textoSecundario,
             fontWeight: isActive ? 600 : 400,
-            borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+            borderBottom: isActive ? `2px solid ${theme.amarilloBet}` : '2px solid transparent',
             transition: 'border-color 0.15s',
           })}
         >

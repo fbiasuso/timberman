@@ -2,21 +2,23 @@ import { useMemo, useState } from 'react';
 import type { MatchDTO } from '../../types';
 import { useCurrentMatches } from '../../hooks/use-matches';
 import { formatDate } from '../../utils/format';
+import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const card: React.CSSProperties = {
-  background: '#1e293b',
+  background: theme.tarjeta,
   borderRadius: 12,
   padding: 24,
-  border: '1px solid #334155',
+  border: `1px solid ${theme.border}`,
+  boxShadow: theme.glow,
 };
 
 const label: React.CSSProperties = {
   display: 'block',
   fontSize: 12,
   fontWeight: 600,
-  color: '#94a3b8',
+  color: theme.textoSecundario,
   marginBottom: 4,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
@@ -25,10 +27,10 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   padding: '8px 12px',
-  background: '#0f172a',
-  border: '1px solid #334155',
+  background: theme.inputBg,
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 14,
   outline: 'none',
   boxSizing: 'border-box',
@@ -45,8 +47,8 @@ const btn: React.CSSProperties = {
   padding: '12px 0',
   border: 'none',
   borderRadius: 10,
-  background: '#16a34a',
-  color: '#fff',
+  background: theme.verdeBet,
+  color: theme.blanco,
   fontSize: 15,
   fontWeight: 700,
   cursor: 'pointer',
@@ -55,7 +57,7 @@ const btn: React.CSSProperties = {
 
 const btnDisabled: React.CSSProperties = {
   ...btn,
-  background: '#475569',
+  background: theme.disabled,
   cursor: 'not-allowed',
 };
 
@@ -100,7 +102,7 @@ export default function MatchEditor() {
   if (isLoading) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>Cargando partidos...</p>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>Cargando partidos...</p>
       </div>
     );
   }
@@ -109,7 +111,7 @@ export default function MatchEditor() {
   if (error) {
     return (
       <div style={card}>
-        <p style={{ color: '#ef4444', textAlign: 'center' }}>
+        <p style={{ color: theme.rojo, textAlign: 'center' }}>
           Error al cargar los partidos.
         </p>
       </div>
@@ -120,7 +122,7 @@ export default function MatchEditor() {
   if (displayMatches.length === 0) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>
           No hay partidos en la fecha activa.
         </p>
       </div>
@@ -129,13 +131,13 @@ export default function MatchEditor() {
 
   return (
     <div style={card}>
-      <h3 style={{ margin: '0 0 20px', fontSize: 18, color: '#f1f5f9' }}>
+      <h3 style={{ margin: '0 0 20px', fontSize: 18, color: theme.blanco }}>
         Editar Partidos — Fecha {data?.matchDate?.dateNumber ?? '—'}
       </h3>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {displayMatches.map((match) => (
-          <div key={match.id} style={{ padding: 16, background: '#0f172a', borderRadius: 10 }}>
+          <div key={match.id} style={{ padding: 16, background: theme.inputBg, borderRadius: 10 }}>
             <div style={grid}>
               {/* Local team */}
               <div>
@@ -223,13 +225,13 @@ export default function MatchEditor() {
       {/* Save button */}
       <button
         onClick={handleSave}
-        style={saved ? { ...btn, background: '#16a34a' } : btn}
+        style={saved ? { ...btn, background: theme.verdeBet } : btn}
       >
         {saved ? '✓ Guardado' : 'Guardar Cambios'}
       </button>
 
       {saved && (
-        <p style={{ textAlign: 'center', color: '#22c55e', fontSize: 13, marginTop: 8 }}>
+        <p style={{ textAlign: 'center', color: theme.verdeBet, fontSize: 13, marginTop: 8 }}>
           Cambios guardados correctamente.
         </p>
       )}

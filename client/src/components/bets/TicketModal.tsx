@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { TicketDTO } from '../../types';
 import { formatDate, formatMoney } from '../../utils/format';
 import { useCurrentMatches } from '../../hooks/use-matches';
+import theme from '../../styles/theme';
 
 interface TicketModalProps {
   ticket: TicketDTO;
@@ -53,10 +54,12 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
         style={{
           maxWidth: 420,
           width: '100%',
-          background: '#fff',
+          background: theme.tarjeta,
           borderRadius: 16,
           padding: 24,
           position: 'relative',
+          border: `1px solid ${theme.border}`,
+          boxShadow: theme.glow,
         }}
       >
         {/* Close button (top-right) */}
@@ -70,14 +73,14 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
             height: 32,
             border: 'none',
             borderRadius: '50%',
-            background: '#f3f4f6',
+            background: theme.searchBg,
             cursor: 'pointer',
             fontSize: 18,
             lineHeight: 1,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#6b7280',
+            color: theme.textoSecundario,
           }}
           aria-label="Cerrar"
         >
@@ -86,20 +89,20 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <h2 style={{ margin: 0, fontSize: 20, color: '#1e293b' }}>
+          <h2 style={{ margin: 0, fontSize: 20, color: theme.blanco }}>
             Ticket #{ticket.id}
           </h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
             {formatDate(ticket.createdAt)}
           </p>
         </div>
 
         {/* Divider */}
-        <div style={{ borderTop: '1px dashed #d1d5db', marginBottom: 16 }} />
+        <div style={{ borderTop: `1px dashed ${theme.border}`, marginBottom: 16 }} />
 
         {/* Predictions */}
         <div style={{ marginBottom: 16 }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 14, color: '#374151' }}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 14, color: theme.textoSecundario }}>
             Pronósticos
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -110,9 +113,9 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
                 : `Partido #${tp.matchId}`;
               const color = match?.result
                 ? tp.prediction === match.result
-                  ? '#16a34a'
-                  : '#dc2626'
-                : '#374151';
+                  ? theme.verdeBet
+                  : theme.rojo
+                : theme.blanco;
 
               return (
                 <div
@@ -122,11 +125,11 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '8px 12px',
-                    background: '#f9fafb',
+                    background: theme.searchBg,
                     borderRadius: 8,
                   }}
                 >
-                  <span style={{ fontSize: 14, color: '#374151' }}>{label}</span>
+                  <span style={{ fontSize: 14, color: theme.blanco }}>{label}</span>
                   <span
                     style={{
                       fontWeight: 700,
@@ -145,7 +148,7 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
         </div>
 
         {/* Divider */}
-        <div style={{ borderTop: '1px dashed #d1d5db', marginBottom: 16 }} />
+        <div style={{ borderTop: `1px dashed ${theme.border}`, marginBottom: 16 }} />
 
         {/* Summary */}
         <div style={{ marginBottom: 24 }}>
@@ -154,12 +157,12 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               display: 'flex',
               justifyContent: 'space-between',
               fontSize: 14,
-              color: '#6b7280',
+              color: theme.textoSecundario,
               marginBottom: 4,
             }}
           >
             <span>Monto apostado</span>
-            <span style={{ fontWeight: 600, color: '#1e293b' }}>
+            <span style={{ fontWeight: 600, color: theme.blanco }}>
               {formatMoney(ticket.betAmount)}
             </span>
           </div>
@@ -168,7 +171,7 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               display: 'flex',
               justifyContent: 'space-between',
               fontSize: 14,
-              color: '#6b7280',
+              color: theme.textoSecundario,
               marginBottom: 4,
             }}
           >
@@ -176,7 +179,7 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
             <span
               style={{
                 fontWeight: 600,
-                color: correctCount > 0 ? '#16a34a' : '#6b7280',
+                color: correctCount > 0 ? theme.verdeBet : theme.textoSecundario,
               }}
             >
               {correctCount}/{ticket.predictions.length}
@@ -191,10 +194,10 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
             style={{
               width: '100%',
               padding: '12px 0',
-              border: '1px solid #2563eb',
+              border: `1px solid ${theme.border}`,
               borderRadius: 8,
-              background: '#fff',
-              color: '#2563eb',
+              background: theme.tarjeta,
+              color: theme.blanco,
               fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',
@@ -209,8 +212,8 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               padding: '12px 0',
               border: 'none',
               borderRadius: 8,
-              background: '#2563eb',
-              color: '#fff',
+              background: theme.verdeBet,
+              color: theme.blanco,
               fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',

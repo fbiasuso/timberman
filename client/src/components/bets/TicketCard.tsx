@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { TicketDTO } from '../../types';
 import { formatDate, formatMoney } from '../../utils/format';
 import { useCurrentMatches } from '../../hooks/use-matches';
+import theme from '../../styles/theme';
 
 interface TicketCardProps {
   ticket: TicketDTO;
@@ -34,18 +35,19 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
     <div
       style={{
         padding: 16,
-        background: '#fff',
+        background: theme.tarjeta,
         borderRadius: 12,
-        border: '1px solid #e5e7eb',
+        border: `1px solid ${theme.border}`,
+        boxShadow: theme.glow,
         cursor: 'pointer',
         transition: 'box-shadow 0.15s',
       }}
       onClick={() => onSelect(ticket)}
       onMouseOver={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.45)';
       }}
       onMouseOut={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = theme.glow;
       }}
     >
       {/* Header: ticket ID + date */}
@@ -57,10 +59,10 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
           marginBottom: 12,
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: theme.blanco }}>
           Ticket #{ticket.id}
         </span>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>
+        <span style={{ fontSize: 12, color: theme.textoSecundario }}>
           {formatDate(ticket.createdAt)}
         </span>
       </div>
@@ -73,8 +75,8 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
             fontWeight: 600,
             padding: '2px 8px',
             borderRadius: 4,
-            background: '#f3f4f6',
-            color: '#6b7280',
+            background: theme.searchBg,
+            color: theme.textoSecundario,
           }}
         >
           Pendiente
@@ -110,7 +112,7 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
       </div>
 
       {/* Bet amount */}
-      <div style={{ marginTop: 12, fontSize: 13, color: '#6b7280', textAlign: 'right' }}>
+      <div style={{ marginTop: 12, fontSize: 13, color: theme.amarilloBet, textAlign: 'right' }}>
         {formatMoney(ticket.betAmount)}
       </div>
     </div>
@@ -119,12 +121,12 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
 
 /**
  * Determine prediction text color based on match result.
- * green = correct, red = wrong, dark = pending (no result yet)
+ * green = correct, red = wrong, white = pending (no result yet)
  */
 function getPredictionColor(
   prediction: string,
   result: string | null,
 ): string {
-  if (!result) return '#374151';
-  return prediction === result ? '#16a34a' : '#dc2626';
+  if (!result) return theme.blanco;
+  return prediction === result ? theme.verdeBet : theme.rojo;
 }

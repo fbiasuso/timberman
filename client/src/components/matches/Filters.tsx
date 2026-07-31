@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import theme from '../../styles/theme';
 
 type FilterValue = 'todos' | 'pendientes' | 'cerrados';
 
@@ -42,7 +43,9 @@ export default function Filters({ onChange }: FiltersProps) {
         style={{
           width: '100%',
           padding: '10px 14px',
-          border: '1px solid #d1d5db',
+          background: theme.searchBg,
+          border: `1px solid ${theme.border}`,
+          color: theme.blanco,
           borderRadius: 8,
           fontSize: 15,
           outline: 'none',
@@ -58,13 +61,15 @@ export default function Filters({ onChange }: FiltersProps) {
             onClick={() => handleFilter(pill.value)}
             style={{
               padding: '6px 16px',
-              border: 'none',
+              border: activeFilter === pill.value
+                ? `1px solid ${theme.amarilloBet}`
+                : `1px solid ${theme.border}`,
               borderRadius: 20,
               fontSize: 13,
               fontWeight: activeFilter === pill.value ? 600 : 400,
               cursor: 'pointer',
-              background: activeFilter === pill.value ? '#2563eb' : '#e5e7eb',
-              color: activeFilter === pill.value ? '#fff' : '#374151',
+              background: activeFilter === pill.value ? theme.headerBg : theme.pillBg,
+              color: activeFilter === pill.value ? theme.amarilloBet : theme.textoSecundario,
               transition: 'all 0.15s',
             }}
           >

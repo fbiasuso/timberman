@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useAdminConfig, useUpdateConfig } from '../../hooks/use-admin';
+import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const card: React.CSSProperties = {
-  background: '#1e293b',
+  background: theme.tarjeta,
   borderRadius: 12,
   padding: 24,
-  border: '1px solid #334155',
+  border: `1px solid ${theme.border}`,
 };
 
 const label: React.CSSProperties = {
   display: 'block',
   fontSize: 12,
   fontWeight: 600,
-  color: '#94a3b8',
+  color: theme.textoSecundario,
   marginBottom: 4,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
@@ -23,10 +24,10 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   padding: '10px 14px',
-  background: '#0f172a',
-  border: '1px solid #334155',
+  background: theme.inputBg,
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 14,
   outline: 'none',
   boxSizing: 'border-box',
@@ -37,7 +38,7 @@ const checkboxRow: React.CSSProperties = {
   alignItems: 'center',
   gap: 12,
   padding: '12px 16px',
-  background: '#0f172a',
+  background: theme.inputBg,
   borderRadius: 8,
 };
 
@@ -46,8 +47,8 @@ const btn: React.CSSProperties = {
   padding: '12px 0',
   border: 'none',
   borderRadius: 10,
-  background: '#f59e0b',
-  color: '#0f172a',
+  background: theme.amarilloBet,
+  color: theme.fondo,
   fontSize: 15,
   fontWeight: 700,
   cursor: 'pointer',
@@ -56,9 +57,9 @@ const btn: React.CSSProperties = {
 
 const btnDisabled: React.CSSProperties = {
   ...btn,
-  background: '#475569',
+  background: theme.disabled,
   cursor: 'not-allowed',
-  color: '#94a3b8',
+  color: theme.textoSecundario,
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -119,7 +120,7 @@ export default function ConfigPanel() {
   if (isLoading) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>Cargando configuración...</p>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>Cargando configuración...</p>
       </div>
     );
   }
@@ -127,7 +128,7 @@ export default function ConfigPanel() {
   if (error) {
     return (
       <div style={card}>
-        <p style={{ color: '#ef4444', textAlign: 'center' }}>
+        <p style={{ color: theme.rojo, textAlign: 'center' }}>
           Error al cargar la configuración.
         </p>
       </div>
@@ -137,7 +138,7 @@ export default function ConfigPanel() {
   if (!config) {
     return (
       <div style={card}>
-        <p style={{ color: '#64748b', textAlign: 'center' }}>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>
           No se pudo obtener la configuración.
         </p>
       </div>
@@ -146,7 +147,7 @@ export default function ConfigPanel() {
 
   return (
     <div style={card}>
-      <h4 style={{ margin: '0 0 20px', fontSize: 16, color: '#f1f5f9' }}>
+      <h4 style={{ margin: '0 0 20px', fontSize: 16, color: theme.blanco }}>
         Configuración del Sistema
       </h4>
 
@@ -173,11 +174,11 @@ export default function ConfigPanel() {
               id="allowRegistration"
               checked={allowRegistration}
               onChange={(e) => setAllowRegistration(e.target.checked)}
-              style={{ width: 18, height: 18, accentColor: '#f59e0b', cursor: 'pointer' }}
+              style={{ width: 18, height: 18, accentColor: theme.amarilloBet, cursor: 'pointer' }}
             />
             <label
               htmlFor="allowRegistration"
-              style={{ color: '#f1f5f9', fontSize: 14, cursor: 'pointer' }}
+              style={{ color: theme.blanco, fontSize: 14, cursor: 'pointer' }}
             >
               Permitir registro de nuevos usuarios
             </label>
@@ -202,8 +203,8 @@ export default function ConfigPanel() {
           <div
             style={{
               padding: '10px 16px',
-              background: '#7f1d1d',
-              color: '#fca5a5',
+              background: theme.dangerBg,
+              color: theme.rojo,
               borderRadius: 8,
               fontSize: 14,
             }}

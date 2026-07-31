@@ -2,6 +2,7 @@ import type { MatchDTO } from '../../types';
 import { formatDate } from '../../utils/format';
 import BetButtons from './BetButtons';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
+import theme from '../../styles/theme';
 
 interface MatchCardProps {
   match: MatchDTO;
@@ -25,9 +26,10 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
         alignItems: 'center',
         gap: 16,
         padding: '16px 20px',
-        background: '#fff',
+        background: theme.tarjeta,
         borderRadius: 12,
-        border: '1px solid #e5e7eb',
+        border: `1px solid ${theme.border}`,
+        boxShadow: theme.glow,
         opacity: isExpired ? 0.65 : 1,
         position: 'relative',
         overflow: 'hidden',
@@ -42,8 +44,8 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
             right: 8,
             fontSize: 11,
             fontWeight: 600,
-            color: '#dc2626',
-            background: '#fee2e2',
+            color: theme.rojo,
+            background: theme.dangerBg,
             padding: '2px 8px',
             borderRadius: 4,
           }}
@@ -60,8 +62,8 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
             top: 8,
             left: 8,
             fontSize: 11,
-            color: '#6b7280',
-            background: '#f3f4f6',
+            color: theme.textoSecundario,
+            background: theme.searchBg,
             padding: '2px 8px',
             borderRadius: 4,
           }}
@@ -80,7 +82,7 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         )}
-        <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
           {match.localTeam}
         </div>
       </div>
@@ -88,11 +90,11 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
       {/* Score or VS */}
       <div style={{ minWidth: 60, textAlign: 'center' }}>
         {match.score ? (
-          <div style={{ fontWeight: 700, fontSize: 20, color: '#1e293b' }}>
+          <div style={{ fontWeight: 700, fontSize: 20, color: theme.blanco }}>
             {match.score}
           </div>
         ) : (
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#9ca3af' }}>VS</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: theme.vsText }}>VS</div>
         )}
       </div>
 
@@ -106,7 +108,7 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         )}
-        <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
           {match.visitorTeam}
         </div>
       </div>

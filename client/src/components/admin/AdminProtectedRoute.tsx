@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth-store';
 import { useMe } from '../../hooks/use-auth';
+import theme from '../../styles/theme';
 
 /**
  * Guards admin-only routes.
@@ -30,8 +31,8 @@ export default function AdminProtectedRoute() {
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: '100vh',
-          background: '#0f172a',
-          color: '#94a3b8',
+          background: theme.fondo,
+          color: theme.textoSecundario,
           fontSize: 14,
         }}
       >

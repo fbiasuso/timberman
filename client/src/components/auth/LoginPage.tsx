@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useLogin, useRegister } from '../../hooks/use-auth';
 import { useAuthStore } from '../../stores/auth-store';
+import theme from '../../styles/theme';
 
 type AuthTab = 'login' | 'register';
 
@@ -14,7 +15,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 16px' }}>
+    <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 16px', background: theme.fondo, minHeight: '100vh', color: theme.blanco }}>
       <h1 style={{ textAlign: 'center', marginBottom: 32 }}>Timberman</h1>
 
       {/* Tabs */}
@@ -25,11 +26,11 @@ export default function LoginPage() {
             flex: 1,
             padding: '10px 0',
             border: 'none',
-            borderBottom: tab === 'login' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+            borderBottom: tab === 'login' ? `2px solid ${theme.amarilloBet}` : `2px solid ${theme.border}`,
             background: 'none',
             cursor: 'pointer',
             fontWeight: tab === 'login' ? 600 : 400,
-            color: tab === 'login' ? '#2563eb' : '#6b7280',
+            color: tab === 'login' ? theme.amarilloBet : theme.textoSecundario,
           }}
         >
           Iniciar sesión
@@ -40,11 +41,11 @@ export default function LoginPage() {
             flex: 1,
             padding: '10px 0',
             border: 'none',
-            borderBottom: tab === 'register' ? '2px solid #2563eb' : '2px solid #e5e7eb',
+            borderBottom: tab === 'register' ? `2px solid ${theme.amarilloBet}` : `2px solid ${theme.border}`,
             background: 'none',
             cursor: 'pointer',
             fontWeight: tab === 'register' ? 600 : 400,
-            color: tab === 'register' ? '#2563eb' : '#6b7280',
+            color: tab === 'register' ? theme.amarilloBet : theme.textoSecundario,
           }}
         >
           Registrarse
@@ -70,7 +71,7 @@ function LoginForm() {
   return (
     <form onSubmit={handleSubmit}>
       {login.error && (
-        <div style={{ color: '#dc2626', marginBottom: 16, fontSize: 14 }}>
+        <div style={{ color: theme.rojo, marginBottom: 16, fontSize: 14 }}>
           {(login.error as any)?.response?.data?.message ?? 'Error al iniciar sesión'}
         </div>
       )}
@@ -83,7 +84,7 @@ function LoginForm() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
-          style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 16 }}
+          style={{ width: '100%', padding: '8px 12px', background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.blanco, borderRadius: 6, fontSize: 16 }}
         />
       </div>
       <div style={{ marginBottom: 24 }}>
@@ -95,7 +96,7 @@ function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 16 }}
+          style={{ width: '100%', padding: '8px 12px', background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.blanco, borderRadius: 6, fontSize: 16 }}
         />
       </div>
       <button
@@ -104,8 +105,8 @@ function LoginForm() {
         style={{
           width: '100%',
           padding: '10px 0',
-          background: '#2563eb',
-          color: '#fff',
+          background: login.isPending ? theme.disabled : theme.verdeBet,
+          color: login.isPending ? theme.textoSecundario : theme.blanco,
           border: 'none',
           borderRadius: 6,
           fontSize: 16,
@@ -138,7 +139,7 @@ function RegisterForm() {
 
   if (success) {
     return (
-      <div style={{ textAlign: 'center', color: '#16a34a' }}>
+      <div style={{ textAlign: 'center', color: theme.verdeBet }}>
         <p>¡Registro exitoso! Ahora puedes iniciar sesión.</p>
       </div>
     );
@@ -147,7 +148,7 @@ function RegisterForm() {
   return (
     <form onSubmit={handleSubmit}>
       {register.error && (
-        <div style={{ color: '#dc2626', marginBottom: 16, fontSize: 14 }}>
+        <div style={{ color: theme.rojo, marginBottom: 16, fontSize: 14 }}>
           {(register.error as any)?.response?.data?.message ?? 'Error al registrarse'}
         </div>
       )}
@@ -161,7 +162,7 @@ function RegisterForm() {
           onChange={(e) => setUsername(e.target.value)}
           required
           minLength={3}
-          style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 16 }}
+          style={{ width: '100%', padding: '8px 12px', background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.blanco, borderRadius: 6, fontSize: 16 }}
         />
       </div>
       <div style={{ marginBottom: 16 }}>
@@ -174,7 +175,7 @@ function RegisterForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={6}
-          style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 16 }}
+          style={{ width: '100%', padding: '8px 12px', background: theme.inputBg, border: `1px solid ${theme.border}`, color: theme.blanco, borderRadius: 6, fontSize: 16 }}
         />
       </div>
       <div style={{ marginBottom: 24 }}>
@@ -189,10 +190,12 @@ function RegisterForm() {
           style={{
             width: '100%',
             padding: '8px 12px',
-            border: '1px solid #d1d5db',
+            background: theme.inputBg,
+            border: `1px solid ${theme.border}`,
+            color: theme.blanco,
             borderRadius: 6,
             fontSize: 16,
-            outline: password !== confirm && confirm ? '2px solid #dc2626' : undefined,
+            outline: password !== confirm && confirm ? `2px solid ${theme.rojo}` : undefined,
           }}
         />
       </div>
@@ -202,8 +205,8 @@ function RegisterForm() {
         style={{
           width: '100%',
           padding: '10px 0',
-          background: '#2563eb',
-          color: '#fff',
+          background: register.isPending || password !== confirm ? theme.disabled : theme.verdeBet,
+          color: register.isPending || password !== confirm ? theme.textoSecundario : theme.blanco,
           border: 'none',
           borderRadius: 6,
           fontSize: 16,

@@ -1,21 +1,23 @@
 import { useState } from 'react';
 import { useAdminUsers, useCreateUser, useAdjustBalance, useDeleteUser } from '../../hooks/use-admin';
 import { formatMoney } from '../../utils/format';
+import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const card: React.CSSProperties = {
-  background: '#1e293b',
+  background: theme.tarjeta,
   borderRadius: 12,
   padding: 24,
-  border: '1px solid #334155',
+  border: `1px solid ${theme.border}`,
+  boxShadow: theme.glow,
 };
 
 const label: React.CSSProperties = {
   display: 'block',
   fontSize: 12,
   fontWeight: 600,
-  color: '#94a3b8',
+  color: theme.textoSecundario,
   marginBottom: 4,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
@@ -24,10 +26,10 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   padding: '8px 12px',
-  background: '#0f172a',
-  border: '1px solid #334155',
+  background: theme.inputBg,
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 14,
   outline: 'none',
   boxSizing: 'border-box',
@@ -37,8 +39,8 @@ const btnPrimary: React.CSSProperties = {
   padding: '8px 20px',
   border: 'none',
   borderRadius: 8,
-  background: '#2563eb',
-  color: '#fff',
+  background: theme.verdeBet,
+  color: theme.blanco,
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
@@ -48,8 +50,8 @@ const btnDanger: React.CSSProperties = {
   padding: '6px 14px',
   border: 'none',
   borderRadius: 8,
-  background: '#dc2626',
-  color: '#fff',
+  background: theme.rojo,
+  color: theme.blanco,
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
@@ -59,8 +61,8 @@ const btnSuccess: React.CSSProperties = {
   padding: '8px 20px',
   border: 'none',
   borderRadius: 8,
-  background: '#16a34a',
-  color: '#fff',
+  background: theme.verdeBet,
+  color: theme.blanco,
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
@@ -68,10 +70,10 @@ const btnSuccess: React.CSSProperties = {
 
 const btnOutline: React.CSSProperties = {
   padding: '6px 14px',
-  border: '1px solid #334155',
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
   background: 'transparent',
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 12,
   cursor: 'pointer',
 };
@@ -144,7 +146,7 @@ export default function UserManager() {
   if (isLoading) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>Cargando usuarios...</p>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>Cargando usuarios...</p>
       </div>
     );
   }
@@ -152,7 +154,7 @@ export default function UserManager() {
   if (error) {
     return (
       <div style={card}>
-        <p style={{ color: '#ef4444', textAlign: 'center' }}>
+        <p style={{ color: theme.rojo, textAlign: 'center' }}>
           Error al cargar usuarios.
         </p>
       </div>
@@ -163,7 +165,7 @@ export default function UserManager() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* ── Create user form ─────────────────────────────────────────────── */}
       <div style={card}>
-        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: '#f1f5f9' }}>
+        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: theme.blanco }}>
           Crear Usuario
         </h4>
 
@@ -221,13 +223,13 @@ export default function UserManager() {
           </div>
 
           {createUser.isSuccess && (
-            <p style={{ color: '#22c55e', fontSize: 13, margin: '8px 0 0' }}>
+            <p style={{ color: theme.verdeBet, fontSize: 13, margin: '8px 0 0' }}>
               Usuario creado correctamente.
             </p>
           )}
 
           {createUser.error && (
-            <p style={{ color: '#ef4444', fontSize: 13, margin: '8px 0 0' }}>
+            <p style={{ color: theme.rojo, fontSize: 13, margin: '8px 0 0' }}>
               {(createUser.error as any)?.response?.data?.message ?? 'Error al crear usuario.'}
             </p>
           )}
@@ -236,12 +238,12 @@ export default function UserManager() {
 
       {/* ── Users table ──────────────────────────────────────────────────── */}
       <div style={card}>
-        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: '#f1f5f9' }}>
+        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: theme.blanco }}>
           Usuarios ({users?.length ?? 0})
         </h4>
 
         {(!users || users.length === 0) && (
-          <p style={{ color: '#64748b', fontSize: 14, textAlign: 'center' }}>
+          <p style={{ color: theme.textoSecundario, fontSize: 14, textAlign: 'center' }}>
             No hay usuarios registrados.
           </p>
         )}
@@ -250,7 +252,7 @@ export default function UserManager() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                <tr style={{ borderBottom: `1px solid ${theme.border}`, color: theme.textoSecundario }}>
                   <th style={thStyle}>Usuario</th>
                   <th style={thStyle}>Contraseña</th>
                   <th style={thStyle}>Saldo</th>
@@ -263,7 +265,7 @@ export default function UserManager() {
                 {users.map((u) => (
                   <tr
                     key={u.id}
-                    style={{ borderBottom: '1px solid #1e293b', color: '#f1f5f9' }}
+                    style={{ borderBottom: `1px solid ${theme.border}`, color: theme.blanco }}
                   >
                     <td style={tdStyle}>{u.username}</td>
                     <td style={tdStyle}>
@@ -276,18 +278,18 @@ export default function UserManager() {
                         {revealed[u.id] ? u.id.slice(0, 8) : '••••••••'}
                       </button>
                     </td>
-                    <td style={{ ...tdStyle, color: '#22c55e', fontWeight: 600 }}>
+                    <td style={{ ...tdStyle, color: theme.amarilloBet, fontWeight: 600 }}>
                       {formatMoney(u.balance)}
                     </td>
-                    <td style={{ ...tdStyle, color: '#f59e0b', fontWeight: 600 }}>
+                    <td style={{ ...tdStyle, color: theme.amarilloBet, fontWeight: 600 }}>
                       {u.points ?? 0}
                     </td>
                     <td style={tdStyle}>
                       <span
                         style={{
                           fontSize: 11,
-                          background: u.role === 'admin' ? '#f59e0b' : '#334155',
-                          color: u.role === 'admin' ? '#0f172a' : '#cbd5e1',
+                          background: u.role === 'admin' ? theme.amarilloBet : theme.border,
+                          color: u.role === 'admin' ? theme.fondo : theme.textoSecundario,
                           padding: '2px 8px',
                           borderRadius: 4,
                           fontWeight: 600,
@@ -345,7 +347,7 @@ export default function UserManager() {
 
       {/* ── Balance adjust ───────────────────────────────────────────────── */}
       <div style={card}>
-        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: '#f1f5f9' }}>
+        <h4 style={{ margin: '0 0 16px', fontSize: 16, color: theme.blanco }}>
           Ajustar Saldo
         </h4>
 
@@ -427,13 +429,13 @@ export default function UserManager() {
         </div>
 
         {adjustBalance.isSuccess && (
-          <p style={{ color: '#22c55e', fontSize: 13, margin: '8px 0 0' }}>
+          <p style={{ color: theme.verdeBet, fontSize: 13, margin: '8px 0 0' }}>
             Saldo ajustado correctamente.
           </p>
         )}
 
         {adjustBalance.error && (
-          <p style={{ color: '#ef4444', fontSize: 13, margin: '8px 0 0' }}>
+          <p style={{ color: theme.rojo, fontSize: 13, margin: '8px 0 0' }}>
             {(adjustBalance.error as any)?.response?.data?.message ?? 'Error al ajustar saldo.'}
           </p>
         )}
@@ -450,6 +452,8 @@ const thStyle: React.CSSProperties = {
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
+  background: theme.headerBg,
+  color: theme.amarilloBet,
 };
 
 const tdStyle: React.CSSProperties = {

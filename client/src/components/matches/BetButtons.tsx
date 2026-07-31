@@ -1,5 +1,6 @@
 import type { Prediction } from '../../types';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
+import theme from '../../styles/theme';
 
 interface BetButtonsProps {
   /** Match ID as a string (for store key) */
@@ -42,10 +43,10 @@ export default function BetButtons({ matchId, disabled, currentPrediction }: Bet
             style={{
               width: 44,
               height: 44,
-              border: isSelected ? `2px solid ${colors.border}` : '2px solid #d1d5db',
+              border: isSelected ? `2px solid ${colors.border}` : `2px solid ${theme.border}`,
               borderRadius: 8,
-              background: isSelected ? colors.bg : '#fff',
-              color: isSelected ? colors.text : '#374151',
+              background: isSelected ? colors.bg : theme.searchBg,
+              color: isSelected ? colors.text : theme.textoSecundario,
               fontWeight: 700,
               fontSize: 16,
               cursor: disabled ? 'not-allowed' : 'pointer',
@@ -75,14 +76,14 @@ function getButtonColors(
   value: Prediction,
   isSelected: boolean,
 ): { bg: string; border: string; text: string } {
-  if (!isSelected) return { bg: '#fff', border: '#d1d5db', text: '#374151' };
+  if (!isSelected) return { bg: theme.searchBg, border: theme.border, text: theme.textoSecundario };
 
   switch (value) {
     case 'L':
-      return { bg: '#dcfce7', border: '#16a34a', text: '#15803d' }; // green
+      return { bg: theme.betL, border: theme.headerBg, text: theme.blanco }; // green
     case 'E':
-      return { bg: '#fef9c3', border: '#ca8a04', text: '#a16207' }; // yellow
+      return { bg: theme.betE, border: theme.amarilloBet, text: theme.amarilloBet }; // yellow
     case 'V':
-      return { bg: '#dcfce7', border: '#16a34a', text: '#15803d' }; // green
+      return { bg: theme.betV, border: theme.verdeBet, text: theme.blanco }; // green
   }
 }

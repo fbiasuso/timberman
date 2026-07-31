@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { useRanking, useUserDetail } from '../../hooks/use-ranking';
 import type { RankingEntry } from '../../types';
+import theme from '../../styles/theme';
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -12,10 +13,10 @@ function getMedal(position: number): string | null {
 }
 
 function getRowBackground(position: number, isExpanded: boolean, isHovered: boolean): string {
-  if (isExpanded) return '#1f3d28';
-  if (isHovered) return '#1f3d28';
-  if (position <= 3) return '#1a3522';
-  return '#162e1f';
+  if (isExpanded) return theme.border;
+  if (isHovered) return theme.border;
+  if (position <= 3) return theme.top3Bg;
+  return theme.pillBg;
 }
 
 /* ─── Inline styles (dark theme) ──────────────────────── */
@@ -23,35 +24,36 @@ function getRowBackground(position: number, isExpanded: boolean, isHovered: bool
 const styles = {
   container: {
     minHeight: 320,
-    background: '#0f2a1a',
+    background: theme.tarjeta,
     borderRadius: 12,
     padding: 24,
-    color: '#e2e8f0',
+    color: theme.blanco,
+    boxShadow: theme.glow,
   } as React.CSSProperties,
 
   title: {
     margin: '0 0 4px',
     fontSize: 22,
     fontWeight: 700,
-    color: '#f5c518',
+    color: theme.amarilloBet,
   } as React.CSSProperties,
 
   subtitle: {
     margin: '0 0 24px',
     fontSize: 13,
-    color: '#94a3b8',
+    color: theme.textoSecundario,
   } as React.CSSProperties,
 
   /* Table header */
   headerRow: {
     display: 'flex',
     padding: '10px 16px',
-    borderBottom: '1px solid #2d4a36',
+    borderBottom: `1px solid ${theme.border}`,
     fontSize: 12,
     fontWeight: 600,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    color: '#94a3b8',
+    color: theme.textoSecundario,
   } as React.CSSProperties,
 
   colPos: {
@@ -77,7 +79,7 @@ const styles = {
     borderRadius: 8,
     cursor: 'pointer',
     transition: 'background 0.15s',
-    borderBottom: '1px solid #1f3d28',
+    borderBottom: `1px solid ${theme.border}`,
     userSelect: 'none' as const,
   } as React.CSSProperties,
 
@@ -100,20 +102,20 @@ const styles = {
     textAlign: 'right' as const,
     fontWeight: 700,
     fontSize: 16,
-    color: '#f5c518',
+    color: theme.amarilloBet,
   } as React.CSSProperties,
 
   expandIcon: {
     marginLeft: 8,
     fontSize: 12,
-    color: '#94a3b8',
+    color: theme.textoSecundario,
     transition: 'transform 0.2s',
   } as React.CSSProperties,
 
   /* Breakdown */
   breakdown: {
     padding: '12px 16px 12px 88px',
-    background: '#1a3522',
+    background: theme.searchBg,
     borderRadius: '0 0 8px 8px',
     marginTop: -4,
     marginBottom: 4,
@@ -124,26 +126,26 @@ const styles = {
     justifyContent: 'space-between',
     padding: '6px 0',
     fontSize: 14,
-    borderBottom: '1px solid #2d4a36',
+    borderBottom: `1px solid ${theme.border}`,
   } as React.CSSProperties,
 
   breakdownLabel: {
-    color: '#94a3b8',
+    color: theme.textoSecundario,
   } as React.CSSProperties,
 
   breakdownValue: {
     fontWeight: 600,
-    color: '#f5c518',
+    color: theme.amarilloBet,
   } as React.CSSProperties,
 
   breakdownLoading: {
-    color: '#94a3b8',
+    color: theme.textoSecundario,
     fontSize: 14,
     fontStyle: 'italic' as const,
   } as React.CSSProperties,
 
   breakdownError: {
-    color: '#fca5a5',
+    color: theme.rojo,
     fontSize: 13,
   } as React.CSSProperties,
 
@@ -151,13 +153,13 @@ const styles = {
   stateMsg: {
     textAlign: 'center' as const,
     padding: 48,
-    color: '#94a3b8',
+    color: theme.textoSecundario,
   } as React.CSSProperties,
 
   stateError: {
     textAlign: 'center' as const,
     padding: 48,
-    color: '#fca5a5',
+    color: theme.rojo,
   } as React.CSSProperties,
 };
 
@@ -264,7 +266,7 @@ export default function RankingPage() {
                 {medal ? (
                   <span style={{ fontSize: 20 }}>{medal}</span>
                 ) : (
-                  <span style={{ color: '#94a3b8' }}>#{entry.position}</span>
+                  <span style={{ color: theme.textoSecundario }}>#{entry.position}</span>
                 )}
               </div>
               <div style={styles.username}>{entry.username}</div>

@@ -4,6 +4,7 @@ import { useMatchDates } from '../../hooks/use-matches';
 import TicketCard from './TicketCard';
 import TicketModal from './TicketModal';
 import type { TicketDTO } from '../../types';
+import theme from '../../styles/theme';
 
 /**
  * TicketsPage — list of the authenticated user's tickets with date filter.
@@ -24,7 +25,7 @@ export default function TicketsPage() {
 
   return (
     <div>
-      <h2 style={{ margin: '0 0 20px', fontSize: 22, color: '#1e293b' }}>
+      <h2 style={{ margin: '0 0 20px', fontSize: 22, color: theme.blanco }}>
         Mis Tickets
       </h2>
 
@@ -39,10 +40,11 @@ export default function TicketsPage() {
           style={{
             width: '100%',
             padding: '10px 14px',
-            border: '1px solid #d1d5db',
+            border: `1px solid ${theme.border}`,
             borderRadius: 8,
             fontSize: 15,
-            background: '#fff',
+            background: theme.tarjeta,
+            color: theme.blanco,
             outline: 'none',
           }}
         >
@@ -57,21 +59,21 @@ export default function TicketsPage() {
 
       {/* Loading */}
       {isLoading && (
-        <div style={{ textAlign: 'center', padding: 48, color: '#6b7280' }}>
+        <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
           Cargando tickets...
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div style={{ textAlign: 'center', padding: 48, color: '#dc2626' }}>
+        <div style={{ textAlign: 'center', padding: 48, color: theme.rojo }}>
           Error al cargar los tickets.
         </div>
       )}
 
       {/* Empty */}
       {!isLoading && !error && betsData?.tickets.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 48, color: '#9ca3af' }}>
+        <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
           <p style={{ fontSize: 16, margin: 0 }}>No tenés tickets todavía.</p>
           <p style={{ fontSize: 14, margin: '8px 0 0' }}>
             Andá a la cartelera para hacer tu primera jugada.

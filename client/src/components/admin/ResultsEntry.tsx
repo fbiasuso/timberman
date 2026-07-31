@@ -2,21 +2,23 @@ import { useState } from 'react';
 import { useCurrentMatches } from '../../hooks/use-matches';
 import { useSetMatchResult, useCloseDate } from '../../hooks/use-admin';
 import type { MatchDTO } from '../../types';
+import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const card: React.CSSProperties = {
-  background: '#1e293b',
+  background: theme.tarjeta,
   borderRadius: 12,
   padding: 24,
-  border: '1px solid #334155',
+  border: `1px solid ${theme.border}`,
+  boxShadow: theme.glow,
 };
 
 const matchCard: React.CSSProperties = {
-  background: '#0f172a',
+  background: theme.inputBg,
   borderRadius: 10,
   padding: 16,
-  borderLeft: '4px solid #f59e0b',
+  borderLeft: `4px solid ${theme.amarilloBet}`,
   display: 'flex',
   alignItems: 'center',
   gap: 16,
@@ -26,7 +28,7 @@ const matchCard: React.CSSProperties = {
 const label: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
-  color: '#94a3b8',
+  color: theme.textoSecundario,
   marginBottom: 4,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
@@ -34,10 +36,10 @@ const label: React.CSSProperties = {
 
 const select: React.CSSProperties = {
   padding: '8px 12px',
-  background: '#1e293b',
-  border: '1px solid #334155',
+  background: theme.inputBg,
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 14,
   outline: 'none',
   cursor: 'pointer',
@@ -45,10 +47,10 @@ const select: React.CSSProperties = {
 
 const input: React.CSSProperties = {
   padding: '8px 12px',
-  background: '#1e293b',
-  border: '1px solid #334155',
+  background: theme.inputBg,
+  border: `1px solid ${theme.border}`,
   borderRadius: 8,
-  color: '#f1f5f9',
+  color: theme.blanco,
   fontSize: 14,
   outline: 'none',
   width: 80,
@@ -58,8 +60,8 @@ const saveBtn: React.CSSProperties = {
   padding: '8px 16px',
   border: 'none',
   borderRadius: 8,
-  background: '#2563eb',
-  color: '#fff',
+  background: theme.verdeBet,
+  color: theme.blanco,
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
@@ -70,8 +72,8 @@ const closeBtn: React.CSSProperties = {
   padding: '12px 24px',
   border: 'none',
   borderRadius: 10,
-  background: '#f59e0b',
-  color: '#0f172a',
+  background: theme.amarilloBet,
+  color: theme.fondo,
   fontSize: 15,
   fontWeight: 700,
   cursor: 'pointer',
@@ -117,7 +119,7 @@ export default function ResultsEntry() {
   if (isLoading) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>Cargando partidos...</p>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>Cargando partidos...</p>
       </div>
     );
   }
@@ -126,7 +128,7 @@ export default function ResultsEntry() {
   if (error) {
     return (
       <div style={card}>
-        <p style={{ color: '#ef4444', textAlign: 'center' }}>
+        <p style={{ color: theme.rojo, textAlign: 'center' }}>
           Error al cargar los partidos.
         </p>
       </div>
@@ -139,7 +141,7 @@ export default function ResultsEntry() {
   if (!matchDate) {
     return (
       <div style={card}>
-        <p style={{ color: '#94a3b8', textAlign: 'center' }}>
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>
           No hay una fecha activa para cargar resultados.
         </p>
       </div>
@@ -158,10 +160,10 @@ export default function ResultsEntry() {
         }}
       >
         <div>
-          <h3 style={{ margin: 0, fontSize: 18, color: '#f1f5f9' }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: theme.blanco }}>
             Resultados — Fecha {matchDate.dateNumber}
           </h3>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
             Estado: {matchDate.status}
           </p>
         </div>
@@ -188,8 +190,8 @@ export default function ResultsEntry() {
         <div
           style={{
             padding: '10px 16px',
-            background: '#064e3b',
-            color: '#6ee7b7',
+            background: theme.betV,
+            color: theme.verdeBet,
             borderRadius: 8,
             marginBottom: 16,
             fontSize: 14,
@@ -203,8 +205,8 @@ export default function ResultsEntry() {
         <div
           style={{
             padding: '10px 16px',
-            background: '#7f1d1d',
-            color: '#fca5a5',
+            background: theme.dangerBg,
+            color: theme.rojo,
             borderRadius: 8,
             marginBottom: 16,
             fontSize: 14,
@@ -221,9 +223,9 @@ export default function ResultsEntry() {
           <div key={match.id} style={matchCard}>
             {/* Team names */}
             <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: '#f1f5f9' }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
                 {match.localTeam}
-                <span style={{ color: '#64748b', margin: '0 8px' }}>vs</span>
+                <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
                 {match.visitorTeam}
               </div>
             </div>
@@ -289,11 +291,11 @@ export default function ResultsEntry() {
             {/* Feedback */}
             {setResult.isSuccess &&
               setResult.variables?.matchId === match.id && (
-                <span style={{ color: '#22c55e', fontSize: 12 }}>✓</span>
+                <span style={{ color: theme.verdeBet, fontSize: 12 }}>✓</span>
               )}
             {setResult.isError &&
               setResult.variables?.matchId === match.id && (
-                <span style={{ color: '#ef4444', fontSize: 12 }}>✗</span>
+                <span style={{ color: theme.rojo, fontSize: 12 }}>✗</span>
               )}
           </div>
         ))}

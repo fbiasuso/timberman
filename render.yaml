@@ -1,0 +1,21 @@
+# Render Blueprint — timberman API (deploy via "New +" → "Blueprint" in Render,
+# pointing at this repo root). Secrets (DATABASE_URL, JWT_SECRET) are created
+# with sync: false and must be filled in the Render dashboard after connect.
+services:
+  - type: web
+    name: timberman-api
+    runtime: node
+    rootDir: server
+    plan: free
+    healthCheckPath: /api/health
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_EXPIRES_IN
+        value: "7d"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false

@@ -1,0 +1,14 @@
+# Netlify config — timberman front (React SPA build via Vite).
+# Set site env var VITE_API_URL=https://timberman-api.onrender.com (or your
+# Render URL) in Netlify → Site settings → Environment variables BEFORE
+# building, so the client points at the API.
+[build]
+  base = "client"
+  command = "pnpm install --frozen-lockfile && pnpm build"
+  publish = "dist"
+
+# SPA fallback: let client-side routing handle unknown paths.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -15,11 +15,13 @@ import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
 import { User } from '../../domain/entities/user.js';
 import { PozoCalculator } from '../betting/pozo-calculator.js';
+import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
   DateNotClosedError,
   UserNotFoundError,
+  MatchesNotReadyError,
 } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -27,6 +29,7 @@ import {
 function createTournamentRepoMocks() {
   const repo: TournamentRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findActive: vi.fn(),
     findAll: vi.fn(),
     save: vi.fn(),
@@ -106,6 +109,20 @@ function makeUser(id: string, balance = 0): User {
     balance,
     createdAt: new Date(),
   });
+}
+
+/**
+ * Fake unit of work: hands the given repos to the callback untouched and
+ * records the invocation, so tests can assert the flow ran inside it.
+ */
+function createFakeUow(repos: TransactionRepos) {
+  const withTransaction = vi.fn(
+    async (fn: (txRepos: TransactionRepos) => Promise<unknown>) => fn(repos),
+  );
+  const uow: UnitOfWork = {
+    withTransaction: withTransaction as unknown as UnitOfWork['withTransaction'],
+  };
+  return { uow, withTransaction };
 }
 
 // ── CreateDateUseCase ──────────────────────────────────────────────
@@ -193,7 +210,7 @@ describe('CloseDateUseCase', () => {
     const admin = makeAdmin('admin-1');
 
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(admin);
 
@@ -233,7 +250,7 @@ describe('CloseDateUseCase', () => {
     const admin = makeAdmin('admin-1');
 
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(admin);
 
@@ -255,7 +272,7 @@ describe('CloseDateUseCase', () => {
     const tournament = Tournament.new({ id: 1, name: 'Test' });
 
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(0);
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
@@ -276,7 +293,7 @@ describe('CloseDateUseCase', () => {
     const tournament = Tournament.new({ id: 1, name: 'Test' });
 
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(null);
 
@@ -321,6 +338,102 @@ describe('CloseDateUseCase', () => {
     );
     await expect(uc.execute(10, 'admin-1')).rejects.toThrow('Cannot close');
     expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+  });
+
+  it('locks the tournament row (findByIdForUpdate) when reading carryover', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 500 });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    await uc.execute(10, 'admin-1');
+
+    // The carryover read must go through the row lock, never the plain read
+    expect(tournamentRepo.findByIdForUpdate).toHaveBeenCalledWith(1);
+    expect(tournamentRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('runs the whole close flow inside the provided unit of work', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 500 });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+
+    const { uow, withTransaction } = createFakeUow({
+      tournamentRepo,
+      ticketRepo,
+      userRepo,
+      auditLogRepo,
+      matchRepo: undefined as never,
+    });
+
+    const uc = new CloseDateUseCase(
+      tournamentRepo,
+      ticketRepo,
+      new PozoCalculator(),
+      config,
+      userRepo,
+      auditLogRepo,
+      uow,
+    );
+    const result = await uc.execute(10, 'admin-1');
+
+    expect(withTransaction).toHaveBeenCalledOnce();
+    expect(result.status).toBe('closed');
+    // Every write went through repos provided by the unit of work (atomic set)
+    expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
+    expect(tournamentRepo.update).toHaveBeenCalledOnce();
+    expect(userRepo.update).toHaveBeenCalledOnce();
+    expect(auditLogRepo.save).toHaveBeenCalledOnce();
+  });
+
+  it('propagates errors from inside the unit of work so the transaction rolls back', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(null); // ghost admin
+
+    const { uow, withTransaction } = createFakeUow({
+      tournamentRepo,
+      ticketRepo,
+      userRepo,
+      auditLogRepo,
+      matchRepo: undefined as never,
+    });
+
+    const uc = new CloseDateUseCase(
+      tournamentRepo,
+      ticketRepo,
+      new PozoCalculator(),
+      config,
+      userRepo,
+      auditLogRepo,
+      uow,
+    );
+
+    await expect(uc.execute(10, 'ghost-admin')).rejects.toThrow(UserNotFoundError);
+    // The error surfaced out of the unit of work — the Drizzle implementation
+    // turns that into a rollback (verified in drizzle-unit-of-work.test.ts).
+    expect(withTransaction).toHaveBeenCalledOnce();
   });
 });
 
@@ -548,6 +661,68 @@ describe('PublishResultsUseCase', () => {
     );
     await expect(uc.execute(10)).rejects.toThrow(DateNotClosedError);
     expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+  });
+
+  it('rejects publishing when a match is missing its result — no writes', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    // Match 1 has a result; match 2 does NOT
+    const partial = [matches[0].setResult('L', '2-0'), matches[1]];
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(partial);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    await expect(uc.execute(10)).rejects.toThrow(MatchesNotReadyError);
+
+    // Guard runs BEFORE any write: the date stays closed, nothing is credited
+    expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(ticketRepo.update).not.toHaveBeenCalled();
+    expect(tournamentRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('runs the whole publish flow inside the provided unit of work', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const results = matches.map((m) => m.setResult('L', '2-0'));
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+
+    const { uow, withTransaction } = createFakeUow({
+      tournamentRepo,
+      matchRepo,
+      ticketRepo,
+      userRepo,
+      auditLogRepo: {} as never,
+    });
+
+    const uc = new PublishResultsUseCase(
+      tournamentRepo,
+      matchRepo,
+      ticketRepo,
+      new PointsCalculator(),
+      userRepo,
+      uow,
+    );
+    const result = await uc.execute(10);
+
+    expect(withTransaction).toHaveBeenCalledOnce();
+    expect(result.status).toBe('results');
+    // All writes went through repos provided by the unit of work (atomic set)
+    expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
+    expect(userRepo.update).toHaveBeenCalledOnce();
+    expect(ticketRepo.update).toHaveBeenCalledOnce();
   });
 });
 

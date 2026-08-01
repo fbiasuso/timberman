@@ -185,6 +185,7 @@ describe('CreateTournamentUseCase', () => {
   function createTournamentRepoMocks() {
     const repo: import('../../domain/ports/tournament-repo.js').TournamentRepo = {
       findById: vi.fn(),
+      findByIdForUpdate: vi.fn(),
       findActive: vi.fn(),
       findAll: vi.fn(),
       save: vi.fn((t: any) => Promise.resolve(t)),
@@ -228,6 +229,7 @@ describe('ListTournamentsUseCase', () => {
   function createTournamentRepoMocks() {
     const repo: import('../../domain/ports/tournament-repo.js').TournamentRepo = {
       findById: vi.fn(),
+      findByIdForUpdate: vi.fn(),
       findActive: vi.fn(),
       findAll: vi.fn(),
       save: vi.fn(),

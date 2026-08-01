@@ -32,6 +32,25 @@ export class DrizzleTournamentRepo implements TournamentRepo {
     } as TournamentSnapshot);
   }
 
+  async findByIdForUpdate(id: number): Promise<Tournament | null> {
+    // Lock the row for the duration of the transaction — serializes the
+    // carryover read-modify-write between concurrent date closes.
+    const [row] = await this.db
+      .select()
+      .from(schema.tournaments)
+      .where(eq(schema.tournaments.id, id))
+      .for('update');
+    if (!row) return null;
+    return Tournament.create({
+      id: row.id,
+      name: row.name,
+      commission: Number(row.commission),
+      isActive: row.isActive,
+      carryover: row.carryover,
+      createdAt: row.createdAt,
+    } as TournamentSnapshot);
+  }
+
   async findActive(): Promise<Tournament | null> {
     const [row] = await this.db
       .select()

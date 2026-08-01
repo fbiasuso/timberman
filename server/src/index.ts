@@ -11,6 +11,7 @@ import { DrizzleMatchRepo } from './infrastructure/repositories/drizzle-match-re
 import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-repo.js';
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
+import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
 import { errorHandler } from './infrastructure/http/middlewares/error-handler.js';
 import { DEFAULT_SYSTEM_CONFIG } from './domain/entities/system-config.js';
@@ -36,6 +37,17 @@ const auditLogRepo = new DrizzleAuditLogRepo(db);
 const systemConfigRepo = new DrizzleSystemConfigRepo(db);
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
+
+// ── Transaction boundary (financial flows: close + publish results) ──
+// Repos are rebuilt bound to the transaction client inside the callback,
+// so every write in those flows is atomic and rolls back on failure.
+const uow = new DrizzleUnitOfWork(db, {
+  tournamentRepo: (tx) => new DrizzleTournamentRepo(tx),
+  matchRepo: (tx) => new DrizzleMatchRepo(tx),
+  ticketRepo: (tx) => new DrizzleTicketRepo(tx),
+  userRepo: (tx) => new DrizzleUserRepo(tx),
+  auditLogRepo: (tx) => new DrizzleAuditLogRepo(tx),
+});
 
 // ── System Config (persisted single row, live-loaded at boot) ────
 // Load the persisted config; when no row exists yet, seed the built-in
@@ -65,6 +77,7 @@ await app.register(createRouter(
   auditLogRepo,
   config,
   systemConfigRepo,
+  uow,
 ));
 
 // ── Health check ────────────────────────────────────────────────

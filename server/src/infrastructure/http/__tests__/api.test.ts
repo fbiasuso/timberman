@@ -44,6 +44,7 @@ function createMockServices() {
 
   const tournamentRepo: TournamentRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findActive: vi.fn(),
     findAll: vi.fn(),
     save: vi.fn(),
@@ -480,6 +481,33 @@ describe('API Integration Tests', () => {
       expect(services.ticketRepo.update).not.toHaveBeenCalled();
     });
 
+    it('rejects with 422 MATCHES_NOT_READY when a match lacks its result', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
+        matchesWithResults[0], // has result
+        Match.new({ id: 2, matchDateId: 10, localTeam: 'C', visitorTeam: 'D' }), // no result
+      ]);
+      vi.mocked(services.ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/publish-results',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCHES_NOT_READY');
+      expect(services.tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+      expect(services.userRepo.update).not.toHaveBeenCalled();
+    });
+
     it('returns 403 for non-admin users', async () => {
       vi.clearAllMocks();
       vi.mocked(services.jwtService.verify).mockReturnValue({
@@ -520,7 +548,7 @@ describe('API Integration Tests', () => {
         username: 'admin',
       });
       vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
         Tournament.new({ id: 1, name: 'Test' }),
       );
       vi.mocked(services.ticketRepo.countByMatchDateId).mockResolvedValue(5);

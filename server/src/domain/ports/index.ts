@@ -4,3 +4,4 @@ export type { MatchRepo } from './match-repo.js';
 export type { TicketRepo } from './ticket-repo.js';
 export type { AuditLogRepo } from './audit-log-repo.js';
 export type { SystemConfigRepo } from './system-config-repo.js';
+export type { UnitOfWork, TransactionRepos } from './unit-of-work.js';

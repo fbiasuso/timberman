@@ -181,19 +181,13 @@ export default function ResultsEntry() {
 
   const activeDate = selectableDates.find((d) => d.id === selectedDateId) ?? defaultDate;
 
-  const status = activeDate.status;
-
   // /matches/current only reaches the OPEN date, so a closed date's matches
   // must be loaded explicitly — lets the admin review/correct results before
   // publishing (PATCH /api/admin/matches/:matchId/result accepts them).
+  // Null-safe: activeDate may be null here; the early return below guards it.
+  const closedDateId = activeDate?.status === 'closed' ? activeDate.id : undefined;
   const { data: closedMatchesData, isLoading: closedMatchesLoading, error: closedMatchesError } =
-    useMatchesByDate(status === 'closed' ? activeDate.id : undefined);
-
-  const matchesLoading = status === 'closed' ? closedMatchesLoading : currentMatchesLoading;
-  const matchesError = status === 'closed' ? closedMatchesError : currentMatchesError;
-  const matches = status === 'closed'
-    ? (closedMatchesData?.matches ?? [])
-    : (currentData?.matches ?? []);
+    useMatchesByDate(closedDateId);
 
   // Follow the open date automatically until the admin picks a date manually —
   // otherwise a late-resolving /matches/current query would reset an admin's
@@ -260,6 +254,13 @@ export default function ResultsEntry() {
       </div>
     );
   }
+
+  const status = activeDate.status;
+  const matchesLoading = status === 'closed' ? closedMatchesLoading : currentMatchesLoading;
+  const matchesError = status === 'closed' ? closedMatchesError : currentMatchesError;
+  const matches = status === 'closed'
+    ? (closedMatchesData?.matches ?? [])
+    : (currentData?.matches ?? []);
 
   // Match cards with result selectors — shared by the OPEN date (matches from
   // /matches/current) and CLOSED dates (matches from /matches/dates/:dateId),

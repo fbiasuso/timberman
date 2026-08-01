@@ -195,6 +195,7 @@ describe('ResultsEntry', () => {
       isPending: false,
       isSuccess: true,
       error: null,
+      variables: 2, // closedDate.id — the keyed guard only disables for the published date
     } as any);
 
     render(<ResultsEntry />);

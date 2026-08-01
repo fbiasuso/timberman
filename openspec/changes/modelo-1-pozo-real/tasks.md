@@ -44,13 +44,13 @@ Chain strategy: pending
 
 ## Phase 3: Close + Publish Flows + Routes
 
-- [ ] 3.1 `CreateTournamentUseCase`: default `commission` from `config.commission` (informational) (tournament-mgmt: Start New Tournament).
-- [ ] 3.2 `CloseDateUseCase`: ctor `(tournamentRepo, ticketRepo, pozoCalculator, config, userRepo, auditLogRepo)`; `execute(dateId, adminId)`: pozo = carryover + (gross − commission via `Commission(config.commission)`); store pozo + commission snapshot; `tournament.withCarryover(0)` + update; `userRepo.update(admin.addBalance(commission))`; save audit `'commission_payout'` (tournament-mgmt: Close Date Financials, Carryover Lifecycle; betting-engine: Pozo Calculation).
-- [ ] 3.3 Create `application/tournament/pozo-split.ts`: pure `splitPozo(pozoCents, n)` floor + remainder to index 0 (prize-payouts: Equal Pozo Split).
-- [ ] 3.4 `PublishResultsUseCase`: ctor gains `userRepo`; winners = max correct > 0, ascending ticketId; transition-first `updateMatchDate(publishResults())` (idempotent via DateNotClosedError); credit winners + persist `ticket.withPrize`; max=0 → `tournament.withCarryover(carryover + pozo)`; result gains `winners` (prize-payouts: all; tournament-mgmt: Date Lifecycle).
-- [ ] 3.5 `admin-routes.ts`: close passes `request.user.sub`; add `POST /api/admin/dates/:dateId/publish-results` (zod coerce dateId) behind auth+admin (admin-ops: Publish Results Route).
-- [ ] 3.6 DTOs: `bet-routes.ts` expose `prizeWon`; `match-routes.ts` expose `commission` + `carryover` (prize-payouts: Premio ganado, Carryover in Cartelera).
-- [ ] 3.7 `list-tournaments-use-case.ts`: per-tournament `dates[]` `{id,dateNumber,status,pozo,commission,winners[{ticketId,userId,username,prize}]}` via ticketRepo+userRepo lookups — CONFIRMED payload for design risk #2 (admin-ops: Payout Breakdown).
+- [x] 3.1 `CreateTournamentUseCase`: default `commission` from `config.commission` (informational) (tournament-mgmt: Start New Tournament).
+- [x] 3.2 `CloseDateUseCase`: ctor `(tournamentRepo, ticketRepo, pozoCalculator, config, userRepo, auditLogRepo)`; `execute(dateId, adminId)`: pozo = carryover + (gross − commission via `Commission(config.commission)`); store pozo + commission snapshot; `tournament.withCarryover(0)` + update; `userRepo.update(admin.addBalance(commission))`; save audit `'commission_payout'` (tournament-mgmt: Close Date Financials, Carryover Lifecycle; betting-engine: Pozo Calculation).
+- [x] 3.3 Create `application/tournament/pozo-split.ts`: pure `splitPozo(pozoCents, n)` floor + remainder to index 0 (prize-payouts: Equal Pozo Split).
+- [x] 3.4 `PublishResultsUseCase`: ctor gains `userRepo`; winners = max correct > 0, ascending ticketId; transition-first `updateMatchDate(publishResults())` (idempotent via DateNotClosedError); credit winners + persist `ticket.withPrize`; max=0 → `tournament.withCarryover(carryover + pozo)`; result gains `winners` (prize-payouts: all; tournament-mgmt: Date Lifecycle).
+- [x] 3.5 `admin-routes.ts`: close passes `request.user.sub`; add `POST /api/admin/dates/:dateId/publish-results` (zod coerce dateId) behind auth+admin (admin-ops: Publish Results Route).
+- [x] 3.6 DTOs: `bet-routes.ts` expose `prizeWon`; `match-routes.ts` expose `commission` + `carryover` (prize-payouts: Premio ganado, Carryover in Cartelera).
+- [x] 3.7 `list-tournaments-use-case.ts`: per-tournament `dates[]` `{id,dateNumber,status,pozo,commission,winners[{ticketId,userId,username,prize}]}` via ticketRepo+userRepo lookups — CONFIRMED payload for design risk #2 (admin-ops: Payout Breakdown).
 
 ## Phase 4: Client
 
@@ -63,11 +63,11 @@ Chain strategy: pending
 
 ## Phase 5: Tests
 
-- [ ] 5.1 Unit `splitPozo`: 1000/3 → 334/333/333; exact; single winner (prize-payouts: Equal Split).
-- [ ] 5.2 MatchDate: `withCommission` immutable; `publishResults()` throws DateNotClosedError (betting-engine: never recomputed).
-- [ ] 5.3 CloseDateUseCase (mocks): carryover add+reset, admin credit, audit entry, zero-bet → 0 (tournament-mgmt scenarios).
-- [ ] 5.4 PublishResultsUseCase (mocks): winners paid, prizeWon persisted, max=0 → carryover, no credits; double execute → DateNotClosedError, no double credit (prize-payouts: Idempotency).
-- [ ] 5.5 Update existing: config use cases (async + repo), register (config ref), close/publish signatures, `api.test.ts` (403 non-admin publish, publish happy path, close credits, config round-trip) (admin-ops: Re-submit harmless, Non-admin rejected).
+- [x] 5.1 Unit `splitPozo`: 1000/3 → 334/333/333; exact; single winner (prize-payouts: Equal Split).
+- [x] 5.2 MatchDate: `withCommission` immutable; `publishResults()` throws DateNotClosedError (betting-engine: never recomputed).
+- [x] 5.3 CloseDateUseCase (mocks): carryover add+reset, admin credit, audit entry, zero-bet → 0 (tournament-mgmt scenarios).
+- [x] 5.4 PublishResultsUseCase (mocks): winners paid, prizeWon persisted, max=0 → carryover, no credits; double execute → DateNotClosedError, no double credit (prize-payouts: Idempotency).
+- [x] 5.5 Update existing: config use cases (async + repo), register (config ref), close/publish signatures, `api.test.ts` (403 non-admin publish, publish happy path, close credits, config round-trip) (admin-ops: Re-submit harmless, Non-admin rejected).
 
 ## Phase 6: Docs
 

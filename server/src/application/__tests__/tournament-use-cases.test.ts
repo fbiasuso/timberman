@@ -6,16 +6,20 @@ import { PointsCalculator } from '../tournament/points-calculator.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
+import type { UserRepo } from '../../domain/ports/user-repo.js';
+import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
 import { Tournament } from '../../domain/entities/tournament.js';
 import { MatchDate } from '../../domain/entities/match-date.js';
 import { Match } from '../../domain/entities/match.js';
 import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
+import { User } from '../../domain/entities/user.js';
 import { PozoCalculator } from '../betting/pozo-calculator.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
   DateNotClosedError,
+  UserNotFoundError,
 } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -58,6 +62,39 @@ function createTicketRepoMocks() {
     countByMatchDateId: vi.fn(),
   };
   return repo;
+}
+
+function createUserRepoMocks() {
+  const repo: UserRepo = {
+    findById: vi.fn(),
+    findByUsername: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn((u: User) => Promise.resolve(u)),
+    findAll: vi.fn(),
+    delete: vi.fn(),
+  };
+  return repo;
+}
+
+function createAuditLogRepoMocks() {
+  const repo: AuditLogRepo = {
+    save: vi.fn((log: any) => Promise.resolve(log)),
+    findByAdminId: vi.fn(),
+    findByUserId: vi.fn(),
+    findAll: vi.fn(),
+  };
+  return repo;
+}
+
+function makeAdmin(id: string, balance = 0): User {
+  return User.create({
+    id,
+    username: 'admin',
+    passwordHash: 'hash',
+    role: 'admin',
+    balance,
+    createdAt: new Date(),
+  });
 }
 
 // ── CreateDateUseCase ──────────────────────────────────────────────
@@ -118,24 +155,122 @@ describe('CloseDateUseCase', () => {
     createdAt: new Date(),
   });
 
-  it('closes an open date and calculates pozo', async () => {
+  const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+
+  function buildUseCase(
+    tournamentRepo: TournamentRepo,
+    ticketRepo: TicketRepo,
+    userRepo: UserRepo,
+    auditLogRepo: AuditLogRepo,
+  ) {
+    return new CloseDateUseCase(
+      tournamentRepo,
+      ticketRepo,
+      new PozoCalculator(),
+      config,
+      userRepo,
+      auditLogRepo,
+    );
+  }
+
+  it('closes an open date, calculates pozo, credits the admin, and audits', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test', commission: 15 });
+    const admin = makeAdmin('admin-1');
 
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(admin);
 
-    const pozoCalc = new PozoCalculator();
-    const uc = new CloseDateUseCase(tournamentRepo, ticketRepo, pozoCalc);
-    const result = await uc.execute(10);
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    const result = await uc.execute(10, 'admin-1');
 
     // 5 tickets × 1500 = 7500 gross, 15% commission = 1125, pozo = 6375
     expect(result.status).toBe('closed');
     expect(result.pozo).toBe(6375);
+    expect(result.commission).toBe(1125);
     expect(result.ticketCount).toBe(5);
-    expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
+
+    // Date persists pozo + commission snapshot
+    const savedDate = vi.mocked(tournamentRepo.updateMatchDate).mock.calls[0][0];
+    expect(savedDate.toSnapshot()).toMatchObject({ pozo: 6375, commission: 15 });
+
+    // Carryover (0) is consumed — still persisted via update
+    expect(tournamentRepo.update).toHaveBeenCalledOnce();
+
+    // Admin balance credited 1125
+    const credited = vi.mocked(userRepo.update).mock.calls[0][0];
+    expect(credited.balance.cents).toBe(1125);
+
+    // Audit entry recorded
+    expect(auditLogRepo.save).toHaveBeenCalledOnce();
+    const audit = vi.mocked(auditLogRepo.save).mock.calls[0][0];
+    expect(audit.action).toBe('commission_payout');
+    expect(audit.amount?.cents).toBe(1125);
+  });
+
+  it('adds tournament carryover to the pozo and resets it to zero', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 1200 });
+    const admin = makeAdmin('admin-1');
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(admin);
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    const result = await uc.execute(10, 'admin-1');
+
+    // 7500 gross − 1125 commission = 6375 base + 1200 carryover = 7575
+    expect(result.pozo).toBe(7575);
+
+    const reset = vi.mocked(tournamentRepo.update).mock.calls[0][0];
+    expect(reset.carryover).toBe(0);
+  });
+
+  it('records pozo and commission as zero when there are no bets', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(0);
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    const result = await uc.execute(10, 'admin-1');
+
+    expect(result.pozo).toBe(0);
+    expect(result.commission).toBe(0);
+    expect(userRepo.findById).not.toHaveBeenCalled();
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(auditLogRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('throws UserNotFoundError when the closing admin does not exist', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(null);
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    await expect(uc.execute(10, 'ghost-admin')).rejects.toThrow(UserNotFoundError);
   });
 
   it('throws MatchDateNotFoundError when date does not exist', async () => {
@@ -143,9 +278,13 @@ describe('CloseDateUseCase', () => {
     const ticketRepo = createTicketRepoMocks();
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
 
-    const pozoCalc = new PozoCalculator();
-    const uc = new CloseDateUseCase(tournamentRepo, ticketRepo, pozoCalc);
-    await expect(uc.execute(999)).rejects.toThrow(MatchDateNotFoundError);
+    const uc = buildUseCase(
+      tournamentRepo,
+      ticketRepo,
+      createUserRepoMocks(),
+      createAuditLogRepoMocks(),
+    );
+    await expect(uc.execute(999, 'admin-1')).rejects.toThrow(MatchDateNotFoundError);
   });
 
   it('throws when trying to close an already closed date', async () => {
@@ -163,9 +302,13 @@ describe('CloseDateUseCase', () => {
     });
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
 
-    const pozoCalc = new PozoCalculator();
-    const uc = new CloseDateUseCase(tournamentRepo, ticketRepo, pozoCalc);
-    await expect(uc.execute(10)).rejects.toThrow('Cannot close');
+    const uc = buildUseCase(
+      tournamentRepo,
+      ticketRepo,
+      createUserRepoMocks(),
+      createAuditLogRepoMocks(),
+    );
+    await expect(uc.execute(10, 'admin-1')).rejects.toThrow('Cannot close');
     expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
   });
 });

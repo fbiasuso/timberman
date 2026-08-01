@@ -5,6 +5,7 @@ import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
+import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
@@ -62,6 +63,7 @@ export function createAdminRoutes(
   jwtService: JwtServiceImpl,
   bcryptService: BcryptServiceImpl,
   config: SystemConfig,
+  configRepo: SystemConfigRepo,
 ): FastifyPluginAsync {
   return async (fastify) => {
     const authMiddleware = createAuthMiddleware(jwtService);
@@ -74,7 +76,7 @@ export function createAdminRoutes(
     const adjustBalanceUseCase = new AdjustBalanceUseCase(userRepo, auditLogRepo);
     const deleteUserUseCase = new DeleteUserUseCase(userRepo);
     const getConfigUseCase = new GetConfigUseCase(config);
-    const updateConfigUseCase = new UpdateConfigUseCase(config);
+    const updateConfigUseCase = new UpdateConfigUseCase(config, configRepo);
     const listTournamentsUseCase = new ListTournamentsUseCase(tournamentRepo);
     const createTournamentUseCase = new CreateTournamentUseCase(tournamentRepo);
     const setMatchResultUseCase = new SetMatchResultUseCase(matchRepo);
@@ -178,7 +180,7 @@ export function createAdminRoutes(
       preHandler: [authMiddleware, adminMiddleware],
     }, async (request, reply) => {
       const body = updateConfigSchema.parse(request.body);
-      const conf = updateConfigUseCase.execute(body.key, body.value);
+      const conf = await updateConfigUseCase.execute(body.key, body.value);
       return reply.send({ config: conf });
     });
 

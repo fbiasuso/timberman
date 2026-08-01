@@ -4,6 +4,7 @@ import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
+import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
@@ -24,16 +25,16 @@ export function createRouter(
   ticketRepo: TicketRepo,
   jwtService: JwtServiceImpl,
   bcryptService: BcryptServiceImpl,
-  allowRegistration: boolean,
   auditLogRepo: AuditLogRepo,
   config: SystemConfig,
+  configRepo: SystemConfigRepo,
 ): FastifyPluginAsync {
   return async (fastify) => {
     await fastify.register(createAuthRoutes(
       userRepo,
       jwtService,
       bcryptService,
-      allowRegistration,
+      config,
     ));
 
     await fastify.register(createMatchRoutes(
@@ -59,6 +60,7 @@ export function createRouter(
       jwtService,
       bcryptService,
       config,
+      configRepo,
     ));
 
     await fastify.register(createRankingRoutes(

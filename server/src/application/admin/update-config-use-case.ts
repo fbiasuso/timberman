@@ -1,4 +1,5 @@
 import type { SystemConfig } from '../../domain/entities/system-config.js';
+import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js';
 
 // ── Error ──────────────────────────────────────────────────────────
 
@@ -12,7 +13,8 @@ export class InvalidConfigKeyError extends Error {
 // ── Use Case ──────────────────────────────────────────────────────
 
 /**
- * Updates a single key-value pair in the system configuration.
+ * Updates a single key-value pair in the system configuration and
+ * persists the change so it survives restarts.
  *
  * Supported keys: commission, allowRegistration, defaultBetAmount.
  * Values are coerced to the correct type (number for commission/betAmount,
@@ -21,9 +23,12 @@ export class InvalidConfigKeyError extends Error {
 export class UpdateConfigUseCase {
   private static readonly VALID_KEYS = ['commission', 'allowRegistration', 'defaultBetAmount'] as const;
 
-  constructor(private readonly config: SystemConfig) {}
+  constructor(
+    private readonly config: SystemConfig,
+    private readonly repo: SystemConfigRepo,
+  ) {}
 
-  execute(key: string, value: unknown): SystemConfig {
+  async execute(key: string, value: unknown): Promise<SystemConfig> {
     if (!UpdateConfigUseCase.VALID_KEYS.includes(key as any)) {
       throw new InvalidConfigKeyError(key);
     }
@@ -40,6 +45,7 @@ export class UpdateConfigUseCase {
         break;
     }
 
+    await this.repo.upsert(this.config);
     return { ...this.config };
   }
 }

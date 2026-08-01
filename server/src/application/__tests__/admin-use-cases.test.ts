@@ -11,6 +11,7 @@ import type { UserRepo } from '../../domain/ports/user-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
+import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js';
 import type { BcryptService } from '../auth/register-use-case.js';
 import { User } from '../../domain/entities/user.js';
 import { Match } from '../../domain/entities/match.js';
@@ -60,6 +61,14 @@ function createAuditLogRepoMocks() {
     findByAdminId: vi.fn(),
     findByUserId: vi.fn(),
     findAll: vi.fn(),
+  };
+  return repo;
+}
+
+function createConfigRepoMocks() {
+  const repo: SystemConfigRepo = {
+    get: vi.fn(),
+    upsert: vi.fn(),
   };
   return repo;
 }
@@ -251,34 +260,43 @@ describe('GetConfigUseCase', () => {
 // ── UpdateConfigUseCase ────────────────────────────────────────────
 
 describe('UpdateConfigUseCase', () => {
-  it('updates commission key', () => {
+  it('updates commission key and persists via the config repo', async () => {
     const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
-    const uc = new UpdateConfigUseCase(config);
-    const result = uc.execute('commission', '20');
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+    const result = await uc.execute('commission', '20');
 
     expect(result.commission).toBe(20);
+    expect(repo.upsert).toHaveBeenCalledWith(config);
   });
 
-  it('updates allowRegistration with coercion', () => {
+  it('updates allowRegistration with coercion and persists', async () => {
     const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
-    const uc = new UpdateConfigUseCase(config);
-    const result = uc.execute('allowRegistration', 'false');
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+    const result = await uc.execute('allowRegistration', 'false');
 
     expect(result.allowRegistration).toBe(false);
+    expect(repo.upsert).toHaveBeenCalledWith(config);
   });
 
-  it('updates defaultBetAmount with numeric coercion', () => {
+  it('updates defaultBetAmount with numeric coercion and persists', async () => {
     const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
-    const uc = new UpdateConfigUseCase(config);
-    const result = uc.execute('defaultBetAmount', '2500');
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+    const result = await uc.execute('defaultBetAmount', '2500');
 
     expect(result.defaultBetAmount).toBe(2500);
+    expect(repo.upsert).toHaveBeenCalledWith(config);
   });
 
-  it('throws InvalidConfigKeyError for invalid keys', () => {
+  it('throws InvalidConfigKeyError for invalid keys without persisting', async () => {
     const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
-    const uc = new UpdateConfigUseCase(config);
-    expect(() => uc.execute('invalidKey', 'value')).toThrow(InvalidConfigKeyError);
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+
+    await expect(uc.execute('invalidKey', 'value')).rejects.toThrow(InvalidConfigKeyError);
+    expect(repo.upsert).not.toHaveBeenCalled();
   });
 });
 

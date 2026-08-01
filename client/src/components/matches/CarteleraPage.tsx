@@ -86,6 +86,11 @@ export default function CarteleraPage() {
   const matchDateId = matchDate.id;
   const isExpired = matchDate.status !== 'open';
 
+  // Accumulated prize pool: the current date's pozo plus unpaid pozo rolled
+  // over from previous dates without winners (carryover).
+  const carryover = data.carryover ?? 0;
+  const accumulatedPozo = (matchDate.pozo ?? 0) + carryover;
+
   const totalMatches = matches.length;
   const predictedCount = Object.keys(predictions).length;
   const allPredicted = totalMatches > 0 && predictedCount === totalMatches;
@@ -124,6 +129,39 @@ export default function CarteleraPage() {
             : `Estado: ${matchDate.status}`}
         </p>
       </div>
+
+      {/* Accumulated pozo (incl. carryover from dates without winners) */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 16px',
+          background: theme.tarjeta,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          marginBottom: 20,
+        }}
+      >
+        <span style={{ fontSize: 13, color: theme.textoSecundario }}>
+          Pozo acumulado
+        </span>
+        <span style={{ fontWeight: 700, fontSize: 16, color: theme.amarilloBet }}>
+          {formatMoney(accumulatedPozo)}
+        </span>
+      </div>
+
+      {carryover > 0 && (
+        <p
+          style={{
+            margin: '-12px 0 20px',
+            fontSize: 12,
+            color: theme.textoSecundario,
+          }}
+        >
+          Incluye {formatMoney(carryover)} de fechas anteriores sin ganadores.
+        </p>
+      )}
 
       {!isExpired && (
         <Filters onChange={(s, f) => { setSearch(s); setFilter(f); }} />

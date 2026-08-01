@@ -67,20 +67,35 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
         </span>
       </div>
 
-      {/* Status badge */}
+      {/* Status badge — winning ticket shows the prize */}
       <div style={{ marginBottom: 12 }}>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            padding: '2px 8px',
-            borderRadius: 4,
-            background: theme.searchBg,
-            color: theme.textoSecundario,
-          }}
-        >
-          Pendiente
-        </span>
+        {ticket.prizeWon != null ? (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '3px 8px',
+              borderRadius: 4,
+              background: theme.betV,
+              color: theme.verdeBet,
+            }}
+          >
+            Premio ganado: {formatMoney(ticket.prizeWon)}
+          </span>
+        ) : (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: 4,
+              background: theme.searchBg,
+              color: theme.textoSecundario,
+            }}
+          >
+            Pendiente
+          </span>
+        )}
       </div>
 
       {/* Predictions summary */}

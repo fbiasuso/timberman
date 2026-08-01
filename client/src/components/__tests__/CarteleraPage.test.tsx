@@ -141,4 +141,29 @@ describe('CarteleraPage', () => {
     // Pay button should NOT be shown when closed
     expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
   });
+
+  it('shows accumulated pozo including carryover', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({
+      data: { ...mockMatchesData, carryover: 1500 },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(<CarteleraPage />);
+    expect(screen.getByText('Pozo acumulado')).toBeDefined();
+    // pozo 0 (open) + carryover 1500 → $15.00
+    expect(screen.getByText('$15.00')).toBeDefined();
+    expect(
+      screen.getByText(/Incluye \$15.00 de fechas anteriores sin ganadores/),
+    ).toBeDefined();
+  });
+
+  it('shows zero pozo without carryover', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+
+    render(<CarteleraPage />);
+    expect(screen.getByText('Pozo acumulado')).toBeDefined();
+    expect(screen.getByText('$0.00')).toBeDefined();
+    expect(screen.queryByText(/Incluye \$/)).toBeNull();
+  });
 });

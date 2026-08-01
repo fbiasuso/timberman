@@ -43,6 +43,15 @@ export class InvalidCommissionError extends DomainError {
   get statusCode(): number { return 400; }
 }
 
+export class InvalidConfigValueError extends DomainError {
+  constructor(key: string, value: number, expected: string) {
+    super(`Invalid configuration value for "${key}": ${value}. Expected ${expected}.`);
+  }
+
+  get code(): string { return 'INVALID_CONFIG_VALUE'; }
+  get statusCode(): number { return 400; }
+}
+
 export class InvalidPredictionError extends DomainError {
   constructor(value: string) {
     super(`Invalid prediction: "${value}". Must be one of: L, E, V.`);

@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+// VITE_API_URL lets a hosted build point the client at the deployed API
+// (e.g. https://api.example.com). Falls back to '/api', which the Vite dev
+// server proxies to http://localhost:3001.
+const apiBaseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
+
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseURL,
 });
 
 // Attach JWT from localStorage on every request

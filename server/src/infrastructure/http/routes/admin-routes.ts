@@ -82,7 +82,7 @@ export function createAdminRoutes(
     const deleteUserUseCase = new DeleteUserUseCase(userRepo);
     const getConfigUseCase = new GetConfigUseCase(config);
     const updateConfigUseCase = new UpdateConfigUseCase(config, configRepo);
-    const listTournamentsUseCase = new ListTournamentsUseCase(tournamentRepo);
+    const listTournamentsUseCase = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo);
     const createTournamentUseCase = new CreateTournamentUseCase(tournamentRepo, config);
     const setMatchResultUseCase = new SetMatchResultUseCase(matchRepo);
     const closeDateUseCase = new CloseDateUseCase(

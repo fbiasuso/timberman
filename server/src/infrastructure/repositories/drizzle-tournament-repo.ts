@@ -6,6 +6,10 @@ import { Tournament } from '../../domain/entities/tournament.js';
 import type { TournamentSnapshot } from '../../domain/entities/tournament.js';
 import { MatchDate } from '../../domain/entities/match-date.js';
 import type { MatchDateSnapshot } from '../../domain/entities/match-date.js';
+import {
+  TournamentNotFoundError,
+  MatchDateNotFoundError,
+} from '../../domain/errors/index.js';
 
 export class DrizzleTournamentRepo implements TournamentRepo {
   constructor(private readonly db: PostgresJsDatabase<any>) {}
@@ -86,6 +90,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       })
       .where(eq(schema.tournaments.id, snap.id))
       .returning();
+    if (!row) throw new TournamentNotFoundError(snap.id);
     return Tournament.create({
       id: row.id,
       name: row.name,
@@ -158,6 +163,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       })
       .where(eq(schema.matchDates.id, snap.id))
       .returning();
+    if (!row) throw new MatchDateNotFoundError(snap.id);
     return this.toMatchDate(row);
   }
 }

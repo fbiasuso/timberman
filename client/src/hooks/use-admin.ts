@@ -99,6 +99,18 @@ export function useCloseDate() {
   });
 }
 
+/** Publish results for a closed date — invalidates ['admin', 'tournaments'] and ['matches'] */
+export function usePublishResults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dateId: number) => adminApi.publishResults(dateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
 /** Update system config — invalidates ['admin', 'config'] */
 export function useUpdateConfig() {
   const qc = useQueryClient();

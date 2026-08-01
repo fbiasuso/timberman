@@ -80,3 +80,11 @@ Chain strategy: pending
 - [x] 7.3 `PublishResultsUseCase`: run inside `uow`; guard `MatchesNotReadyError` (422) when any match lacks a result — no silent pozo roll to carryover (finding 4).
 - [x] 7.4 Wire `DrizzleUnitOfWork` in `index.ts` → router → admin-routes (close + publish use cases).
 - [x] 7.5 Tests: uow wraps both flows (all writes through tx repos), locked carryover read, error propagation, `MATCHES_NOT_READY` 422 (unit + api).
+
+## Phase 8: Adversarial Review Follow-up (hardening slice)
+
+- [x] 8.1 Lock the no-winners carryover roll with `findByIdForUpdate` in `PublishResultsUseCase` (review finding 1).
+- [x] 8.2 Lock the match-date row at the start of close AND publish: `findMatchDateByIdForUpdate` (FOR UPDATE) on the port + Drizzle impl; concurrent same-date requests serialize and the second is rejected instead of double-crediting (review finding 2).
+- [x] 8.3 `MatchDateNotOpenError` (409, MATCH_DATE_NOT_OPEN) thrown from `MatchDate.close()`; double-close now maps to 4xx, with domain + use-case + API (409) tests (review finding 3).
+- [x] 8.4 Publish guard requires `matches.length > 0` — zero-match dates are rejected with `MatchesNotReadyError` (422) instead of silently rolling the pozo to carryover; use-case + API tests (review finding 4).
+- [ ] 8.5 Out of scope (INFO): user-balance read-modify-writes (`userRepo.findById` + `update(addBalance)`) remain unlocked — noted for a future slice.

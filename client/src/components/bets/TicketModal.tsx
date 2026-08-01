@@ -185,6 +185,24 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               {correctCount}/{ticket.predictions.length}
             </span>
           </div>
+          {ticket.prizeWon != null && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 15,
+                marginTop: 8,
+                padding: '10px 12px',
+                background: theme.betV,
+                borderRadius: 8,
+                color: theme.verdeBet,
+                fontWeight: 700,
+              }}
+            >
+              <span>Premio ganado</span>
+              <span>{formatMoney(ticket.prizeWon)}</span>
+            </div>
+          )}
         </div>
 
         {/* Buttons */}

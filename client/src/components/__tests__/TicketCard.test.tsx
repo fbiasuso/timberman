@@ -24,6 +24,7 @@ const baseTicket = {
   userId: 'user-1',
   matchDateId: 10,
   betAmount: 1500,
+  prizeWon: null,
   createdAt: '2026-07-28T12:00:00.000Z',
   predictions: [
     { matchId: 1, prediction: 'L' as const },
@@ -67,5 +68,20 @@ describe('TicketCard', () => {
     const card = container.firstChild as HTMLElement;
     card.click();
     expect(onSelect).toHaveBeenCalledWith(baseTicket);
+  });
+
+  it('shows the prize badge when the ticket has a prize', () => {
+    const winningTicket = { ...baseTicket, prizeWon: 334 };
+    render(<TicketCard ticket={winningTicket} onSelect={vi.fn()} />);
+    expect(screen.getByText(/Premio ganado/)).toBeDefined();
+    expect(screen.getByText('Premio ganado: $3.34')).toBeDefined();
+    // Pending badge is replaced by the prize badge
+    expect(screen.queryByText('Pendiente')).toBeNull();
+  });
+
+  it('does not show the prize badge on a pending ticket', () => {
+    render(<TicketCard ticket={baseTicket} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/Premio ganado/)).toBeNull();
+    expect(screen.getByText('Pendiente')).toBeDefined();
   });
 });

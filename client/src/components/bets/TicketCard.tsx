@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { TicketDTO } from '../../types';
 import { formatDate, formatMoney } from '../../utils/format';
-import { useCurrentMatches } from '../../hooks/use-matches';
+import { useCurrentMatches, useMatchDates } from '../../hooks/use-matches';
 import theme from '../../styles/theme';
 
 interface TicketCardProps {
@@ -19,6 +19,9 @@ interface TicketCardProps {
 export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
   // Load current match data to enrich predictions with team names
   const { data: currentData } = useCurrentMatches();
+  // Load all match dates to know whether the ticket's date already has
+  // published results (a date with status 'results' and no prize = loser)
+  const { data: datesData } = useMatchDates();
 
   // Build a lookup map of matchId → match info (team names + results)
   const matchMap = useMemo(() => {
@@ -30,6 +33,14 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
     }
     return map;
   }, [currentData]);
+
+  // The ticket's date is published when its date reached the 'results'
+  // status — a prizeWon === null ticket on such a date lost, it is not
+  // pending anymore.
+  const datePublished = useMemo(
+    () => datesData?.dates.some((d) => d.id === ticket.matchDateId && d.status === 'results') ?? false,
+    [datesData, ticket.matchDateId],
+  );
 
   return (
     <div
@@ -67,7 +78,8 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
         </span>
       </div>
 
-      {/* Status badge — winning ticket shows the prize */}
+      {/* Status badge — winning ticket shows the prize; a loser on a
+          published date shows "Sin premio"; otherwise still pending */}
       <div style={{ marginBottom: 12 }}>
         {ticket.prizeWon != null ? (
           <span
@@ -81,6 +93,19 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
             }}
           >
             Premio ganado: {formatMoney(ticket.prizeWon)}
+          </span>
+        ) : datePublished ? (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: 4,
+              background: theme.searchBg,
+              color: theme.textoSecundario,
+            }}
+          >
+            Sin premio
           </span>
         ) : (
           <span

@@ -54,12 +54,12 @@ Chain strategy: pending
 
 ## Phase 4: Client
 
-- [ ] 4.1 `types/index.ts`: `TicketDTO.prizeWon?`, `MatchDateDTO.commission`, `carryover`.
-- [ ] 4.2 `admin-api.ts`: `publishResults(dateId)`; extend `AdminTournamentDTO` with dates+winners.
-- [ ] 4.3 `use-admin.ts`: `usePublishResults()` (invalidates admin tournaments + matches).
-- [ ] 4.4 `ResultsEntry.tsx`: close button only when `open`; "Publish results and pay out" when `closed`; winners + amounts + commission breakdown when `results` (admin-ops: Payout Breakdown).
-- [ ] 4.5 `TicketCard.tsx`: "Premio ganado" badge when `prizeWon != null` (prize-payouts: Premio ganado).
-- [ ] 4.6 `CarteleraPage.tsx`: show pozo including carryover (prize-payouts: Carryover).
+- [x] 4.1 `types/index.ts`: `TicketDTO.prizeWon?`, `MatchDateDTO.commission`, `carryover`.
+- [x] 4.2 `admin-api.ts`: `publishResults(dateId)`; extend `AdminTournamentDTO` with dates+winners.
+- [x] 4.3 `use-admin.ts`: `usePublishResults()` (invalidates admin tournaments + matches).
+- [x] 4.4 `ResultsEntry.tsx`: close button only when `open`; "Publish results and pay out" when `closed`; winners + amounts + commission breakdown when `results` (admin-ops: Payout Breakdown).
+- [x] 4.5 `TicketCard.tsx`: "Premio ganado" badge when `prizeWon != null` (prize-payouts: Premio ganado).
+- [x] 4.6 `CarteleraPage.tsx`: show pozo including carryover (prize-payouts: Carryover).
 
 ## Phase 5: Tests
 

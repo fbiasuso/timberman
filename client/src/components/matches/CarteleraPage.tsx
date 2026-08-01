@@ -86,10 +86,10 @@ export default function CarteleraPage() {
   const matchDateId = matchDate.id;
   const isExpired = matchDate.status !== 'open';
 
-  // Accumulated prize pool: the current date's pozo plus unpaid pozo rolled
-  // over from previous dates without winners (carryover).
+  // Accumulated prize pool: only the carryover rolled over from previous
+  // dates without winners. The server snapshots a date's pozo at close, so
+  // the open date's wagers are NOT included in this banner.
   const carryover = data.carryover ?? 0;
-  const accumulatedPozo = (matchDate.pozo ?? 0) + carryover;
 
   const totalMatches = matches.length;
   const predictedCount = Object.keys(predictions).length;
@@ -130,7 +130,8 @@ export default function CarteleraPage() {
         </p>
       </div>
 
-      {/* Accumulated pozo (incl. carryover from dates without winners) */}
+      {/* Accumulated pozo — carryover from previous dates without winners.
+          The open date's wagers are not included: pozo is snapshotted at close. */}
       <div
         style={{
           display: 'flex',
@@ -144,14 +145,14 @@ export default function CarteleraPage() {
         }}
       >
         <span style={{ fontSize: 13, color: theme.textoSecundario }}>
-          Pozo acumulado
+          Pozo acumulado de fechas anteriores
         </span>
         <span style={{ fontWeight: 700, fontSize: 16, color: theme.amarilloBet }}>
-          {formatMoney(accumulatedPozo)}
+          {formatMoney(carryover)}
         </span>
       </div>
 
-      {carryover > 0 && (
+      {!isExpired && (
         <p
           style={{
             margin: '-12px 0 20px',
@@ -159,7 +160,7 @@ export default function CarteleraPage() {
             color: theme.textoSecundario,
           }}
         >
-          Incluye {formatMoney(carryover)} de fechas anteriores sin ganadores.
+          No incluye las jugadas de esta fecha: el pozo se calcula al cerrar los puntos.
         </p>
       )}
 

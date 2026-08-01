@@ -25,12 +25,15 @@ interface MatchDateDTO {
   status: string;
   pozo: number;
   betAmount: number;
+  commission: number; // percent — snapshot taken at close
+  carryover: number; // cents — unpaid pozo accumulated in the parent tournament
   createdAt: string;
 }
 
 interface CurrentDateResponse {
   matchDate: MatchDateDTO | null;
   matches: MatchDTO[];
+  carryover: number; // cents — accumulated pozo from unpaid previous dates
 }
 
 interface DatesResponse {
@@ -51,7 +54,7 @@ function toMatchDTO(match: any): MatchDTO {
   };
 }
 
-function toMatchDateDTO(md: any): MatchDateDTO {
+function toMatchDateDTO(md: any, carryover: number): MatchDateDTO {
   return {
     id: md.id,
     tournamentId: md.tournamentId,
@@ -59,6 +62,8 @@ function toMatchDateDTO(md: any): MatchDateDTO {
     status: md.status,
     pozo: md.pozo,
     betAmount: md.betAmount,
+    commission: md.commission,
+    carryover,
     createdAt: md.createdAt.toISOString(),
   };
 }
@@ -84,7 +89,7 @@ export function createMatchRoutes(
     }, async (_request, _reply) => {
       const openDates = await tournamentRepo.findOpenMatchDates();
       if (openDates.length === 0) {
-        return { matchDate: null, matches: [] } satisfies CurrentDateResponse;
+        return { matchDate: null, matches: [], carryover: 0 } satisfies CurrentDateResponse;
       }
 
       // Use the most recent open date
@@ -92,12 +97,14 @@ export function createMatchRoutes(
         md.createdAt > latest.createdAt ? md : latest,
       );
 
+      const tournament = await tournamentRepo.findById(current.tournamentId);
       const matches = await matchRepo.findByMatchDateId(current.id);
       const snap = current.toSnapshot();
 
       return {
-        matchDate: toMatchDateDTO(snap),
+        matchDate: toMatchDateDTO(snap, tournament?.carryover ?? 0),
         matches: matches.map((m) => toMatchDTO(m.toSnapshot())),
+        carryover: tournament?.carryover ?? 0,
       } satisfies CurrentDateResponse;
     });
 
@@ -116,7 +123,7 @@ export function createMatchRoutes(
       for (const t of tournaments) {
         const dates = await tournamentRepo.findMatchDatesByTournamentId(t.id);
         for (const md of dates) {
-          allDates.push(toMatchDateDTO(md.toSnapshot()));
+          allDates.push(toMatchDateDTO(md.toSnapshot(), t.carryover));
         }
       }
 

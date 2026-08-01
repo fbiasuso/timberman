@@ -99,6 +99,7 @@ function toTicketDTO(ticket: Ticket): TicketDTO {
     userId: ticket.userId,
     matchDateId: ticket.matchDateId,
     betAmount: ticket.betAmount.cents,
+    prizeWon: ticket.prizeWon,
     predictions: ticket.predictions.map((tp) => ({
       matchId: tp.matchId,
       prediction: tp.prediction,

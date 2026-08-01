@@ -10,7 +10,7 @@ export interface MatchDateSnapshot {
   status: MatchDateStatus;
   pozo: number; // cents
   betAmount: number; // cents
-  commission: number; // percent — snapshotted at close, never recomputed
+  commission: number; // percent — snapshot-at-close is implemented in a later slice
   createdAt: Date;
 }
 
@@ -40,7 +40,7 @@ export class MatchDate {
     return Money.fromCents(this._betAmount);
   }
 
-  /** Commission percent applied at close (snapshot, never recomputed) */
+  /** Commission percent applied at close — snapshot-at-close is implemented in a later slice */
   get commission(): number {
     return this._commission;
   }

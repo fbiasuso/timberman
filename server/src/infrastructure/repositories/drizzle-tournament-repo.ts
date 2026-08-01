@@ -134,7 +134,14 @@ export class DrizzleTournamentRepo implements TournamentRepo {
     const snap = matchDate.toSnapshot();
     const [row] = await this.db
       .insert(schema.matchDates)
-      .values(snap as any)
+      .values({
+        tournamentId: snap.tournamentId,
+        dateNumber: snap.dateNumber,
+        status: snap.status,
+        pozo: snap.pozo,
+        betAmount: snap.betAmount,
+        commission: String(snap.commission),
+      })
       .returning();
     return this.toMatchDate(row);
   }

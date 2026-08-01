@@ -1,10 +1,10 @@
 /**
  * System-wide configuration entity.
  *
- * Persisted as a single row (id=1) in the `system_config` table and
- * loaded at boot, falling back to DEFAULT_SYSTEM_CONFIG when absent.
- * The same object reference is shared across the app so updates are
- * reflected immediately without a restart.
+ * This file currently ships the entity contract and DEFAULT_SYSTEM_CONFIG.
+ * Persistence lives in DrizzleSystemConfigRepo (single row, id=1, in the
+ * `system_config` table). Boot loading and update persistence are wired
+ * into the app in a later slice.
  */
 export interface SystemConfig {
   commission: number; // percent (0-100)

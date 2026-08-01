@@ -1,5 +1,6 @@
 import client from './client';
 import type { UserDTO } from './auth-api';
+import type { MatchDateStatus } from '../types';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -8,12 +9,36 @@ export interface AdminUserDTO extends UserDTO {
   points: number;
 }
 
+/** Payout breakdown winner (from GET /api/admin/tournaments) */
+export interface WinnerDTO {
+  ticketId: number;
+  userId: string;
+  username: string;
+  /** Cents credited to the winner */
+  prize: number;
+}
+
+/** Per-date payout info (from GET /api/admin/tournaments) */
+export interface TournamentDateDTO {
+  id: number;
+  dateNumber: number;
+  status: MatchDateStatus;
+  /** Cents — prize pool snapshot taken at close (includes carryover) */
+  pozo: number;
+  /** Commission percentage snapshot taken at close */
+  commission: number;
+  winners: WinnerDTO[];
+}
+
 export interface AdminTournamentDTO {
   id: number;
   name: string;
   commission: number;
-  betAmount: number;
+  isActive: boolean;
+  /** Cents — unpaid pozo rolled to the next date */
+  carryover: number;
   createdAt: string;
+  dates: TournamentDateDTO[];
 }
 
 export interface AdminConfigDTO {
@@ -102,6 +127,11 @@ export const adminApi = {
   /** POST /api/admin/dates/:dateId/close — close a match date and process points */
   closeDate(dateId: number) {
     return client.post(`/admin/dates/${dateId}/close`).then((r) => r.data);
+  },
+
+  /** POST /api/admin/dates/:dateId/publish-results — pay winners or roll pozo into carryover */
+  publishResults(dateId: number) {
+    return client.post(`/admin/dates/${dateId}/publish-results`).then((r) => r.data);
   },
 
   // ── Config ───────────────────────────────────────────────────────────────

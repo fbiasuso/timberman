@@ -12,6 +12,10 @@ export interface MatchDateDTO {
   status: MatchDateStatus;
   pozo: number;
   betAmount: number;
+  /** Commission percentage snapshot taken when the date was closed */
+  commission: number;
+  /** Cents — unpaid pozo accumulated in the parent tournament */
+  carryover: number;
   createdAt: string;
 }
 
@@ -40,6 +44,8 @@ export interface TicketDTO {
   userId: string;
   matchDateId: number;
   betAmount: number;
+  /** Cents won after results are published — null until the ticket wins */
+  prizeWon: number | null;
   predictions: TicketPredictionDTO[];
   createdAt: string;
 }

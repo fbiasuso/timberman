@@ -4,6 +4,8 @@ import type { MatchDTO, MatchDateDTO } from '../types';
 export interface CurrentDateResponse {
   matchDate: MatchDateDTO | null;
   matches: MatchDTO[];
+  /** Cents — unpaid pozo accumulated from previous dates without winners */
+  carryover: number;
 }
 
 export interface DatesResponse {

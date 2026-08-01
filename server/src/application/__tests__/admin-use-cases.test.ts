@@ -15,7 +15,7 @@ import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js'
 import type { BcryptService } from '../auth/register-use-case.js';
 import { User } from '../../domain/entities/user.js';
 import { Match } from '../../domain/entities/match.js';
-import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError } from '../../domain/errors/index.js';
+import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError, InvalidCommissionError, InvalidConfigValueError } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -260,43 +260,96 @@ describe('GetConfigUseCase', () => {
 // ── UpdateConfigUseCase ────────────────────────────────────────────
 
 describe('UpdateConfigUseCase', () => {
+  function makeConfig() {
+    return { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+  }
+
   it('updates commission key and persists via the config repo', async () => {
-    const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+    const config = makeConfig();
     const repo = createConfigRepoMocks();
     const uc = new UpdateConfigUseCase(config, repo);
     const result = await uc.execute('commission', '20');
 
     expect(result.commission).toBe(20);
-    expect(repo.upsert).toHaveBeenCalledWith(config);
+    expect(repo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ commission: 20, allowRegistration: true, defaultBetAmount: 1500 }),
+    );
   });
 
   it('updates allowRegistration with coercion and persists', async () => {
-    const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+    const config = makeConfig();
     const repo = createConfigRepoMocks();
     const uc = new UpdateConfigUseCase(config, repo);
     const result = await uc.execute('allowRegistration', 'false');
 
     expect(result.allowRegistration).toBe(false);
-    expect(repo.upsert).toHaveBeenCalledWith(config);
+    expect(repo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ allowRegistration: false }),
+    );
   });
 
   it('updates defaultBetAmount with numeric coercion and persists', async () => {
-    const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+    const config = makeConfig();
     const repo = createConfigRepoMocks();
     const uc = new UpdateConfigUseCase(config, repo);
     const result = await uc.execute('defaultBetAmount', '2500');
 
     expect(result.defaultBetAmount).toBe(2500);
-    expect(repo.upsert).toHaveBeenCalledWith(config);
+    expect(repo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultBetAmount: 2500 }),
+    );
   });
 
   it('throws InvalidConfigKeyError for invalid keys without persisting', async () => {
-    const config = { commission: 15, allowRegistration: true, defaultBetAmount: 1500 };
+    const config = makeConfig();
     const repo = createConfigRepoMocks();
     const uc = new UpdateConfigUseCase(config, repo);
 
     await expect(uc.execute('invalidKey', 'value')).rejects.toThrow(InvalidConfigKeyError);
     expect(repo.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-numeric commission with InvalidCommissionError', async () => {
+    const config = makeConfig();
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+
+    await expect(uc.execute('commission', 'abc')).rejects.toThrow(InvalidCommissionError);
+    expect(repo.upsert).not.toHaveBeenCalled();
+    expect(config.commission).toBe(15); // shared ref untouched
+  });
+
+  it('rejects commission outside 0-100 with InvalidCommissionError', async () => {
+    const config = makeConfig();
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+
+    await expect(uc.execute('commission', 150)).rejects.toThrow(InvalidCommissionError);
+    await expect(uc.execute('commission', -5)).rejects.toThrow(InvalidCommissionError);
+    expect(repo.upsert).not.toHaveBeenCalled();
+    expect(config.commission).toBe(15);
+  });
+
+  it('rejects negative, non-integer, or NaN defaultBetAmount without persisting', async () => {
+    const config = makeConfig();
+    const repo = createConfigRepoMocks();
+    const uc = new UpdateConfigUseCase(config, repo);
+
+    await expect(uc.execute('defaultBetAmount', -100)).rejects.toThrow(InvalidConfigValueError);
+    await expect(uc.execute('defaultBetAmount', 15.5)).rejects.toThrow(InvalidConfigValueError);
+    await expect(uc.execute('defaultBetAmount', 'abc')).rejects.toThrow(InvalidConfigValueError);
+    expect(repo.upsert).not.toHaveBeenCalled();
+    expect(config.defaultBetAmount).toBe(1500);
+  });
+
+  it('does not mutate the shared config when the upsert fails', async () => {
+    const config = makeConfig();
+    const repo = createConfigRepoMocks();
+    vi.mocked(repo.upsert).mockRejectedValue(new Error('db down'));
+    const uc = new UpdateConfigUseCase(config, repo);
+
+    await expect(uc.execute('commission', 20)).rejects.toThrow('db down');
+    expect(config.commission).toBe(15); // in-memory never diverges from DB
   });
 });
 

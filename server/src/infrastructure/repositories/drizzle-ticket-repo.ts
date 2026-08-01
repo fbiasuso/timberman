@@ -4,6 +4,7 @@ import * as schema from '../db/schema.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
+import { TicketNotFoundError } from '../../domain/errors/index.js';
 import type { TicketSnapshot, TicketPredictionSnapshot } from '../../domain/entities/index.js';
 
 export class DrizzleTicketRepo implements TicketRepo {
@@ -103,6 +104,7 @@ export class DrizzleTicketRepo implements TicketRepo {
       })
       .where(eq(schema.tickets.id, snap.id))
       .returning();
+    if (!row) throw new TicketNotFoundError(snap.id);
 
     const predictions = await this.loadPredictions(row.id);
     return Ticket.create(row as unknown as TicketSnapshot, predictions);

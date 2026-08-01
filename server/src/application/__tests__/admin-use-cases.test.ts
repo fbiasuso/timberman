@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ListUsersUseCase } from '../admin/list-users-use-case.js';
 import { CreateUserUseCase } from '../admin/create-user-use-case.js';
+import { CreateTournamentUseCase } from '../admin/create-tournament-use-case.js';
 import { AdjustBalanceUseCase } from '../admin/adjust-balance-use-case.js';
 import { DeleteUserUseCase } from '../admin/delete-user-use-case.js';
 import { GetConfigUseCase } from '../admin/get-config-use-case.js';
@@ -170,6 +171,49 @@ describe('CreateUserUseCase', () => {
     const uc = new CreateUserUseCase(userRepo, bcrypt);
     await expect(uc.execute({ username: 'existing', password: 'pass' })).rejects.toThrow(DuplicateUsernameError);
     expect(userRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+// ── CreateTournamentUseCase ────────────────────────────────────────
+
+describe('CreateTournamentUseCase', () => {
+  function createTournamentRepoMocks() {
+    const repo: import('../../domain/ports/tournament-repo.js').TournamentRepo = {
+      findById: vi.fn(),
+      findActive: vi.fn(),
+      findAll: vi.fn(),
+      save: vi.fn((t: any) => Promise.resolve(t)),
+      update: vi.fn(),
+      findMatchDateById: vi.fn(),
+      findMatchDatesByTournamentId: vi.fn(),
+      findOpenMatchDates: vi.fn(),
+      saveMatchDate: vi.fn(),
+      updateMatchDate: vi.fn(),
+    };
+    return repo;
+  }
+
+  it('defaults commission from the system config when not provided', async () => {
+    const repo = createTournamentRepoMocks();
+    const config = { commission: 20, allowRegistration: true, defaultBetAmount: 1500 };
+    const uc = new CreateTournamentUseCase(repo, config);
+
+    const result = await uc.execute({ name: 'Torneo' });
+
+    expect(result.commission).toBe(20);
+    expect(repo.save).toHaveBeenCalledOnce();
+    const saved = vi.mocked(repo.save).mock.calls[0][0];
+    expect(saved.toSnapshot().commission).toBe(20);
+  });
+
+  it('uses an explicit commission when provided', async () => {
+    const repo = createTournamentRepoMocks();
+    const config = { commission: 20, allowRegistration: true, defaultBetAmount: 1500 };
+    const uc = new CreateTournamentUseCase(repo, config);
+
+    const result = await uc.execute({ name: 'Torneo', commission: 10 });
+
+    expect(result.commission).toBe(10);
   });
 });
 

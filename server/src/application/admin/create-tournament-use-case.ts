@@ -1,5 +1,6 @@
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import { Tournament } from '../../domain/entities/tournament.js';
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
@@ -20,15 +21,22 @@ export interface TournamentDTO {
 
 /**
  * Create a new tournament.
+ *
+ * The commission is informational only: it defaults to the live
+ * system-config rate and MUST NOT feed pozo calculation (the close
+ * flow reads the system config directly).
  */
 export class CreateTournamentUseCase {
-  constructor(private readonly tournamentRepo: TournamentRepo) {}
+  constructor(
+    private readonly tournamentRepo: TournamentRepo,
+    private readonly config: SystemConfig,
+  ) {}
 
   async execute(input: CreateTournamentInput): Promise<TournamentDTO> {
     const tournament = Tournament.new({
       id: 0,
       name: input.name,
-      commission: input.commission,
+      commission: input.commission ?? this.config.commission,
     });
 
     const saved = await this.tournamentRepo.save(tournament);

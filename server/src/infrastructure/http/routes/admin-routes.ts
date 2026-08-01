@@ -52,6 +52,10 @@ const updateConfigSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean()]),
 });
 
+const dateParamsSchema = z.object({
+  dateId: z.coerce.number().int().positive(),
+});
+
 // ── Routes ────────────────────────────────────────────────────────
 
 export function createAdminRoutes(
@@ -84,6 +88,9 @@ export function createAdminRoutes(
       tournamentRepo,
       ticketRepo,
       new PozoCalculator(),
+      config,
+      userRepo,
+      auditLogRepo,
     );
 
     // ── GET /api/admin/users ─────────────────────────────────────
@@ -188,8 +195,8 @@ export function createAdminRoutes(
     fastify.post('/api/admin/dates/:dateId/close', {
       preHandler: [authMiddleware, adminMiddleware],
     }, async (request, reply) => {
-      const { dateId } = request.params as { dateId: string };
-      const result = await closeDateUseCase.execute(Number(dateId));
+      const { dateId } = dateParamsSchema.parse(request.params);
+      const result = await closeDateUseCase.execute(dateId, request.user!.sub);
       return reply.send(result);
     });
   };

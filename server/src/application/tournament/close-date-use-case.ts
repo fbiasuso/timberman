@@ -1,10 +1,16 @@
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
+import type { UserRepo } from '../../domain/ports/user-repo.js';
+import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
 import { PozoCalculator } from '../betting/pozo-calculator.js';
 import { Money } from '../../domain/value-objects/money.js';
+import { Commission } from '../../domain/value-objects/commission.js';
+import { AuditLog } from '../../domain/entities/audit-log.js';
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 import {
   MatchDateNotFoundError,
   TournamentNotFoundError,
+  UserNotFoundError,
 } from '../../domain/errors/index.js';
 
 // ── DTOs ──────────────────────────────────────────────────────────
@@ -12,8 +18,9 @@ import {
 export interface CloseDateResult {
   id: number;
   status: string;
-  pozo: number;
+  pozo: number; // cents — bets pozo + consumed carryover
   ticketCount: number;
+  commission: number; // cents — house cut credited to the closing admin
 }
 
 // ── Use Case ──────────────────────────────────────────────────────
@@ -21,21 +28,28 @@ export interface CloseDateResult {
 /**
  * Close a match date for betting and calculate the prize pool.
  *
- * Flow:
+ * Financial flow (per tournament-management spec):
  * 1. Find the match date and verify it's open
- * 2. Find the parent tournament for commission rate
+ * 2. Find the parent tournament for its accumulated carryover
  * 3. Count all tickets placed on this date
- * 4. Calculate pozo = (tickets × betAmount) - commission
- * 5. Update and save the match date
+ * 4. Calculate pozo = (tickets × betAmount) − commission at the LIVE
+ *    system-config rate; the carryover is added on top and consumed
+ * 5. Snapshot pozo + commission on the date (never recomputed later)
+ * 6. Reset the tournament carryover to 0
+ * 7. Credit the house commission to the closing admin (from the JWT)
+ * 8. Write a `commission_payout` audit entry
  */
 export class CloseDateUseCase {
   constructor(
     private readonly tournamentRepo: TournamentRepo,
     private readonly ticketRepo: TicketRepo,
     private readonly pozoCalculator: PozoCalculator,
+    private readonly config: SystemConfig,
+    private readonly userRepo: UserRepo,
+    private readonly auditLogRepo: AuditLogRepo,
   ) {}
 
-  async execute(matchDateId: number): Promise<CloseDateResult> {
+  async execute(matchDateId: number, adminId: string): Promise<CloseDateResult> {
     // 1. Load match date
     const matchDate = await this.tournamentRepo.findMatchDateById(matchDateId);
     if (!matchDate) {
@@ -45,7 +59,7 @@ export class CloseDateUseCase {
     // 2. Close it (domain transition — throws if not open)
     const closed = matchDate.close();
 
-    // 3. Find tournament for commission rate
+    // 3. Find tournament for its carryover
     const tournament = await this.tournamentRepo.findById(closed.tournamentId);
     if (!tournament) {
       throw new TournamentNotFoundError(closed.tournamentId);
@@ -54,16 +68,45 @@ export class CloseDateUseCase {
     // 4. Count tickets placed on this date
     const ticketCount = await this.ticketRepo.countByMatchDateId(matchDateId);
 
-    // 5. Calculate pozo
-    const pozo = this.pozoCalculator.calculate(
+    // 5. Calculate pozo at the LIVE system-config rate (the tournament
+    //    commission field is informational and never feeds the calculation)
+    const rate = Commission.create(this.config.commission);
+    const pozoBase = this.pozoCalculator.calculate(
       ticketCount,
       closed.betAmount,
-      tournament.commission,
-    );
+      rate,
+    ).cents;
+    const gross = ticketCount * closed.betAmount.cents;
+    const commissionCents = gross - pozoBase;
 
-    // 6. Update match date with pozo
-    const updated = closed.withPozo(pozo);
+    // 6. Pozo = bets pozo + carryover accumulated from unpaid previous dates
+    const pozo = Money.fromCents(pozoBase + tournament.carryover);
+
+    // 7. Persist the date with pozo + commission snapshot
+    const updated = closed.withPozo(pozo).withCommission(this.config.commission);
     const saved = await this.tournamentRepo.updateMatchDate(updated);
+
+    // 8. Consume the carryover — it is now part of this date's pozo
+    await this.tournamentRepo.update(tournament.withCarryover(0));
+
+    // 9. Credit the house commission to the closing admin + audit trail
+    if (commissionCents > 0) {
+      const admin = await this.userRepo.findById(adminId);
+      if (!admin) {
+        throw new UserNotFoundError(adminId);
+      }
+      await this.userRepo.update(admin.addBalance(Money.fromCents(commissionCents)));
+
+      const auditLog = AuditLog.new({
+        id: 0,
+        adminId,
+        action: 'commission_payout',
+        amount: commissionCents,
+        reason: `Commission payout for match date ${matchDateId}`,
+      });
+      await this.auditLogRepo.save(auditLog);
+    }
+
     const snap = saved.toSnapshot();
 
     return {
@@ -71,6 +114,7 @@ export class CloseDateUseCase {
       status: snap.status,
       pozo: snap.pozo,
       ticketCount,
+      commission: commissionCents,
     };
   }
 }

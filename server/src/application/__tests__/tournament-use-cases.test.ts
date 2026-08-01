@@ -72,6 +72,7 @@ function createTicketRepoMocks() {
 function createUserRepoMocks() {
   const repo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn(),
     update: vi.fn((u: User) => Promise.resolve(u)),
@@ -214,7 +215,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(admin);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(admin);
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
     const result = await uc.execute(10, 'admin-1');
@@ -254,7 +255,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(admin);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(admin);
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
     const result = await uc.execute(10, 'admin-1');
@@ -282,7 +283,7 @@ describe('CloseDateUseCase', () => {
 
     expect(result.pozo).toBe(0);
     expect(result.commission).toBe(0);
-    expect(userRepo.findById).not.toHaveBeenCalled();
+    expect(userRepo.findByIdForUpdate).not.toHaveBeenCalled();
     expect(userRepo.update).not.toHaveBeenCalled();
     expect(auditLogRepo.save).not.toHaveBeenCalled();
   });
@@ -297,7 +298,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(null);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(null);
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
     await expect(uc.execute(10, 'ghost-admin')).rejects.toThrow(UserNotFoundError);
@@ -353,7 +354,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeAdmin('admin-1'));
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
     await uc.execute(10, 'admin-1');
@@ -375,7 +376,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeAdmin('admin-1'));
 
     const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
     await uc.execute(10, 'admin-1');
@@ -383,6 +384,28 @@ describe('CloseDateUseCase', () => {
     // The carryover read must go through the row lock, never the plain read
     expect(tournamentRepo.findByIdForUpdate).toHaveBeenCalledWith(1);
     expect(tournamentRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('locks the admin row (findByIdForUpdate) before crediting the commission', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeAdmin('admin-1'));
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    await uc.execute(10, 'admin-1');
+
+    // The balance credit must go through the row lock — a concurrent bet
+    // deduction on the same user serializes here so the credit is never lost.
+    // The plain read must never be used in this flow.
+    expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('admin-1');
+    expect(userRepo.findById).not.toHaveBeenCalled();
   });
 
   it('runs the whole close flow inside the provided unit of work', async () => {
@@ -395,7 +418,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeAdmin('admin-1'));
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
@@ -435,7 +458,7 @@ describe('CloseDateUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
-    vi.mocked(userRepo.findById).mockResolvedValue(null); // ghost admin
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(null); // ghost admin
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
@@ -524,7 +547,7 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
 
     const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
     const result = await uc.execute(10);
@@ -577,7 +600,7 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticketA, ticketB]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(userRepo.findById).mockImplementation(async (userId: string) =>
+    vi.mocked(userRepo.findByIdForUpdate).mockImplementation(async (userId: string) =>
       makeUser(userId),
     );
 
@@ -645,7 +668,7 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
 
     const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
     await uc.execute(10);
@@ -747,7 +770,7 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
 
     const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
     await uc.execute(10);
@@ -757,6 +780,29 @@ describe('PublishResultsUseCase', () => {
     // double payout). The plain read must never be used in this flow.
     expect(tournamentRepo.findMatchDateByIdForUpdate).toHaveBeenCalledWith(10);
     expect(tournamentRepo.findMatchDateById).not.toHaveBeenCalled();
+  });
+
+  it('locks the winner row (findByIdForUpdate) before crediting the prize', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const results = matches.map((m) => m.setResult('L', '2-0'));
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    await uc.execute(10);
+
+    // The payout must go through the row lock — a concurrent bet deduction
+    // on the same user serializes here so the credit is never lost. The
+    // plain read must never be used in this flow.
+    expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('user-1');
+    expect(userRepo.findById).not.toHaveBeenCalled();
   });
 
   it('runs the whole publish flow inside the provided unit of work', async () => {
@@ -770,7 +816,7 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,

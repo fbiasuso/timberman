@@ -28,6 +28,7 @@ import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError, InvalidC
 function createUserRepoMocks() {
   const repo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn((u: User) => Promise.resolve(u)),
     update: vi.fn((u: User) => Promise.resolve(u)),

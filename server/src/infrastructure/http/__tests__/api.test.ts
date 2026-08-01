@@ -21,6 +21,7 @@ import { User } from '../../../domain/entities/user.js';
 function createMockServices() {
   const userRepo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn((user: any) => Promise.resolve({
       ...user,
@@ -427,7 +428,7 @@ describe('API Integration Tests', () => {
       vi.mocked(services.tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
       vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
       vi.mocked(services.ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
-      vi.mocked(services.userRepo.findById).mockResolvedValue(
+      vi.mocked(services.userRepo.findByIdForUpdate).mockResolvedValue(
         User.create({
           id: 'user-1',
           username: 'testuser',
@@ -449,9 +450,11 @@ describe('API Integration Tests', () => {
       expect(body.status).toBe('results');
       expect(body.winners).toEqual([{ ticketId: 1, userId: 'user-1', prize: 6000 }]);
 
-      // Winner balance credited 500 + 6000
+      // Winner balance credited 500 + 6000 through the FOR UPDATE row lock
       const credited = vi.mocked(services.userRepo.update).mock.calls[0][0];
       expect(credited.balance.cents).toBe(6500);
+      expect(services.userRepo.findByIdForUpdate).toHaveBeenCalledWith('user-1');
+      expect(services.userRepo.findById).not.toHaveBeenCalled();
       // Winning ticket prize persisted
       const paidTicket = vi.mocked(services.ticketRepo.update).mock.calls[0][0];
       expect(paidTicket.prizeWon).toBe(6000);
@@ -580,7 +583,7 @@ describe('API Integration Tests', () => {
         Tournament.new({ id: 1, name: 'Test' }),
       );
       vi.mocked(services.ticketRepo.countByMatchDateId).mockResolvedValue(5);
-      vi.mocked(services.userRepo.findById).mockResolvedValue(
+      vi.mocked(services.userRepo.findByIdForUpdate).mockResolvedValue(
         User.create({
           id: 'admin-1',
           username: 'admin',
@@ -603,9 +606,11 @@ describe('API Integration Tests', () => {
       expect(body.pozo).toBe(6375); // 7500 gross − 1125 commission
       expect(body.commission).toBe(1125);
 
-      // Admin credited with the house cut
+      // Admin credited with the house cut through the FOR UPDATE row lock
       const credited = vi.mocked(services.userRepo.update).mock.calls[0][0];
       expect(credited.balance.cents).toBe(1125);
+      expect(services.userRepo.findByIdForUpdate).toHaveBeenCalledWith('admin-1');
+      expect(services.userRepo.findById).not.toHaveBeenCalled();
       // Audit entry written
       expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
       const audit = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];

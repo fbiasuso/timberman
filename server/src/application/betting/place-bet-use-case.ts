@@ -2,6 +2,7 @@ import type { UserRepo } from '../../domain/ports/user-repo.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
+import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
 import { User } from '../../domain/entities/user.js';
 import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
@@ -48,7 +49,13 @@ export interface PlaceBetInput {
  * 3. User hasn't already bet on this date
  * 4. All matches in the date have a prediction
  *
- * On success: deducts balance, creates ticket, saves all.
+ * On success: deducts balance, creates ticket, saves all. When a unit of
+ * work is provided, the deduction + ticket insert run inside ONE database
+ * transaction (a failure anywhere rolls everything back) and the user row
+ * is locked FOR UPDATE so concurrent bets/credits on the same user cannot
+ * be lost. The user lock is the innermost level of the global lock order
+ * (matchDate → tournament → user), so this flow never holds a higher-level
+ * lock while waiting for one.
  */
 export class PlaceBetUseCase {
   constructor(
@@ -56,11 +63,29 @@ export class PlaceBetUseCase {
     private readonly tournamentRepo: TournamentRepo,
     private readonly matchRepo: MatchRepo,
     private readonly ticketRepo: TicketRepo,
+    private readonly uow?: UnitOfWork,
   ) {}
 
   async execute(input: PlaceBetInput): Promise<TicketDTO> {
+    if (this.uow) {
+      return this.uow.withTransaction((repos) => this.place(input, repos));
+    }
+    return this.place(input, {
+      userRepo: this.userRepo,
+      tournamentRepo: this.tournamentRepo,
+      matchRepo: this.matchRepo,
+      ticketRepo: this.ticketRepo,
+    });
+  }
+
+  private async place(
+    input: PlaceBetInput,
+    repos: Pick<TransactionRepos, 'userRepo' | 'tournamentRepo' | 'matchRepo' | 'ticketRepo'>,
+  ): Promise<TicketDTO> {
+    const { userRepo, tournamentRepo, matchRepo, ticketRepo } = repos;
+
     // 1. Load match date — must exist and be open
-    const matchDate = await this.tournamentRepo.findMatchDateById(input.matchDateId);
+    const matchDate = await tournamentRepo.findMatchDateById(input.matchDateId);
     if (!matchDate) {
       throw new MatchDateNotFoundError(input.matchDateId);
     }
@@ -68,21 +93,23 @@ export class PlaceBetUseCase {
       throw new DateNotOpenError(input.matchDateId, matchDate.status);
     }
 
-    // 2. Load user — must have sufficient balance
-    const user = await this.userRepo.findById(input.userId);
+    // 2. Load user — must have sufficient balance. The row is locked FOR
+    //    UPDATE inside the transaction so two concurrent bets from the same
+    //    user serialize here (the second reads the deducted balance).
+    const user = await userRepo.findByIdForUpdate(input.userId);
     if (!user) {
       throw new Error(`User not found: ${input.userId}`); // should not happen with auth
     }
     const updatedUser = user.deductBalance(matchDate.betAmount);
 
     // 3. Check for duplicate bet on this date
-    const existing = await this.ticketRepo.findByUserAndDate(input.userId, input.matchDateId);
+    const existing = await ticketRepo.findByUserAndDate(input.userId, input.matchDateId);
     if (existing) {
       throw new DuplicateBetError(input.userId, input.matchDateId);
     }
 
     // 4. Load matches for this date — validate all have predictions
-    const matches = await this.matchRepo.findByMatchDateId(input.matchDateId);
+    const matches = await matchRepo.findByMatchDateId(input.matchDateId);
     const matchIds = new Set(matches.map((m) => m.id));
     const providedMatchIds = new Set(Object.keys(input.predictions).map(Number));
 
@@ -123,8 +150,8 @@ export class PlaceBetUseCase {
     });
 
     // 7. Save ticket (transaction: ticket + predictions) and update user balance
-    const savedTicket = await this.ticketRepo.save(ticket, predictions);
-    await this.userRepo.update(updatedUser);
+    const savedTicket = await ticketRepo.save(ticket, predictions);
+    await userRepo.update(updatedUser);
 
     // 8. Return DTO
     return this.toDTO(savedTicket);

@@ -8,6 +8,7 @@ import { User } from '../../domain/entities/user.js';
 function createMocks() {
   const userRepo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn(),
     update: vi.fn(),

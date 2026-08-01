@@ -8,6 +8,7 @@ import { DuplicateUsernameError, RegistrationDisabledError } from '../../domain/
 function createMocks() {
   const userRepo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn((user: any) => Promise.resolve(user)),
     update: vi.fn(),

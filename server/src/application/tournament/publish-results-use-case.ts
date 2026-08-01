@@ -126,8 +126,10 @@ export class PublishResultsUseCase {
         const winner = winners[i];
         const prize = amounts[i];
 
-        // Credit the winner's balance
-        const user = await userRepo.findById(winner.userId);
+        // Credit the winner's balance — the row is locked FOR UPDATE
+        // (innermost lock level) so a concurrent bet deduction or payout
+        // can never clobber this credit.
+        const user = await userRepo.findByIdForUpdate(winner.userId);
         if (!user) {
           throw new UserNotFoundError(winner.userId);
         }

@@ -4,6 +4,7 @@ import type { UserRepo } from '../../../domain/ports/user-repo.js';
 import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
+import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import { PlaceBetUseCase } from '../../../application/betting/place-bet-use-case.js';
 import type { TicketDTO } from '../../../application/betting/place-bet-use-case.js';
 import type { Ticket } from '../../../domain/entities/ticket.js';
@@ -34,10 +35,11 @@ export function createBetRoutes(
   matchRepo: MatchRepo,
   ticketRepo: TicketRepo,
   jwtService: JwtServiceImpl,
+  uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
     const authMiddleware = createAuthMiddleware(jwtService);
-    const placeBetUseCase = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo);
+    const placeBetUseCase = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo, uow);
 
     /**
      * POST /api/bets

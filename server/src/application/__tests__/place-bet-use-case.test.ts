@@ -19,6 +19,7 @@ import {
 function createMocks() {
   const userRepo: UserRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findByUsername: vi.fn(),
     save: vi.fn(),
     update: vi.fn((user: any) => Promise.resolve(user)),
@@ -98,7 +99,7 @@ describe('PlaceBetUseCase', () => {
     it('creates a ticket and deducts balance', async () => {
       const { userRepo, tournamentRepo, matchRepo, ticketRepo } = createMocks();
       vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-      vi.mocked(userRepo.findById).mockResolvedValue(user);
+      vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
       vi.mocked(ticketRepo.findByUserAndDate).mockResolvedValue(null);
       vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(matches);
 
@@ -118,6 +119,68 @@ describe('PlaceBetUseCase', () => {
       // User balance should be deducted
       const updatedUser = vi.mocked(userRepo.update).mock.calls[0][0];
       expect(updatedUser.balance.cents).toBe(3500);
+      // The deduction goes through the row lock, never the plain read
+      expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('user-1');
+      expect(userRepo.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unit of work', () => {
+    it('runs the deduction + ticket insert inside the provided unit of work', async () => {
+      const { userRepo, tournamentRepo, matchRepo, ticketRepo } = createMocks();
+      vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
+      vi.mocked(ticketRepo.findByUserAndDate).mockResolvedValue(null);
+      vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(matches);
+
+      const withTransaction = vi.fn(
+        async (fn: (repos: any) => Promise<unknown>) => fn({
+          userRepo,
+          tournamentRepo,
+          matchRepo,
+          ticketRepo,
+        }),
+      );
+      const uow = { withTransaction } as any;
+
+      const uc = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo, uow);
+      const result = await uc.execute({
+        userId: 'user-1',
+        matchDateId: 10,
+        predictions: { '1': 'L', '2': 'E' },
+      });
+
+      expect(withTransaction).toHaveBeenCalledOnce();
+      expect(result.userId).toBe('user-1');
+      expect(result.betAmount).toBe(1500);
+      expect(userRepo.update).toHaveBeenCalledOnce();
+      expect(ticketRepo.save).toHaveBeenCalledOnce();
+    });
+
+    it('propagates errors from inside the unit of work so the transaction rolls back', async () => {
+      const { userRepo, tournamentRepo, matchRepo, ticketRepo } = createMocks();
+      vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(null); // ghost user
+
+      const withTransaction = vi.fn(
+        async (fn: (repos: any) => Promise<unknown>) => fn({
+          userRepo,
+          tournamentRepo,
+          matchRepo,
+          ticketRepo,
+        }),
+      );
+      const uow = { withTransaction } as any;
+
+      const uc = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo, uow);
+      await expect(
+        uc.execute({ userId: 'ghost', matchDateId: 10, predictions: { '1': 'L' } }),
+      ).rejects.toThrow('User not found: ghost');
+      // The error surfaced out of the unit of work — the Drizzle implementation
+      // turns that into a rollback (no ticket inserted, no deduction).
+      expect(withTransaction).toHaveBeenCalledOnce();
+      expect(ticketRepo.save).not.toHaveBeenCalled();
+      expect(userRepo.update).not.toHaveBeenCalled();
     });
   });
 
@@ -134,7 +197,7 @@ describe('PlaceBetUseCase', () => {
       });
 
       vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-      vi.mocked(userRepo.findById).mockResolvedValue(poorUser);
+      vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(poorUser);
 
       const uc = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo);
       await expect(
@@ -147,7 +210,7 @@ describe('PlaceBetUseCase', () => {
     it('throws DuplicateBetError when user already has a bet on this date', async () => {
       const { userRepo, tournamentRepo, matchRepo, ticketRepo } = createMocks();
       vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
-      vi.mocked(userRepo.findById).mockResolvedValue(user);
+      vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
       vi.mocked(ticketRepo.findByUserAndDate).mockResolvedValue({ id: 99 } as any);
 
       const uc = new PlaceBetUseCase(userRepo, tournamentRepo, matchRepo, ticketRepo);

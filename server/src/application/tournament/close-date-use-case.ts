@@ -119,9 +119,11 @@ export class CloseDateUseCase {
     // 8. Consume the carryover — it is now part of this date's pozo
     await tournamentRepo.update(tournament.withCarryover(0));
 
-    // 9. Credit the house commission to the closing admin + audit trail
+    // 9. Credit the house commission to the closing admin + audit trail.
+    //    The admin row is locked FOR UPDATE (innermost lock level) so a
+    //    concurrent bet deduction or payout can never clobber this credit.
     if (commissionCents > 0) {
-      const admin = await userRepo.findById(adminId);
+      const admin = await userRepo.findByIdForUpdate(adminId);
       if (!admin) {
         throw new UserNotFoundError(adminId);
       }

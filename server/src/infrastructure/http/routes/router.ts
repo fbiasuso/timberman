@@ -51,6 +51,7 @@ export function createRouter(
       matchRepo,
       ticketRepo,
       jwtService,
+      uow,
     ));
 
     await fastify.register(createAdminRoutes(

@@ -14,6 +14,19 @@ export class DrizzleUserRepo implements UserRepo {
     return User.create(row as unknown as UserSnapshot);
   }
 
+  async findByIdForUpdate(id: string): Promise<User | null> {
+    // Lock the row for the duration of the transaction — serializes the
+    // balance read-modify-write between concurrent financial flows touching
+    // the same user (bet deduction, commission credit, winner payout).
+    const [row] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id))
+      .for('update');
+    if (!row) return null;
+    return User.create(row as unknown as UserSnapshot);
+  }
+
   async findByUsername(username: string): Promise<User | null> {
     const [row] = await this.db.select().from(schema.users).where(eq(schema.users.username, username));
     if (!row) return null;

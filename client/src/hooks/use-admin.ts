@@ -99,7 +99,7 @@ export function useCloseDate() {
   });
 }
 
-/** Publish results for a closed date — invalidates ['admin', 'tournaments'] and ['matches'] */
+/** Publish results for a closed date — invalidates admin, matches, bets and the user's data */
 export function usePublishResults() {
   const qc = useQueryClient();
   return useMutation({
@@ -107,6 +107,9 @@ export function usePublishResults() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
       qc.invalidateQueries({ queryKey: ['matches'] });
+      // Prize payouts / carryover changes what bettors see on their tickets
+      qc.invalidateQueries({ queryKey: ['bets'] });
+      qc.invalidateQueries({ queryKey: ['me'] });
     },
   });
 }

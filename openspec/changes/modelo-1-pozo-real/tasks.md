@@ -37,10 +37,10 @@ Chain strategy: pending
 
 ## Phase 2: Config Persistence + Wiring
 
-- [ ] 2.1 `index.ts`: instantiate repo → `ensureDefault()` (upsert DEFAULTS if `get()` null) → load `config` → pass to router; delete `allowRegistration` const (sys-config: Boot loads, Empty table, Seed Default).
-- [ ] 2.2 `UpdateConfigUseCase`: ctor `(config, repo)`; `execute` async; after mutation `await repo.upsert(config)` (sys-config: Update survives restart; admin-ops: System Configuration).
-- [ ] 2.3 Auth live toggle: `RegisterUseCase`/`AuthService`/`auth-routes` take `SystemConfig` ref, read `allowRegistration` at execute; `router.ts` drops `allowRegistration` param (user-auth: all 3 scenarios).
-- [ ] 2.4 `seed-dev.ts`: insert system_config row (15/true/1500) (sys-config: Seed Default Config Row).
+- [x] 2.1 `index.ts`: instantiate repo → `ensureDefault()` (upsert DEFAULTS if `get()` null) → load `config` → pass to router; delete `allowRegistration` const (sys-config: Boot loads, Empty table, Seed Default).
+- [x] 2.2 `UpdateConfigUseCase`: ctor `(config, repo)`; `execute` async; after mutation `await repo.upsert(config)` (sys-config: Update survives restart; admin-ops: System Configuration).
+- [x] 2.3 Auth live toggle: `RegisterUseCase`/`AuthService`/`auth-routes` take `SystemConfig` ref, read `allowRegistration` at execute; `router.ts` drops `allowRegistration` param (user-auth: all 3 scenarios).
+- [x] 2.4 `seed-dev.ts`: insert system_config row (15/true/1500) (sys-config: Seed Default Config Row).
 
 ## Phase 3: Close + Publish Flows + Routes
 

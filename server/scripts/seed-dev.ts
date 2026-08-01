@@ -7,6 +7,7 @@
  *   npx tsx server/scripts/seed-dev.ts
  *
  * What it creates:
+ *   - 1 system_config row (15% commission, self-registration on, $15 bets)
  *   - 1 tournament "Torneo Timberman" (active, 15% commission)
  *   - 2 users: test/test123 ($15000 balance) and admin/admin77
  *   - 1 match date (date #1, open) with 5 sample matches
@@ -17,6 +18,7 @@ import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/infrastructure/db/schema.js';
+import { DEFAULT_SYSTEM_CONFIG } from '../src/domain/entities/system-config.js';
 import bcrypt from 'bcryptjs';
 
 // ── DB connection ─────────────────────────────────────────────────
@@ -35,6 +37,18 @@ const BCRYPT_ROUNDS = 10;
 // ── Main ─────────────────────────────────────────────────────────
 async function main() {
   console.log('🌱 Seeding development database...\n');
+
+  // ── 0. Seed system config (single row, id=1) ──────────────────
+  console.log('⚙️  Seeding system config...');
+  await db.insert(schema.systemConfig)
+    .values({
+      id: 1,
+      commission: String(DEFAULT_SYSTEM_CONFIG.commission),
+      allowRegistration: DEFAULT_SYSTEM_CONFIG.allowRegistration,
+      defaultBetAmount: DEFAULT_SYSTEM_CONFIG.defaultBetAmount,
+    })
+    .onConflictDoNothing();
+  console.log(`   commission=${DEFAULT_SYSTEM_CONFIG.commission}%, allowRegistration=${DEFAULT_SYSTEM_CONFIG.allowRegistration}, defaultBet=$${(DEFAULT_SYSTEM_CONFIG.defaultBetAmount / 100).toFixed(2)}`);
 
   // ── 1. Create tournament ───────────────────────────────────────
   console.log('🏆 Creating tournament...');
@@ -155,6 +169,7 @@ async function main() {
   // ── Summary ─────────────────────────────────────────────────────
   console.log('\n────────────────────────────────────────');
   console.log('✅ Dev seed completed successfully');
+  console.log(`   System config:  1  (15% commission, self-registration on, $15 bets)`);
   console.log(`   Tournament:     1  (Torneo Timberman)`);
   console.log(`   Match date:     1  (#1, open, $15 bets)`);
   console.log(`   Matches:        ${matchIds.length}`);

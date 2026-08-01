@@ -7,6 +7,12 @@ import type { TournamentDateDTO } from '../../api/admin-api';
 
 vi.mock('../../hooks/use-matches', () => ({
   useCurrentMatches: vi.fn(),
+  // Default: no matches loaded for a specific date until a test sets them
+  useMatchesByDate: vi.fn(() => ({
+    data: { matchDate: null, matches: [] },
+    isLoading: false,
+    error: null,
+  })),
 }));
 
 const { publishMutate } = vi.hoisted(() => ({ publishMutate: vi.fn() }));
@@ -33,12 +39,13 @@ vi.mock('../../hooks/use-admin', () => ({
   })),
 }));
 
-import { useCurrentMatches } from '../../hooks/use-matches';
+import { useCurrentMatches, useMatchesByDate } from '../../hooks/use-matches';
 import { useAdminTournaments, usePublishResults } from '../../hooks/use-admin';
 
 afterEach(() => {
   cleanup();
   publishMutate.mockClear();
+  vi.mocked(useMatchesByDate).mockClear();
 });
 
 const openDate: TournamentDateDTO = {
@@ -102,6 +109,14 @@ function mockCurrent(matchDate: TournamentDateDTO | null, matches: unknown[] = [
   } as any);
 }
 
+function mockMatchesByDate(matches: unknown[]) {
+  vi.mocked(useMatchesByDate).mockReturnValue({
+    data: { matchDate: null, matches },
+    isLoading: false,
+    error: null,
+  } as any);
+}
+
 describe('ResultsEntry', () => {
   it('shows match cards and close button when the date is open', () => {
     mockTournaments([openDate]);
@@ -131,6 +146,24 @@ describe('ResultsEntry', () => {
     expect(screen.getByText('10%')).toBeDefined();
     // Close button must NOT be shown while closed
     expect(screen.queryByText(/Procesar y Cerrar Puntos de la Fecha/)).toBeNull();
+  });
+
+  it('loads a closed date\'s matches so results can be corrected before publishing', () => {
+    mockTournaments([closedDate]);
+    mockCurrent(null);
+    const closedMatches = [
+      { id: 21, matchDateId: 2, localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: 'L', score: '2-1' },
+      { id: 22, matchDateId: 2, localTeam: 'Racing', visitorTeam: 'Independiente', result: null, score: null },
+    ];
+    mockMatchesByDate(closedMatches);
+
+    render(<ResultsEntry />);
+    // The closed date's matches come from the per-date endpoint, not /current
+    expect(useMatchesByDate).toHaveBeenCalledWith(closedDate.id);
+    expect(screen.getByText(/River Plate/)).toBeDefined();
+    expect(screen.getByText(/Racing/)).toBeDefined();
+    // The admin can still review and publish after correcting results
+    expect(screen.getByText(/Publicar resultados y pagar/)).toBeDefined();
   });
 
   it('shows winners breakdown and commission when results are published', () => {

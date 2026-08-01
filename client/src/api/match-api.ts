@@ -12,6 +12,11 @@ export interface DatesResponse {
   dates: MatchDateDTO[];
 }
 
+export interface DateMatchesResponse {
+  matchDate: MatchDateDTO;
+  matches: MatchDTO[];
+}
+
 export const matchApi = {
   /** GET /api/matches/current — current open match date with its matches */
   getCurrent() {
@@ -21,5 +26,10 @@ export const matchApi = {
   /** GET /api/matches/dates — all match dates across tournaments */
   getDates() {
     return client.get<DatesResponse>('/matches/dates').then((r) => r.data);
+  },
+
+  /** GET /api/matches/dates/:dateId — a specific date (any status) with its matches */
+  getMatchesByDate(dateId: number) {
+    return client.get<DateMatchesResponse>(`/matches/dates/${dateId}`).then((r) => r.data);
   },
 };

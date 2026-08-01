@@ -640,4 +640,93 @@ describe('API Integration Tests', () => {
       expect(services.auditLogRepo.save).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /api/matches/dates/:dateId', () => {
+    const closedDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'closed',
+      pozo: 6000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+
+    const matches = [
+      Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }).setResult('L', '2-0'),
+      Match.new({ id: 2, matchDateId: 10, localTeam: 'C', visitorTeam: 'D' }),
+    ];
+
+    it('returns a specific closed date with its matches for an admin', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 500 }),
+      );
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matches);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/10',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.matchDate).toMatchObject({ id: 10, status: 'closed' });
+      expect(body.matchDate.carryover).toBe(500);
+      expect(body.matches).toHaveLength(2);
+      expect(body.matches[0]).toMatchObject({ id: 1, result: 'L', score: '2-0' });
+      expect(body.matches[1]).toMatchObject({ id: 2, result: null });
+      // The per-date read must NOT go through the FOR UPDATE lock — this is a
+      // plain read used by the admin UI, never inside a financial transaction.
+      expect(services.tournamentRepo.findMatchDateById).toHaveBeenCalledWith(10);
+    });
+
+    it('returns 404 MATCH_DATE_NOT_FOUND for an unknown date', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/999',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_DATE_NOT_FOUND');
+    });
+
+    it('returns 403 for non-admin users (results are unpublished data)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/10',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('FORBIDDEN');
+      expect(services.matchRepo.findByMatchDateId).not.toHaveBeenCalled();
+    });
+  });
 });

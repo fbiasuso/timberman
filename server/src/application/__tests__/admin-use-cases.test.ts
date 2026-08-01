@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ListUsersUseCase } from '../admin/list-users-use-case.js';
 import { CreateUserUseCase } from '../admin/create-user-use-case.js';
 import { CreateTournamentUseCase } from '../admin/create-tournament-use-case.js';
+import { ListTournamentsUseCase } from '../admin/list-tournaments-use-case.js';
 import { AdjustBalanceUseCase } from '../admin/adjust-balance-use-case.js';
 import { DeleteUserUseCase } from '../admin/delete-user-use-case.js';
 import { GetConfigUseCase } from '../admin/get-config-use-case.js';
@@ -16,6 +17,10 @@ import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js'
 import type { BcryptService } from '../auth/register-use-case.js';
 import { User } from '../../domain/entities/user.js';
 import { Match } from '../../domain/entities/match.js';
+import { Tournament } from '../../domain/entities/tournament.js';
+import { MatchDate } from '../../domain/entities/match-date.js';
+import { Ticket } from '../../domain/entities/ticket.js';
+import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
 import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError, InvalidCommissionError, InvalidConfigValueError } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -214,6 +219,82 @@ describe('CreateTournamentUseCase', () => {
     const result = await uc.execute({ name: 'Torneo', commission: 10 });
 
     expect(result.commission).toBe(10);
+  });
+});
+
+// ── ListTournamentsUseCase ─────────────────────────────────────────
+
+describe('ListTournamentsUseCase', () => {
+  function createTournamentRepoMocks() {
+    const repo: import('../../domain/ports/tournament-repo.js').TournamentRepo = {
+      findById: vi.fn(),
+      findActive: vi.fn(),
+      findAll: vi.fn(),
+      save: vi.fn(),
+      update: vi.fn(),
+      findMatchDateById: vi.fn(),
+      findMatchDatesByTournamentId: vi.fn(),
+      findOpenMatchDates: vi.fn(),
+      saveMatchDate: vi.fn(),
+      updateMatchDate: vi.fn(),
+    };
+    return repo;
+  }
+
+  it('includes per-date payout breakdown with winner usernames', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const tournament = Tournament.new({ id: 1, name: 'Torneo', carryover: 500 });
+    const date = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'results',
+      pozo: 6000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+    const winningTicket = Ticket.new({
+      id: 1,
+      userId: 'user-1',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions: [TicketPrediction.new({ matchId: 1, prediction: 'L' })],
+    }).withPrize(6000);
+    const losingTicket = Ticket.new({
+      id: 2,
+      userId: 'user-2',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions: [TicketPrediction.new({ matchId: 1, prediction: 'V' })],
+    });
+
+    vi.mocked(tournamentRepo.findAll).mockResolvedValue([tournament]);
+    vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([date]);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([winningTicket, losingTicket]);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1', 'Alice'));
+
+    const uc = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo);
+    const result = await uc.execute();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].carryover).toBe(500);
+    expect(result[0].dates).toHaveLength(1);
+    expect(result[0].dates[0]).toMatchObject({
+      id: 10,
+      dateNumber: 1,
+      status: 'results',
+      pozo: 6000,
+      commission: 15,
+    });
+    // Only the paid ticket appears; the unpaid one is excluded
+    expect(result[0].dates[0].winners).toEqual([
+      { ticketId: 1, userId: 'user-1', username: 'Alice', prize: 6000 },
+    ]);
+    expect(userRepo.findById).toHaveBeenCalledWith('user-1');
   });
 });
 

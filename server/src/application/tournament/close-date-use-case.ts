@@ -77,8 +77,10 @@ export class CloseDateUseCase {
   ): Promise<CloseDateResult> {
     const { tournamentRepo, ticketRepo, userRepo, auditLogRepo } = repos;
 
-    // 1. Load match date
-    const matchDate = await tournamentRepo.findMatchDateById(matchDateId);
+    // 1. Load match date — row locked FOR UPDATE so a concurrent close of
+    //    the SAME date blocks here, then sees the committed status and is
+    //    rejected (409) instead of double-crediting the commission.
+    const matchDate = await tournamentRepo.findMatchDateByIdForUpdate(matchDateId);
     if (!matchDate) {
       throw new MatchDateNotFoundError(matchDateId);
     }

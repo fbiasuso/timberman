@@ -133,4 +133,32 @@ describe('DrizzleTournamentRepo', () => {
     expect(forSpy).toHaveBeenCalledWith('update');
     expect(tournament?.carryover).toBe(2500);
   });
+
+  it('locks the match date row with FOR UPDATE on findMatchDateByIdForUpdate', async () => {
+    const row = {
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: '15.00',
+      createdAt: new Date(),
+    };
+    // Chain shape: select().from().where(...).for('update')
+    const forSpy = vi.fn().mockResolvedValue([row]);
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ for: forSpy }),
+        }),
+      }),
+    };
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const date = await repo.findMatchDateByIdForUpdate(10);
+
+    expect(forSpy).toHaveBeenCalledWith('update');
+    expect(date?.id).toBe(10);
+  });
 });

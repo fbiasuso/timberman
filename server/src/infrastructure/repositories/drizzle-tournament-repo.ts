@@ -138,6 +138,19 @@ export class DrizzleTournamentRepo implements TournamentRepo {
     return this.toMatchDate(row);
   }
 
+  async findMatchDateByIdForUpdate(id: number): Promise<MatchDate | null> {
+    // Lock the row for the duration of the transaction — serializes
+    // concurrent close/publish on the same date so the second request
+    // sees the committed status and is rejected, never double-credited.
+    const [row] = await this.db
+      .select()
+      .from(schema.matchDates)
+      .where(eq(schema.matchDates.id, id))
+      .for('update');
+    if (!row) return null;
+    return this.toMatchDate(row);
+  }
+
   async findMatchDatesByTournamentId(tournamentId: number): Promise<MatchDate[]> {
     const rows = await this.db
       .select()

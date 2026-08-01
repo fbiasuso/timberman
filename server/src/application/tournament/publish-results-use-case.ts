@@ -79,8 +79,10 @@ export class PublishResultsUseCase {
   ): Promise<PublishResultsResult> {
     const { tournamentRepo, matchRepo, ticketRepo, userRepo } = repos;
 
-    // 1. Load match date
-    const matchDate = await tournamentRepo.findMatchDateById(matchDateId);
+    // 1. Load match date — row locked FOR UPDATE so a concurrent publish of
+    //    the SAME date blocks here, then sees the committed status and is
+    //    rejected (409) instead of double-paying out.
+    const matchDate = await tournamentRepo.findMatchDateByIdForUpdate(matchDateId);
     if (!matchDate) {
       throw new MatchDateNotFoundError(matchDateId);
     }
@@ -88,11 +90,12 @@ export class PublishResultsUseCase {
     // 2. Transition to results status (domain validation — throws if not closed)
     const withResults = matchDate.publishResults();
 
-    // 3. Load matches — every match MUST have its result set, otherwise
-    //    the pozo would silently roll into carryover instead of paying out.
-    //    Guarded BEFORE any write so a failed publish leaves the date closed.
+    // 3. Load matches — every match MUST have its result set (and the date
+    //    MUST have at least one match), otherwise the pozo would silently
+    //    roll into carryover instead of paying out. Guarded BEFORE any write
+    //    so a failed publish leaves the date closed.
     const matches = await matchRepo.findByMatchDateId(matchDateId);
-    if (matches.some((match) => !match.hasResult())) {
+    if (matches.length === 0 || matches.some((match) => !match.hasResult())) {
       throw new MatchesNotReadyError(matchDateId);
     }
 
@@ -139,8 +142,10 @@ export class PublishResultsUseCase {
         payouts.push({ ticketId: winner.ticketId, userId: winner.userId, prize });
       }
     } else {
-      // No winners: the pozo is not paid and accumulates for the next date
-      const tournament = await tournamentRepo.findById(matchDate.tournamentId);
+      // No winners: the pozo is not paid and accumulates for the next date.
+      // The tournament row is locked FOR UPDATE (same as the close flow) so
+      // this read-modify-write cannot race with another concurrent flow.
+      const tournament = await tournamentRepo.findByIdForUpdate(matchDate.tournamentId);
       if (!tournament) {
         throw new TournamentNotFoundError(matchDate.tournamentId);
       }

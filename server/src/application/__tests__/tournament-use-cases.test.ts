@@ -20,6 +20,7 @@ import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
   DateNotClosedError,
+  MatchDateNotOpenError,
   UserNotFoundError,
   MatchesNotReadyError,
 } from '../../domain/errors/index.js';
@@ -35,6 +36,7 @@ function createTournamentRepoMocks() {
     save: vi.fn(),
     update: vi.fn(),
     findMatchDateById: vi.fn(),
+    findMatchDateByIdForUpdate: vi.fn(),
     findMatchDatesByTournamentId: vi.fn(),
     findOpenMatchDates: vi.fn(),
     saveMatchDate: vi.fn((md: MatchDate) => Promise.resolve(md)),
@@ -209,7 +211,7 @@ describe('CloseDateUseCase', () => {
     const tournament = Tournament.new({ id: 1, name: 'Test', commission: 15 });
     const admin = makeAdmin('admin-1');
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(admin);
@@ -249,7 +251,7 @@ describe('CloseDateUseCase', () => {
     const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 1200 });
     const admin = makeAdmin('admin-1');
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(admin);
@@ -271,7 +273,7 @@ describe('CloseDateUseCase', () => {
     const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test' });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(0);
 
@@ -292,7 +294,7 @@ describe('CloseDateUseCase', () => {
     const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test' });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(null);
@@ -304,7 +306,7 @@ describe('CloseDateUseCase', () => {
   it('throws MatchDateNotFoundError when date does not exist', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const ticketRepo = createTicketRepoMocks();
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(null);
 
     const uc = buildUseCase(
       tournamentRepo,
@@ -315,7 +317,7 @@ describe('CloseDateUseCase', () => {
     await expect(uc.execute(999, 'admin-1')).rejects.toThrow(MatchDateNotFoundError);
   });
 
-  it('throws when trying to close an already closed date', async () => {
+  it('throws MatchDateNotOpenError when trying to close an already closed date', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const ticketRepo = createTicketRepoMocks();
     const closedDate = MatchDate.create({
@@ -328,7 +330,7 @@ describe('CloseDateUseCase', () => {
       commission: 0,
       createdAt: new Date(),
     });
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
 
     const uc = buildUseCase(
       tournamentRepo,
@@ -336,8 +338,31 @@ describe('CloseDateUseCase', () => {
       createUserRepoMocks(),
       createAuditLogRepoMocks(),
     );
-    await expect(uc.execute(10, 'admin-1')).rejects.toThrow('Cannot close');
+    await expect(uc.execute(10, 'admin-1')).rejects.toThrow(MatchDateNotOpenError);
     expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+    expect(tournamentRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('locks the match date row (findMatchDateByIdForUpdate) at the start of the close transaction', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
+    vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
+
+    const uc = buildUseCase(tournamentRepo, ticketRepo, userRepo, auditLogRepo);
+    await uc.execute(10, 'admin-1');
+
+    // The date read must go through the row lock — a concurrent close of the
+    // same date blocks here and then sees the committed status (no double
+    // commission credit). The plain read must never be used in this flow.
+    expect(tournamentRepo.findMatchDateByIdForUpdate).toHaveBeenCalledWith(10);
+    expect(tournamentRepo.findMatchDateById).not.toHaveBeenCalled();
   });
 
   it('locks the tournament row (findByIdForUpdate) when reading carryover', async () => {
@@ -347,7 +372,7 @@ describe('CloseDateUseCase', () => {
     const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 500 });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
@@ -367,7 +392,7 @@ describe('CloseDateUseCase', () => {
     const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 500 });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(makeAdmin('admin-1'));
@@ -407,7 +432,7 @@ describe('CloseDateUseCase', () => {
     const auditLogRepo = createAuditLogRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test' });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
     vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
     vi.mocked(ticketRepo.countByMatchDateId).mockResolvedValue(5);
     vi.mocked(userRepo.findById).mockResolvedValue(null); // ghost admin
@@ -495,7 +520,7 @@ describe('PublishResultsUseCase', () => {
       return m;
     });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
@@ -548,7 +573,7 @@ describe('PublishResultsUseCase', () => {
       predictions: [TicketPrediction.new({ matchId: 1, prediction: 'L' })],
     });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticketA, ticketB]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
@@ -581,11 +606,11 @@ describe('PublishResultsUseCase', () => {
       return m;
     });
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
-    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(tournament);
 
     const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
     const result = await uc.execute(10);
@@ -596,6 +621,10 @@ describe('PublishResultsUseCase', () => {
 
     const rolled = vi.mocked(tournamentRepo.update).mock.calls[0][0];
     expect(rolled.carryover).toBe(6000); // 0 + pozo
+    // The carryover read-modify-write goes through the FOR UPDATE lock
+    // (same as the close flow) — never the unlocked plain read.
+    expect(tournamentRepo.findByIdForUpdate).toHaveBeenCalledWith(1);
+    expect(tournamentRepo.findById).not.toHaveBeenCalled();
   });
 
   it('rejects a second publish with DateNotClosedError and does not double-pay', async () => {
@@ -610,7 +639,7 @@ describe('PublishResultsUseCase', () => {
       return m;
     });
 
-    vi.mocked(tournamentRepo.findMatchDateById)
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate)
       .mockResolvedValueOnce(closedDate) // first publish sees 'closed'
       .mockResolvedValueOnce(MatchDate.create({ ...closedDate.toSnapshot(), status: 'results' }));
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
@@ -628,7 +657,7 @@ describe('PublishResultsUseCase', () => {
 
   it('throws MatchDateNotFoundError when date does not exist', async () => {
     const tournamentRepo = createTournamentRepoMocks();
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(null);
 
     const uc = buildUseCase(
       tournamentRepo,
@@ -651,7 +680,7 @@ describe('PublishResultsUseCase', () => {
       commission: 0,
       createdAt: new Date(),
     });
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
 
     const uc = buildUseCase(
       tournamentRepo,
@@ -672,7 +701,7 @@ describe('PublishResultsUseCase', () => {
     // Match 1 has a result; match 2 does NOT
     const partial = [matches[0].setResult('L', '2-0'), matches[1]];
 
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(partial);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
 
@@ -686,6 +715,50 @@ describe('PublishResultsUseCase', () => {
     expect(tournamentRepo.update).not.toHaveBeenCalled();
   });
 
+  it('rejects publishing when the date has no matches — no silent pozo roll', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue([]); // zero matches
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    await expect(uc.execute(10)).rejects.toThrow(MatchesNotReadyError);
+
+    // The empty guard runs BEFORE any write: the date stays closed and the
+    // pozo must NOT silently roll into carryover.
+    expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+    expect(tournamentRepo.update).not.toHaveBeenCalled();
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(ticketRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('locks the match date row (findMatchDateByIdForUpdate) at the start of the publish transaction', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const results = matches.map((m) => m.setResult('L', '2-0'));
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    await uc.execute(10);
+
+    // The date read must go through the row lock — a concurrent publish of
+    // the same date blocks here and then sees the committed status (no
+    // double payout). The plain read must never be used in this flow.
+    expect(tournamentRepo.findMatchDateByIdForUpdate).toHaveBeenCalledWith(10);
+    expect(tournamentRepo.findMatchDateById).not.toHaveBeenCalled();
+  });
+
   it('runs the whole publish flow inside the provided unit of work', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const matchRepo = createMatchRepoMocks();
@@ -693,7 +766,7 @@ describe('PublishResultsUseCase', () => {
     const userRepo = createUserRepoMocks();
 
     const results = matches.map((m) => m.setResult('L', '2-0'));
-    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);

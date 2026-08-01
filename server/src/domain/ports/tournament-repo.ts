@@ -24,6 +24,14 @@ export interface TournamentRepo {
 
   // ── MatchDate ──────────────────────────────────────────────
   findMatchDateById(id: number): Promise<MatchDate | null>;
+  /**
+   * Read a match-date row locking it for update (`SELECT ... FOR UPDATE`).
+   * Must only be called inside a transaction — the lock is held until the
+   * transaction commits/rolls back, which serializes close/publish flows on
+   * the SAME date: a concurrent request blocks here, then reads the committed
+   * status and is rejected instead of double-crediting commission or payout.
+   */
+  findMatchDateByIdForUpdate(id: number): Promise<MatchDate | null>;
   findMatchDatesByTournamentId(tournamentId: number): Promise<MatchDate[]>;
   findOpenMatchDates(): Promise<MatchDate[]>;
   saveMatchDate(matchDate: MatchDate): Promise<MatchDate>;

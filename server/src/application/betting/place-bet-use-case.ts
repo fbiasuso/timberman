@@ -26,6 +26,7 @@ export interface TicketDTO {
   userId: string;
   matchDateId: number;
   betAmount: number;
+  prizeWon: number | null; // cents — set when results are published
   predictions: TicketPredictionDTO[];
   createdAt: Date;
 }
@@ -135,6 +136,7 @@ export class PlaceBetUseCase {
       userId: ticket.userId,
       matchDateId: ticket.matchDateId,
       betAmount: ticket.betAmount.cents,
+      prizeWon: ticket.prizeWon,
       predictions: ticket.predictions.map((tp) => ({
         matchId: tp.matchId,
         prediction: tp.prediction,

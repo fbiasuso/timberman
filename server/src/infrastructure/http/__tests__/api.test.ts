@@ -13,6 +13,8 @@ import { Ticket } from '../../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../../domain/entities/ticket-prediction.js';
 import { Match } from '../../../domain/entities/match.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
+import { Tournament } from '../../../domain/entities/tournament.js';
+import { User } from '../../../domain/entities/user.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -381,6 +383,177 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('USER_NOT_FOUND');
+    });
+  });
+
+  describe('POST /api/admin/dates/:dateId/publish-results', () => {
+    const closedDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'closed',
+      pozo: 6000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+
+    const matchesWithResults = [
+      Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }).setResult('L', '2-0'),
+      Match.new({ id: 2, matchDateId: 10, localTeam: 'C', visitorTeam: 'D' }).setResult('V', '1-0'),
+    ];
+
+    const ticket = Ticket.new({
+      id: 1,
+      userId: 'user-1',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions: [
+        TicketPrediction.new({ matchId: 1, prediction: 'L' }),
+        TicketPrediction.new({ matchId: 2, prediction: 'V' }),
+      ],
+    });
+
+    it('publishes results from closed status, pays winners, and returns the breakdown', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
+      vi.mocked(services.ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+      vi.mocked(services.userRepo.findById).mockResolvedValue(
+        User.create({
+          id: 'user-1',
+          username: 'testuser',
+          passwordHash: 'hash',
+          role: 'user',
+          balance: 500,
+          createdAt: new Date(),
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/publish-results',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.status).toBe('results');
+      expect(body.winners).toEqual([{ ticketId: 1, userId: 'user-1', prize: 6000 }]);
+
+      // Winner balance credited 500 + 6000
+      const credited = vi.mocked(services.userRepo.update).mock.calls[0][0];
+      expect(credited.balance.cents).toBe(6500);
+      // Winning ticket prize persisted
+      const paidTicket = vi.mocked(services.ticketRepo.update).mock.calls[0][0];
+      expect(paidTicket.prizeWon).toBe(6000);
+    });
+
+    it('rejects a re-submit with 409 DATE_NOT_CLOSED without credits', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+        MatchDate.create({ ...closedDate.toSnapshot(), status: 'results' }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/publish-results',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('DATE_NOT_CLOSED');
+      expect(services.tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+      expect(services.userRepo.update).not.toHaveBeenCalled();
+      expect(services.ticketRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/publish-results',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('POST /api/admin/dates/:dateId/close', () => {
+    const openDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+
+    it('closes the date, credits the closing admin, and writes an audit entry', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.ticketRepo.countByMatchDateId).mockResolvedValue(5);
+      vi.mocked(services.userRepo.findById).mockResolvedValue(
+        User.create({
+          id: 'admin-1',
+          username: 'admin',
+          passwordHash: 'hash',
+          role: 'admin',
+          balance: 0,
+          createdAt: new Date(),
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/close',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.status).toBe('closed');
+      expect(body.pozo).toBe(6375); // 7500 gross − 1125 commission
+      expect(body.commission).toBe(1125);
+
+      // Admin credited with the house cut
+      const credited = vi.mocked(services.userRepo.update).mock.calls[0][0];
+      expect(credited.balance.cents).toBe(1125);
+      // Audit entry written
+      expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
+      const audit = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];
+      expect(audit.action).toBe('commission_payout');
     });
   });
 });

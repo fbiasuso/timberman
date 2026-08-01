@@ -20,6 +20,7 @@ import { CreateTournamentUseCase } from '../../../application/admin/create-tourn
 import { SetMatchResultUseCase } from '../../../application/admin/set-match-result-use-case.js';
 import { PointsCalculator } from '../../../application/tournament/points-calculator.js';
 import { CloseDateUseCase } from '../../../application/tournament/close-date-use-case.js';
+import { PublishResultsUseCase } from '../../../application/tournament/publish-results-use-case.js';
 import { PozoCalculator } from '../../../application/betting/pozo-calculator.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
@@ -91,6 +92,13 @@ export function createAdminRoutes(
       config,
       userRepo,
       auditLogRepo,
+    );
+    const publishResultsUseCase = new PublishResultsUseCase(
+      tournamentRepo,
+      matchRepo,
+      ticketRepo,
+      pointsCalculator,
+      userRepo,
     );
 
     // ── GET /api/admin/users ─────────────────────────────────────
@@ -197,6 +205,15 @@ export function createAdminRoutes(
     }, async (request, reply) => {
       const { dateId } = dateParamsSchema.parse(request.params);
       const result = await closeDateUseCase.execute(dateId, request.user!.sub);
+      return reply.send(result);
+    });
+
+    // ── POST /api/admin/dates/:dateId/publish-results ─────────────
+    fastify.post('/api/admin/dates/:dateId/publish-results', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { dateId } = dateParamsSchema.parse(request.params);
+      const result = await publishResultsUseCase.execute(dateId);
       return reply.send(result);
     });
   };

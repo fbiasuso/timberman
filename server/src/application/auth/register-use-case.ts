@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
 import { User } from '../../domain/entities/user.js';
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 import { DuplicateUsernameError, RegistrationDisabledError } from '../../domain/errors/index.js';
 
 /**
@@ -26,11 +27,13 @@ export class RegisterUseCase {
   constructor(
     private readonly userRepo: UserRepo,
     private readonly bcrypt: BcryptService,
-    private readonly allowRegistration: boolean,
+    private readonly config: SystemConfig,
   ) {}
 
   async execute(username: string, password: string): Promise<RegisterUserDTO> {
-    if (!this.allowRegistration) {
+    // Read the toggle by reference at request time so an admin update
+    // takes effect on the next request without a restart.
+    if (!this.config.allowRegistration) {
       throw new RegistrationDisabledError();
     }
 

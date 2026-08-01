@@ -10,8 +10,10 @@ import { DrizzleTournamentRepo } from './infrastructure/repositories/drizzle-tou
 import { DrizzleMatchRepo } from './infrastructure/repositories/drizzle-match-repo.js';
 import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-repo.js';
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
+import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
 import { errorHandler } from './infrastructure/http/middlewares/error-handler.js';
+import { DEFAULT_SYSTEM_CONFIG } from './domain/entities/system-config.js';
 import type { SystemConfig } from './domain/entities/system-config.js';
 
 const app = Fastify({ logger: true });
@@ -31,16 +33,26 @@ const tournamentRepo = new DrizzleTournamentRepo(db);
 const matchRepo = new DrizzleMatchRepo(db);
 const ticketRepo = new DrizzleTicketRepo(db);
 const auditLogRepo = new DrizzleAuditLogRepo(db);
+const systemConfigRepo = new DrizzleSystemConfigRepo(db);
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
-const allowRegistration = true;
 
-// ── System Config (mutable — updated via admin panel) ────────────
-const config: SystemConfig = {
-  commission: 15.0,
-  allowRegistration: true,
-  defaultBetAmount: 1500, // cents = $15
-};
+// ── System Config (persisted single row, live-loaded at boot) ────
+// Load the persisted config; when no row exists yet, seed the built-in
+// defaults so databases created before the system_config table work.
+let config: SystemConfig;
+try {
+  const persisted = await systemConfigRepo.get();
+  if (persisted) {
+    config = persisted;
+  } else {
+    config = { ...DEFAULT_SYSTEM_CONFIG };
+    await systemConfigRepo.upsert(config);
+  }
+} catch (err) {
+  app.log.error({ err }, 'Failed to load system config at boot');
+  process.exit(1);
+}
 
 // ── Routes ───────────────────────────────────────────────────────
 await app.register(createRouter(
@@ -50,9 +62,9 @@ await app.register(createRouter(
   ticketRepo,
   jwtService,
   bcryptService,
-  allowRegistration,
   auditLogRepo,
   config,
+  systemConfigRepo,
 ));
 
 // ── Health check ────────────────────────────────────────────────

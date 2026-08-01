@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { AuthService } from '../../../application/auth/auth-service.js';
 import type { UserRepo } from '../../../domain/ports/user-repo.js';
+import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
@@ -20,10 +21,10 @@ export function createAuthRoutes(
   userRepo: UserRepo,
   jwtService: JwtServiceImpl,
   bcryptService: BcryptServiceImpl,
-  allowRegistration: boolean,
+  config: SystemConfig,
 ): FastifyPluginAsync {
   return async (fastify) => {
-    const authService = new AuthService(userRepo, bcryptService, jwtService, allowRegistration);
+    const authService = new AuthService(userRepo, bcryptService, jwtService, config);
     const authMiddleware = createAuthMiddleware(jwtService);
 
     // ── POST /api/auth/register ───────────────────────────────

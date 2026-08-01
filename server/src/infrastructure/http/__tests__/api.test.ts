@@ -5,6 +5,7 @@ import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
+import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
@@ -77,6 +78,11 @@ function createMockServices() {
     findAll: vi.fn(),
   };
 
+  const configRepo: SystemConfigRepo = {
+    get: vi.fn(),
+    upsert: vi.fn(),
+  };
+
   const jwtService = {
     sign: vi.fn(() => 'fake-jwt-token'),
     verify: vi.fn(),
@@ -94,7 +100,7 @@ function createMockServices() {
   };
 
   return {
-    userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo,
+    userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo, configRepo,
     jwtService, bcryptService, config,
   };
 }
@@ -114,9 +120,9 @@ describe('API Integration Tests', () => {
       services.ticketRepo,
       services.jwtService as any,
       services.bcryptService as any,
-      true,
       services.auditLogRepo,
       services.config,
+      services.configRepo,
     ));
     await app.ready();
   });
@@ -161,6 +167,63 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('registration live toggle (system config reference)', () => {
+    it('blocks registration immediately when the config toggle is flipped', async () => {
+      vi.clearAllMocks(); // isolate call-history assertions from earlier tests
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue(null);
+      services.config.allowRegistration = false;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { username: 'blockeduser', password: 'secret123' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('REGISTRATION_DISABLED');
+      expect(services.userRepo.save).not.toHaveBeenCalled();
+
+      services.config.allowRegistration = true; // restore for other tests
+    });
+
+    it('persists config updates and applies them to registration without restart', async () => {
+      vi.clearAllMocks(); // isolate call-history assertions from earlier tests
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/config',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { key: 'allowRegistration', value: false },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.config.allowRegistration).toBe(false);
+      expect(services.configRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ allowRegistration: false }),
+      );
+
+      // The very next registration attempt is rejected — no restart needed.
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue(null);
+      const regRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { username: 'blockeduser', password: 'secret123' },
+      });
+      expect(regRes.statusCode).toBe(403);
+      const regBody = JSON.parse(regRes.body);
+      expect(regBody.error).toBe('REGISTRATION_DISABLED');
+
+      services.config.allowRegistration = true; // restore for other tests
     });
   });
 

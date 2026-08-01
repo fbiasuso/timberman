@@ -51,6 +51,7 @@ function createMocks() {
     save: vi.fn(),
     update: vi.fn(),
     findMatchDateById: vi.fn(),
+    findMatchDateByIdForUpdate: vi.fn(),
     findMatchDatesByTournamentId: vi.fn(),
     findOpenMatchDates: vi.fn(),
     saveMatchDate: vi.fn(),

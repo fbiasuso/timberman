@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MatchDate } from '../entities/match-date.js';
-import { DateNotClosedError } from '../errors/index.js';
+import { DateNotClosedError, MatchDateNotOpenError } from '../errors/index.js';
 
 describe('MatchDate', () => {
   const baseSnapshot = {
@@ -30,6 +30,38 @@ describe('MatchDate', () => {
       date.withCommission(20);
 
       expect(date.commission).toBe(0);
+    });
+  });
+
+  describe('close', () => {
+    it('closes an open date', () => {
+      const open = MatchDate.create(baseSnapshot);
+      const closed = open.close();
+
+      expect(closed.status).toBe('closed');
+      expect(open.status).toBe('open');
+    });
+
+    it('throws MatchDateNotOpenError when the date is not open', () => {
+      const closed = MatchDate.create({ ...baseSnapshot, status: 'closed' });
+      expect(() => closed.close()).toThrow(MatchDateNotOpenError);
+
+      const published = MatchDate.create({ ...baseSnapshot, status: 'results' });
+      expect(() => published.close()).toThrow(MatchDateNotOpenError);
+    });
+
+    it('throws MatchDateNotOpenError with code MATCH_DATE_NOT_OPEN and 409 status', () => {
+      const closed = MatchDate.create({ ...baseSnapshot, status: 'closed' });
+      try {
+        closed.close();
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MatchDateNotOpenError);
+        const domainErr = err as MatchDateNotOpenError;
+        expect(domainErr.code).toBe('MATCH_DATE_NOT_OPEN');
+        expect(domainErr.statusCode).toBe(409);
+        expect(domainErr.message).toContain('Match date 10 is not open for closing');
+      }
     });
   });
 

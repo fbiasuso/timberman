@@ -51,6 +51,8 @@ export {
   DuplicateBetError,
   DateNotOpenError,
   DateNotClosedError,
+  MatchDateNotOpenError,
+  MatchesNotReadyError,
   BetModificationNotAllowedError,
   RegistrationDisabledError,
   UserNotFoundError,

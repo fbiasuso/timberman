@@ -1,5 +1,5 @@
 import { Money } from '../value-objects/money.js';
-import { DateNotClosedError } from '../errors/index.js';
+import { DateNotClosedError, MatchDateNotOpenError } from '../errors/index.js';
 
 export type MatchDateStatus = 'open' | 'closed' | 'results';
 
@@ -62,9 +62,7 @@ export class MatchDate {
   /** Close this date — only open dates can be closed */
   close(): MatchDate {
     if (!this.isOpen()) {
-      throw new Error(
-        `Cannot close match date ${this.id}: current status is "${this._status}"`,
-      );
+      throw new MatchDateNotOpenError(this.id, this._status);
     }
     return new MatchDate(
       this.id,

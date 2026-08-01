@@ -90,6 +90,15 @@ export class DateNotClosedError extends DomainError {
   get statusCode(): number { return 409; }
 }
 
+export class MatchDateNotOpenError extends DomainError {
+  constructor(matchDateId: number, status: string) {
+    super(`Match date ${matchDateId} is not open for closing. Current status: "${status}"`);
+  }
+
+  get code(): string { return 'MATCH_DATE_NOT_OPEN'; }
+  get statusCode(): number { return 409; }
+}
+
 export class MatchesNotReadyError extends DomainError {
   constructor(matchDateId: number) {
     super(`Match date ${matchDateId} has matches without a result. Set all results before publishing.`);

@@ -50,6 +50,7 @@ function createMockServices() {
     save: vi.fn(),
     update: vi.fn(),
     findMatchDateById: vi.fn(),
+    findMatchDateByIdForUpdate: vi.fn(),
     findMatchDatesByTournamentId: vi.fn(),
     findOpenMatchDates: vi.fn(),
     saveMatchDate: vi.fn(),
@@ -422,7 +423,7 @@ describe('API Integration Tests', () => {
         role: 'admin',
         username: 'admin',
       });
-      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
       vi.mocked(services.tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
       vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
       vi.mocked(services.ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
@@ -463,7 +464,7 @@ describe('API Integration Tests', () => {
         role: 'admin',
         username: 'admin',
       });
-      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(
         MatchDate.create({ ...closedDate.toSnapshot(), status: 'results' }),
       );
 
@@ -488,7 +489,7 @@ describe('API Integration Tests', () => {
         role: 'admin',
         username: 'admin',
       });
-      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
       vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
         matchesWithResults[0], // has result
         Match.new({ id: 2, matchDateId: 10, localTeam: 'C', visitorTeam: 'D' }), // no result
@@ -506,6 +507,33 @@ describe('API Integration Tests', () => {
       expect(body.error).toBe('MATCHES_NOT_READY');
       expect(services.tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
       expect(services.userRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 422 MATCHES_NOT_READY when the date has no matches', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([]); // zero matches
+      vi.mocked(services.ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/publish-results',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCHES_NOT_READY');
+      // No transition, no carryover roll, no credits
+      expect(services.tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+      expect(services.tournamentRepo.update).not.toHaveBeenCalled();
+      expect(services.userRepo.update).not.toHaveBeenCalled();
+      expect(services.ticketRepo.update).not.toHaveBeenCalled();
     });
 
     it('returns 403 for non-admin users', async () => {
@@ -547,7 +575,7 @@ describe('API Integration Tests', () => {
         role: 'admin',
         username: 'admin',
       });
-      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(openDate);
       vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
         Tournament.new({ id: 1, name: 'Test' }),
       );
@@ -582,6 +610,34 @@ describe('API Integration Tests', () => {
       expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
       const audit = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];
       expect(audit.action).toBe('commission_payout');
+    });
+
+    it('rejects a double-close with 409 MATCH_DATE_NOT_OPEN without credits', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      // A second close arrives when the date is already closed
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(
+        MatchDate.create({ ...openDate.toSnapshot(), status: 'closed' }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates/10/close',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_DATE_NOT_OPEN');
+      // No transition, no carryover reset, no commission credit
+      expect(services.tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
+      expect(services.tournamentRepo.update).not.toHaveBeenCalled();
+      expect(services.userRepo.update).not.toHaveBeenCalled();
+      expect(services.auditLogRepo.save).not.toHaveBeenCalled();
     });
   });
 });

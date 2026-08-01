@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useCurrentMatches } from '../../hooks/use-matches';
+import { useCurrentMatches, useMatchesByDate } from '../../hooks/use-matches';
 import {
   useAdminTournaments,
   useSetMatchResult,
@@ -146,7 +146,8 @@ function SummaryRow({ label: text, value, color }: { label: string; value: strin
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ResultsEntry() {
-  const { data: currentData, isLoading: matchesLoading, error: matchesError } = useCurrentMatches();
+  const { data: currentData, isLoading: currentMatchesLoading, error: currentMatchesError } =
+    useCurrentMatches();
   const { data: tournaments, isLoading: tournamentsLoading, error: tournamentsError } =
     useAdminTournaments();
   const setResult = useSetMatchResult();
@@ -179,6 +180,20 @@ export default function ResultsEntry() {
     : selectableDates[0] ?? null;
 
   const activeDate = selectableDates.find((d) => d.id === selectedDateId) ?? defaultDate;
+
+  const status = activeDate.status;
+
+  // /matches/current only reaches the OPEN date, so a closed date's matches
+  // must be loaded explicitly — lets the admin review/correct results before
+  // publishing (PATCH /api/admin/matches/:matchId/result accepts them).
+  const { data: closedMatchesData, isLoading: closedMatchesLoading, error: closedMatchesError } =
+    useMatchesByDate(status === 'closed' ? activeDate.id : undefined);
+
+  const matchesLoading = status === 'closed' ? closedMatchesLoading : currentMatchesLoading;
+  const matchesError = status === 'closed' ? closedMatchesError : currentMatchesError;
+  const matches = status === 'closed'
+    ? (closedMatchesData?.matches ?? [])
+    : (currentData?.matches ?? []);
 
   // Follow the open date automatically until the admin picks a date manually —
   // otherwise a late-resolving /matches/current query would reset an admin's
@@ -246,8 +261,96 @@ export default function ResultsEntry() {
     );
   }
 
-  const status = activeDate.status;
-  const matches = currentData?.matches ?? [];
+  // Match cards with result selectors — shared by the OPEN date (matches from
+  // /matches/current) and CLOSED dates (matches from /matches/dates/:dateId),
+  // so an admin can correct a closed date's results before publishing.
+  const matchesSection = (
+    <>
+      {matchesLoading && (
+        <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>
+          Cargando partidos...
+        </p>
+      )}
+      {!matchesLoading && matchesError && (
+        <p style={{ color: theme.rojo, textAlign: 'center' }}>
+          Error al cargar los partidos.
+        </p>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+        {matches.map((match) => (
+          <div key={match.id} style={matchCard}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
+                {match.localTeam}
+                <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
+                {match.visitorTeam}
+              </div>
+            </div>
+
+            <div>
+              <div style={label}>Resultado</div>
+              <select
+                style={select}
+                defaultValue={match.result ?? ''}
+                onChange={(e) => {
+                  handleSaveResult(match, e.target.value, match.score ?? '');
+                }}
+              >
+                {resultOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div style={label}>Marcador</div>
+              <input
+                style={input}
+                placeholder="2-1"
+                defaultValue={match.score ?? ''}
+                onBlur={(e) => {
+                  const score = e.target.value.trim();
+                  if (score !== (match.score ?? '')) {
+                    handleSaveResult(match, match.result ?? '', score);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const score = (e.target as HTMLInputElement).value.trim();
+                    if (score !== (match.score ?? '')) {
+                      handleSaveResult(match, match.result ?? '', score);
+                    }
+                  }
+                }}
+              />
+            </div>
+
+            <button
+              onClick={() => handleSaveResult(match, match.result ?? '', match.score ?? '')}
+              disabled={saving[match.id]}
+              style={{
+                ...saveBtn,
+                opacity: saving[match.id] ? 0.6 : 1,
+                cursor: saving[match.id] ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {saving[match.id] ? 'Guardando...' : 'Guardar'}
+            </button>
+
+            {setResult.isSuccess && setResult.variables?.matchId === match.id && (
+              <span style={{ color: theme.verdeBet, fontSize: 12 }}>✓</span>
+            )}
+            {setResult.isError && setResult.variables?.matchId === match.id && (
+              <span style={{ color: theme.rojo, fontSize: 12 }}>✗</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
 
   return (
     <div style={card}>
@@ -307,95 +410,15 @@ export default function ResultsEntry() {
               : 'Procesar y Cerrar Puntos de la Fecha'}
           </button>
 
-          {matchesLoading && (
-            <p style={{ color: theme.textoSecundario, textAlign: 'center' }}>
-              Cargando partidos...
-            </p>
-          )}
-          {!matchesLoading && matchesError && (
-            <p style={{ color: theme.rojo, textAlign: 'center' }}>
-              Error al cargar los partidos.
-            </p>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-            {matches.map((match) => (
-              <div key={match.id} style={matchCard}>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-                    {match.localTeam}
-                    <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
-                    {match.visitorTeam}
-                  </div>
-                </div>
-
-                <div>
-                  <div style={label}>Resultado</div>
-                  <select
-                    style={select}
-                    defaultValue={match.result ?? ''}
-                    onChange={(e) => {
-                      handleSaveResult(match, e.target.value, match.score ?? '');
-                    }}
-                  >
-                    {resultOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <div style={label}>Marcador</div>
-                  <input
-                    style={input}
-                    placeholder="2-1"
-                    defaultValue={match.score ?? ''}
-                    onBlur={(e) => {
-                      const score = e.target.value.trim();
-                      if (score !== (match.score ?? '')) {
-                        handleSaveResult(match, match.result ?? '', score);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const score = (e.target as HTMLInputElement).value.trim();
-                        if (score !== (match.score ?? '')) {
-                          handleSaveResult(match, match.result ?? '', score);
-                        }
-                      }
-                    }}
-                  />
-                </div>
-
-                <button
-                  onClick={() => handleSaveResult(match, match.result ?? '', match.score ?? '')}
-                  disabled={saving[match.id]}
-                  style={{
-                    ...saveBtn,
-                    opacity: saving[match.id] ? 0.6 : 1,
-                    cursor: saving[match.id] ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {saving[match.id] ? 'Guardando...' : 'Guardar'}
-                </button>
-
-                {setResult.isSuccess && setResult.variables?.matchId === match.id && (
-                  <span style={{ color: theme.verdeBet, fontSize: 12 }}>✓</span>
-                )}
-                {setResult.isError && setResult.variables?.matchId === match.id && (
-                  <span style={{ color: theme.rojo, fontSize: 12 }}>✗</span>
-                )}
-              </div>
-            ))}
-          </div>
+          {matchesSection}
         </>
       )}
 
-      {/* ── CLOSED: financial snapshot + publish ────────────────────────── */}
+      {/* ── CLOSED: review/correct results, then publish ─────────────────── */}
       {status === 'closed' && (
         <>
+          {matchesSection}
+
           <div
             style={{
               padding: '14px 16px',

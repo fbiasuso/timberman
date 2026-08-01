@@ -25,3 +25,18 @@ export function useMatchDates() {
     staleTime: 60_000,
   });
 }
+
+/**
+ * Fetch a SPECIFIC match date (any status) with its matches.
+ * Used by ResultsEntry to review/correct a closed date's results
+ * before publishing — /matches/current only reaches the open date.
+ * Disabled until a dateId is provided.
+ */
+export function useMatchesByDate(dateId?: number) {
+  return useQuery({
+    queryKey: ['matches', 'byDate', dateId],
+    queryFn: () => matchApi.getMatchesByDate(dateId!),
+    enabled: dateId != null,
+    staleTime: 30_000,
+  });
+}

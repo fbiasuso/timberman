@@ -72,11 +72,23 @@ The system MUST validate the JWT on every protected route and reject expired or 
 
 ### Requirement: Admin Registration Toggle
 
-The system SHOULD support a configuration toggle to switch between self-registration and admin-only registration.
+The system MUST support a configuration toggle (persisted `allowRegistration` in system-config) that switches between self-registration and admin-only registration. Registration MUST read the live config by reference at request time — no restart or code change needed.
 
-#### Scenario: Toggle from self-registration to admin-only
+#### Scenario: Toggle blocks registration immediately
 
-- GIVEN the system is in self-registration mode
-- WHEN an admin updates the registration mode config
-- THEN new self-registrations are blocked
+- GIVEN the system is in self-registration mode (allowRegistration true)
+- WHEN an admin updates config to admin-only (allowRegistration false)
+- THEN the next self-registration attempt is rejected with 403 Forbidden
 - AND existing users remain unaffected
+
+#### Scenario: Toggle re-enables registration
+
+- GIVEN the system is in admin-only mode
+- WHEN an admin sets allowRegistration true
+- THEN self-registration works again without restart
+
+#### Scenario: Live read across restarts
+
+- GIVEN allowRegistration false persisted in the table
+- WHEN the server restarts and a user attempts to register
+- THEN registration is still blocked (config loaded from DB at boot)

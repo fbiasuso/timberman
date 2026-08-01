@@ -36,3 +36,8 @@ archive:
     status: complete
     total_tests: 138
     prs: 5
+  modelo-1-pozo-real:
+    archived_at: "2026-08-01"
+    status: complete
+    total_tests: 220
+    prs: 6

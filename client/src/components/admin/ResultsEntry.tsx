@@ -411,13 +411,13 @@ export default function ResultsEntry() {
             />
           </div>
 
-          {publishResults.isSuccess && (
+          {publishResults.isSuccess && publishResults.variables === activeDate.id && (
             <div style={successBox}>
               Resultados publicados y pozo pagado correctamente.
             </div>
           )}
 
-          {publishResults.error && (
+          {publishResults.error && publishResults.variables === activeDate.id && (
             <div style={errorBox}>
               Error al publicar resultados.{' '}
               {((publishResults.error as any)?.response?.data?.message as string) ?? ''}
@@ -426,13 +426,20 @@ export default function ResultsEntry() {
 
           <button
             onClick={handlePublish}
-            disabled={publishResults.isPending || publishResults.isSuccess}
+            disabled={
+              (publishResults.isPending || publishResults.isSuccess) &&
+              publishResults.variables === activeDate.id
+            }
             style={{
               ...publishBtn,
-              opacity: publishResults.isPending || publishResults.isSuccess ? 0.6 : 1,
+              opacity:
+                (publishResults.isPending || publishResults.isSuccess) &&
+                publishResults.variables === activeDate.id
+                  ? 0.6
+                  : 1,
             }}
           >
-            {publishResults.isPending
+            {publishResults.isPending && publishResults.variables === activeDate.id
               ? 'Publicando...'
               : 'Publicar resultados y pagar'}
           </button>

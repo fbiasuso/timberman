@@ -84,7 +84,7 @@ The app is mobile-first (max-width 480px) and organized into these views:
 | Piece | Purpose |
 |-------|---------|
 | **Header** | Logged-in user, balance, logout. |
-| **Pozo** | Estimated prize pool = (tickets × bet amount) × commission, shown for the active date. |
+| **Pozo** | Prize pool = (tickets × bet amount) − commission, shown for the active date. |
 | **Ticket modal / PDF** | Receipt shown after paying a bet, with match predictions and a PDF download. |
 
 ## Splash screen logo

@@ -71,7 +71,7 @@ Chain strategy: pending
 
 ## Phase 6: Docs
 
-- [ ] 6.1 `README.md` pozo row + `commission.ts` JSDoc: pozo = gross − commission (betting-engine delta already corrects spec; archive merges).
+- [x] 6.1 `README.md` pozo row + `commission.ts` JSDoc: pozo = gross − commission (betting-engine delta already corrects spec; archive merges).
 
 ## Phase 7: Financial Hardening (PR 5 review findings)
 

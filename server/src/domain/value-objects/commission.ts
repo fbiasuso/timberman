@@ -2,7 +2,7 @@
  * Commission value object — represents a percentage (0–100).
  *
  * Used for tournament commission rates when calculating pozo (prize pool).
- * Commission is the house cut: pozo = (bets × betAmount) × (commission / 100)
+ * Commission is the house cut: pozo = (bets × betAmount) − commission
  */
 export class Commission {
   private constructor(public readonly value: number) {

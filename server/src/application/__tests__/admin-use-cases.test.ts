@@ -14,6 +14,7 @@ import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js';
+import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
 import type { BcryptService } from '../auth/register-use-case.js';
 import { User } from '../../domain/entities/user.js';
 import { Match } from '../../domain/entities/match.js';
@@ -96,6 +97,20 @@ function makeUser(id: string, username: string, opts?: { role?: string; balance?
     balance: opts?.balance ?? 1000,
     createdAt: new Date(),
   });
+}
+
+/**
+ * Fake unit of work: hands the given repos to the callback untouched and
+ * records the invocation, so tests can assert the flow ran inside it.
+ */
+function createFakeUow(repos: TransactionRepos) {
+  const withTransaction = vi.fn(
+    async (fn: (txRepos: TransactionRepos) => Promise<unknown>) => fn(repos),
+  );
+  const uow: UnitOfWork = {
+    withTransaction: withTransaction as unknown as UnitOfWork['withTransaction'],
+  };
+  return { uow, withTransaction };
 }
 
 // ── ListUsersUseCase ──────────────────────────────────────────────
@@ -310,7 +325,7 @@ describe('AdjustBalanceUseCase', () => {
     const userRepo = createUserRepoMocks();
     const auditLogRepo = createAuditLogRepoMocks();
     const user = makeUser('u1', 'Alice', { balance: 1000 });
-    vi.mocked(userRepo.findById).mockResolvedValue(user);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
 
     const uc = new AdjustBalanceUseCase(userRepo, auditLogRepo);
     const result = await uc.execute({ userId: 'u1', adminId: 'admin-1', amount: 500, reason: 'Bonus' });
@@ -323,13 +338,18 @@ describe('AdjustBalanceUseCase', () => {
     const savedLog = vi.mocked(auditLogRepo.save).mock.calls[0][0];
     expect(savedLog.action).toBe('BALANCE_ADJUSTMENT_ADD');
     expect(savedLog.reason).toBe('Bonus');
+    // The balance read must go through the row lock — a concurrent bet
+    // deduction or payout on the same user serializes here so the
+    // adjustment is never lost. The plain read must never be used here.
+    expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('u1');
+    expect(userRepo.findById).not.toHaveBeenCalled();
   });
 
   it('deducts balance with negative adjustment and creates audit log', async () => {
     const userRepo = createUserRepoMocks();
     const auditLogRepo = createAuditLogRepoMocks();
     const user = makeUser('u1', 'Alice', { balance: 2000 });
-    vi.mocked(userRepo.findById).mockResolvedValue(user);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
 
     const uc = new AdjustBalanceUseCase(userRepo, auditLogRepo);
     const result = await uc.execute({ userId: 'u1', adminId: 'admin-1', amount: -300, reason: 'Fee' });
@@ -339,15 +359,45 @@ describe('AdjustBalanceUseCase', () => {
     expect(result.adjustedAmount).toBe(-300);
     const savedLog = vi.mocked(auditLogRepo.save).mock.calls[0][0];
     expect(savedLog.action).toBe('BALANCE_ADJUSTMENT_DEDUCT');
+    expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('u1');
+    expect(userRepo.findById).not.toHaveBeenCalled();
   });
 
   it('throws UserNotFoundError when user does not exist', async () => {
     const userRepo = createUserRepoMocks();
     const auditLogRepo = createAuditLogRepoMocks();
-    vi.mocked(userRepo.findById).mockResolvedValue(null);
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(null);
 
     const uc = new AdjustBalanceUseCase(userRepo, auditLogRepo);
     await expect(uc.execute({ userId: 'nonexistent', adminId: 'admin-1', amount: 100, reason: 'Test' })).rejects.toThrow(UserNotFoundError);
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(auditLogRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('runs the whole adjustment inside the provided unit of work', async () => {
+    const userRepo = createUserRepoMocks();
+    const auditLogRepo = createAuditLogRepoMocks();
+    const user = makeUser('u1', 'Alice', { balance: 1000 });
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(user);
+
+    const { uow, withTransaction } = createFakeUow({
+      userRepo,
+      auditLogRepo,
+      tournamentRepo: undefined as never,
+      matchRepo: undefined as never,
+      ticketRepo: undefined as never,
+    });
+
+    const uc = new AdjustBalanceUseCase(userRepo, auditLogRepo, uow);
+    const result = await uc.execute({ userId: 'u1', adminId: 'admin-1', amount: 500, reason: 'Bonus' });
+
+    expect(withTransaction).toHaveBeenCalledOnce();
+    expect(result.newBalance).toBe(1500);
+    // Every write went through repos provided by the unit of work (atomic set)
+    expect(userRepo.findByIdForUpdate).toHaveBeenCalledWith('u1');
+    expect(userRepo.findById).not.toHaveBeenCalled();
+    expect(userRepo.update).toHaveBeenCalledOnce();
+    expect(auditLogRepo.save).toHaveBeenCalledOnce();
   });
 });
 

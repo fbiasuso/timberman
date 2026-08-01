@@ -80,7 +80,7 @@ export function createAdminRoutes(
     const pointsCalculator = new PointsCalculator();
     const listUsersUseCase = new ListUsersUseCase(userRepo, ticketRepo, matchRepo, pointsCalculator);
     const createUserUseCase = new CreateUserUseCase(userRepo, bcryptService);
-    const adjustBalanceUseCase = new AdjustBalanceUseCase(userRepo, auditLogRepo);
+    const adjustBalanceUseCase = new AdjustBalanceUseCase(userRepo, auditLogRepo, uow);
     const deleteUserUseCase = new DeleteUserUseCase(userRepo);
     const getConfigUseCase = new GetConfigUseCase(config);
     const updateConfigUseCase = new UpdateConfigUseCase(config, configRepo);

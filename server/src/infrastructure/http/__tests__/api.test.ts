@@ -646,6 +646,49 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('PATCH /api/admin/users/:userId/balance', () => {
+    it('adjusts the balance through the FOR UPDATE row lock and audits it', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.userRepo.findByIdForUpdate).mockResolvedValue(
+        User.create({
+          id: 'user-1',
+          username: 'testuser',
+          passwordHash: 'hash',
+          role: 'user',
+          balance: 1000,
+          createdAt: new Date(),
+        }),
+      );
+      vi.mocked(services.userRepo.update).mockImplementation(async (u: any) => u);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/users/user-1/balance',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { amount: 500, reason: 'Bonus' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.userId).toBe('user-1');
+      expect(body.previousBalance).toBe(1000);
+      expect(body.newBalance).toBe(1500);
+
+      // Balance read goes through the FOR UPDATE lock, never the plain read
+      expect(services.userRepo.findByIdForUpdate).toHaveBeenCalledWith('user-1');
+      expect(services.userRepo.findById).not.toHaveBeenCalled();
+      // Audit entry written
+      expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
+      const audit = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];
+      expect(audit.action).toBe('BALANCE_ADJUSTMENT_ADD');
+    });
+  });
+
   describe('GET /api/matches/dates/:dateId', () => {
     const closedDate = MatchDate.create({
       id: 10,

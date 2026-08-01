@@ -90,6 +90,15 @@ export class DateNotClosedError extends DomainError {
   get statusCode(): number { return 409; }
 }
 
+export class MatchesNotReadyError extends DomainError {
+  constructor(matchDateId: number) {
+    super(`Match date ${matchDateId} has matches without a result. Set all results before publishing.`);
+  }
+
+  get code(): string { return 'MATCHES_NOT_READY'; }
+  get statusCode(): number { return 422; }
+}
+
 export class BetModificationNotAllowedError extends DomainError {
   constructor(ticketId: number) {
     super(`Bet ${ticketId} cannot be modified after submission`);

@@ -10,6 +10,13 @@ import type { MatchDate } from '../entities/match-date.js';
 export interface TournamentRepo {
   // ── Tournament ─────────────────────────────────────────────
   findById(id: number): Promise<Tournament | null>;
+  /**
+   * Read a tournament row locking it for update (`SELECT ... FOR UPDATE`).
+   * Must only be called inside a transaction — the lock is held until the
+   * transaction commits/rolls back, which serializes read-modify-write
+   * flows like carryover consumption on date close.
+   */
+  findByIdForUpdate(id: number): Promise<Tournament | null>;
   findActive(): Promise<Tournament | null>;
   findAll(): Promise<Tournament[]>;
   save(tournament: Tournament): Promise<Tournament>;

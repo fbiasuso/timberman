@@ -72,3 +72,11 @@ Chain strategy: pending
 ## Phase 6: Docs
 
 - [ ] 6.1 `README.md` pozo row + `commission.ts` JSDoc: pozo = gross − commission (betting-engine delta already corrects spec; archive merges).
+
+## Phase 7: Financial Hardening (PR 5 review findings)
+
+- [x] 7.1 Add `UnitOfWork` port (transaction boundary) + `DrizzleUnitOfWork` impl: `db.transaction` with repos rebuilt bound to the tx client; propagate errors → rollback (findings 1–2).
+- [x] 7.2 `CloseDateUseCase`: run inside `uow`; carryover read via `findByIdForUpdate` (`SELECT ... FOR UPDATE`) so concurrent closes cannot double-consume carryover (finding 3).
+- [x] 7.3 `PublishResultsUseCase`: run inside `uow`; guard `MatchesNotReadyError` (422) when any match lacks a result — no silent pozo roll to carryover (finding 4).
+- [x] 7.4 Wire `DrizzleUnitOfWork` in `index.ts` → router → admin-routes (close + publish use cases).
+- [x] 7.5 Tests: uow wraps both flows (all writes through tx repos), locked carryover read, error propagation, `MATCHES_NOT_READY` 422 (unit + api).

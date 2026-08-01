@@ -45,6 +45,7 @@ function createMocks() {
 
   const tournamentRepo: TournamentRepo = {
     findById: vi.fn(),
+    findByIdForUpdate: vi.fn(),
     findActive: vi.fn(),
     findAll: vi.fn(),
     save: vi.fn(),

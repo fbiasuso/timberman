@@ -6,6 +6,7 @@ import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
@@ -69,6 +70,7 @@ export function createAdminRoutes(
   bcryptService: BcryptServiceImpl,
   config: SystemConfig,
   configRepo: SystemConfigRepo,
+  uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
     const authMiddleware = createAuthMiddleware(jwtService);
@@ -92,6 +94,7 @@ export function createAdminRoutes(
       config,
       userRepo,
       auditLogRepo,
+      uow,
     );
     const publishResultsUseCase = new PublishResultsUseCase(
       tournamentRepo,
@@ -99,6 +102,7 @@ export function createAdminRoutes(
       ticketRepo,
       pointsCalculator,
       userRepo,
+      uow,
     );
 
     // ── GET /api/admin/users ─────────────────────────────────────

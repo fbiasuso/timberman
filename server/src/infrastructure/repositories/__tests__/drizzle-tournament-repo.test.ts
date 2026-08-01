@@ -107,4 +107,30 @@ describe('DrizzleTournamentRepo', () => {
       repo.updateMatchDate(MatchDate.new({ id: 999, tournamentId: 1, dateNumber: 1 })),
     ).rejects.toThrow(MatchDateNotFoundError);
   });
+
+  it('locks the tournament row with FOR UPDATE on findByIdForUpdate', async () => {
+    const row = {
+      id: 1,
+      name: 'Torneo',
+      commission: '15.00',
+      isActive: true,
+      carryover: 2500,
+      createdAt: new Date(),
+    };
+    // Chain shape: select().from().where(...).for('update')
+    const forSpy = vi.fn().mockResolvedValue([row]);
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ for: forSpy }),
+        }),
+      }),
+    };
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const tournament = await repo.findByIdForUpdate(1);
+
+    expect(forSpy).toHaveBeenCalledWith('update');
+    expect(tournament?.carryover).toBe(2500);
+  });
 });

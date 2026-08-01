@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { DrizzleTournamentRepo } from '../drizzle-tournament-repo.js';
 import { Tournament } from '../../../domain/entities/tournament.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
+import {
+  TournamentNotFoundError,
+  MatchDateNotFoundError,
+} from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -11,6 +15,9 @@ function createMockDb() {
     selectWhere: vi.fn(),
     insertValues: vi.fn(),
     insertReturning: vi.fn(),
+    updateSet: vi.fn(),
+    updateWhere: vi.fn(),
+    updateReturning: vi.fn(),
   };
   const db = {
     select: vi.fn().mockReturnValue({
@@ -18,6 +25,11 @@ function createMockDb() {
     }),
     insert: vi.fn().mockReturnValue({
       values: mocks.insertValues.mockReturnValue({ returning: mocks.insertReturning }),
+    }),
+    update: vi.fn().mockReturnValue({
+      set: mocks.updateSet.mockReturnValue({
+        where: mocks.updateWhere.mockReturnValue({ returning: mocks.updateReturning }),
+      }),
     }),
   };
   return { db, mocks };
@@ -74,5 +86,25 @@ describe('DrizzleTournamentRepo', () => {
     );
     expect(saved.commission).toBe(12.5);
     expect(loaded?.commission).toBe(12.5);
+  });
+
+  it('throws TournamentNotFoundError when updating a missing tournament', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.updateReturning.mockResolvedValue([]); // no rows updated
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    await expect(
+      repo.update(Tournament.new({ id: 999, name: 'Ghost' })),
+    ).rejects.toThrow(TournamentNotFoundError);
+  });
+
+  it('throws MatchDateNotFoundError when updating a missing match date', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.updateReturning.mockResolvedValue([]); // no rows updated
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    await expect(
+      repo.updateMatchDate(MatchDate.new({ id: 999, tournamentId: 1, dateNumber: 1 })),
+    ).rejects.toThrow(MatchDateNotFoundError);
   });
 });

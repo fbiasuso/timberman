@@ -157,27 +157,37 @@ export default function ResultsEntry() {
   const [saving, setSaving] = useState<Record<number, boolean>>({});
   // Manual date selection (null = follow the current date)
   const [selectedDateId, setSelectedDateId] = useState<number | null>(null);
-
-  // All dates across tournaments, newest first
-  const sortedDates = useMemo(
-    () => (tournaments?.flatMap((t) => t.dates) ?? []).sort((a, b) => b.id - a.id),
-    [tournaments],
-  );
+  // Auto-follow the open date until the admin makes a manual selection.
+  const [userSelected, setUserSelected] = useState(false);
 
   // Default selection: the open date when it exists (it carries the matches),
   // otherwise the most recent date so the admin can publish or review it.
   const openDateId = currentData?.matchDate?.id ?? null;
+
+  // All dates across tournaments, newest first. Matches only exist for the
+  // current open date (GET /matches/current), so any OTHER open date would
+  // render the wrong match cards (and saving would patch the wrong date's
+  // matches) — keep the current open date plus all non-open dates, which
+  // render financials only, no matches.
+  const selectableDates = useMemo(() => {
+    const all = (tournaments?.flatMap((t) => t.dates) ?? []).sort((a, b) => b.id - a.id);
+    return all.filter((d) => d.id === openDateId || d.status !== 'open');
+  }, [tournaments, openDateId]);
+
   const defaultDate: TournamentDateDTO | null = openDateId
-    ? sortedDates.find((d) => d.id === openDateId) ?? null
-    : sortedDates[0] ?? null;
+    ? selectableDates.find((d) => d.id === openDateId) ?? null
+    : selectableDates[0] ?? null;
 
-  const activeDate = sortedDates.find((d) => d.id === selectedDateId) ?? defaultDate;
+  const activeDate = selectableDates.find((d) => d.id === selectedDateId) ?? defaultDate;
 
-  // Follow the open date automatically — reset a manual selection when the
-  // current date changes (e.g. after closing, or when a new date is opened).
+  // Follow the open date automatically until the admin picks a date manually —
+  // otherwise a late-resolving /matches/current query would reset an admin's
+  // manual selection.
   useEffect(() => {
-    setSelectedDateId(null);
-  }, [openDateId]);
+    if (!userSelected) {
+      setSelectedDateId(null);
+    }
+  }, [openDateId, userSelected]);
 
   const handleSaveResult = (match: MatchDTO, result: string, score: string) => {
     setSaving((prev) => ({ ...prev, [match.id]: true }));
@@ -189,6 +199,20 @@ export default function ResultsEntry() {
         },
       },
     );
+  };
+
+  const handlePublish = () => {
+    // Publishing pays out the pozo and cannot be undone. Winners are computed
+    // server-side at publish time, so the confirmation shows the pozo snapshot
+    // and warns that the action is irreversible.
+    const pozo = formatMoney(activeDate!.pozo);
+    const message =
+      activeDate!.winners.length > 0
+        ? `¿Publicar resultados y pagar ${pozo} a ${activeDate!.winners.length} ganador(es)? Esta acción no se puede deshacer.`
+        : `¿Publicar resultados y pagar el pozo de ${pozo}? Los ganadores se calculan al publicar; si no hay, el pozo se acumula. Esta acción no se puede deshacer.`;
+    if (window.confirm(message)) {
+      publishResults.mutate(activeDate!.id);
+    }
   };
 
   // ── Loading / Error / Empty ─────────────────────────────────────────────
@@ -250,9 +274,12 @@ export default function ResultsEntry() {
         <select
           style={select}
           value={activeDate.id}
-          onChange={(e) => setSelectedDateId(Number(e.target.value))}
+          onChange={(e) => {
+            setSelectedDateId(Number(e.target.value));
+            setUserSelected(true);
+          }}
         >
-          {sortedDates.map((d) => (
+          {selectableDates.map((d) => (
             <option key={d.id} value={d.id}>
               Fecha {d.dateNumber} — {statusLabels[d.status]}
             </option>
@@ -398,9 +425,12 @@ export default function ResultsEntry() {
           )}
 
           <button
-            onClick={() => publishResults.mutate(activeDate.id)}
-            disabled={publishResults.isPending}
-            style={{ ...publishBtn, opacity: publishResults.isPending ? 0.6 : 1 }}
+            onClick={handlePublish}
+            disabled={publishResults.isPending || publishResults.isSuccess}
+            style={{
+              ...publishBtn,
+              opacity: publishResults.isPending || publishResults.isSuccess ? 0.6 : 1,
+            }}
           >
             {publishResults.isPending
               ? 'Publicando...'

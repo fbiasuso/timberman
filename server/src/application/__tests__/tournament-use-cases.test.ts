@@ -97,6 +97,17 @@ function makeAdmin(id: string, balance = 0): User {
   });
 }
 
+function makeUser(id: string, balance = 0): User {
+  return User.create({
+    id,
+    username: `user-${id}`,
+    passwordHash: 'hash',
+    role: 'user',
+    balance,
+    createdAt: new Date(),
+  });
+}
+
 // ── CreateDateUseCase ──────────────────────────────────────────────
 
 describe('CreateDateUseCase', () => {
@@ -343,10 +354,26 @@ describe('PublishResultsUseCase', () => {
     ],
   });
 
-  it('publishes results and returns points', async () => {
+  function buildUseCase(
+    tournamentRepo: TournamentRepo,
+    matchRepo: MatchRepo,
+    ticketRepo: TicketRepo,
+    userRepo: UserRepo,
+  ) {
+    return new PublishResultsUseCase(
+      tournamentRepo,
+      matchRepo,
+      ticketRepo,
+      new PointsCalculator(),
+      userRepo,
+    );
+  }
+
+  it('publishes results, pays the winner, and persists the prize', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const matchRepo = createMatchRepoMocks();
     const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
 
     // Set results on matches
     const matchesWithResults = matches.map((m) => {
@@ -359,14 +386,9 @@ describe('PublishResultsUseCase', () => {
     vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
     vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
 
-    const pointsCalculator = new PointsCalculator();
-    const uc = new PublishResultsUseCase(
-      tournamentRepo,
-      matchRepo,
-      ticketRepo,
-      pointsCalculator,
-    );
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
     const result = await uc.execute(10);
 
     expect(result.status).toBe('results');
@@ -374,17 +396,132 @@ describe('PublishResultsUseCase', () => {
     expect(result.points[0].ticketId).toBe(1);
     expect(result.points[0].correct).toBe(1); // L is correct, E is wrong
     expect(result.points[0].total).toBe(2);
+
+    // Single winner takes the full pozo
+    expect(result.winners).toEqual([{ ticketId: 1, userId: 'user-1', prize: 6000 }]);
+    expect(userRepo.update).toHaveBeenCalledOnce();
+    expect(ticketRepo.update).toHaveBeenCalledOnce();
+    const paidTicket = vi.mocked(ticketRepo.update).mock.calls[0][0];
+    expect(paidTicket.prizeWon).toBe(6000);
+    // The transition is persisted FIRST (idempotency lock)
+    expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
+  });
+
+  it('splits the pozo among tied winners with remainder to the first ticket', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const results = matches.map((m) => {
+      if (m.id === 1) return m.setResult('L', '2-0');
+      if (m.id === 2) return m.setResult('L', '1-0');
+      return m;
+    });
+
+    // Both tickets predict L on match 1 → 1 correct each
+    const ticketA = Ticket.new({
+      id: 1,
+      userId: 'user-1',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions: [TicketPrediction.new({ matchId: 1, prediction: 'L' })],
+    });
+    const ticketB = Ticket.new({
+      id: 2,
+      userId: 'user-2',
+      matchDateId: 10,
+      betAmount: 1500,
+      predictions: [TicketPrediction.new({ matchId: 1, prediction: 'L' })],
+    });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticketA, ticketB]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findById).mockImplementation(async (userId: string) =>
+      makeUser(userId),
+    );
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    const result = await uc.execute(10);
+
+    // 6000 / 2 = 3000 each — exact split
+    expect(result.winners).toEqual([
+      { ticketId: 1, userId: 'user-1', prize: 3000 },
+      { ticketId: 2, userId: 'user-2', prize: 3000 },
+    ]);
+    expect(userRepo.update).toHaveBeenCalledTimes(2);
+    expect(ticketRepo.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('rolls the pozo into carryover when no ticket has correct predictions', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test', carryover: 0 });
+
+    const results = matches.map((m) => {
+      if (m.id === 1) return m.setResult('V', '0-2');
+      if (m.id === 2) return m.setResult('L', '1-0');
+      return m;
+    });
+
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    const result = await uc.execute(10);
+
+    expect(result.winners).toEqual([]);
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(ticketRepo.update).not.toHaveBeenCalled();
+
+    const rolled = vi.mocked(tournamentRepo.update).mock.calls[0][0];
+    expect(rolled.carryover).toBe(6000); // 0 + pozo
+  });
+
+  it('rejects a second publish with DateNotClosedError and does not double-pay', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+
+    const results = matches.map((m) => {
+      if (m.id === 1) return m.setResult('L', '2-0');
+      if (m.id === 2) return m.setResult('V', '1-0');
+      return m;
+    });
+
+    vi.mocked(tournamentRepo.findMatchDateById)
+      .mockResolvedValueOnce(closedDate) // first publish sees 'closed'
+      .mockResolvedValueOnce(MatchDate.create({ ...closedDate.toSnapshot(), status: 'results' }));
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([ticket]);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1'));
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, ticketRepo, userRepo);
+    await uc.execute(10);
+    await expect(uc.execute(10)).rejects.toThrow(DateNotClosedError);
+
+    expect(userRepo.update).toHaveBeenCalledTimes(1); // no double credit
+    expect(ticketRepo.update).toHaveBeenCalledTimes(1);
   });
 
   it('throws MatchDateNotFoundError when date does not exist', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
 
-    const uc = new PublishResultsUseCase(
+    const uc = buildUseCase(
       tournamentRepo,
       createMatchRepoMocks(),
       createTicketRepoMocks(),
-      new PointsCalculator(),
+      createUserRepoMocks(),
     );
     await expect(uc.execute(999)).rejects.toThrow(MatchDateNotFoundError);
   });
@@ -403,13 +540,14 @@ describe('PublishResultsUseCase', () => {
     });
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
 
-    const uc = new PublishResultsUseCase(
+    const uc = buildUseCase(
       tournamentRepo,
       createMatchRepoMocks(),
       createTicketRepoMocks(),
-      new PointsCalculator(),
+      createUserRepoMocks(),
     );
     await expect(uc.execute(10)).rejects.toThrow(DateNotClosedError);
+    expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
   });
 });
 

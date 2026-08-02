@@ -71,3 +71,7 @@ Chain strategy: pending
 ## Phase 7: Integration Verification (final)
 
 - [x] 7.1 Full server + client vitest suites + typecheck/build both apps; confirm no schema change. AC: 0 failures, 0 migrations. Final PR
+
+## Phase 8: Archive
+
+- [x] 8.1 Archive phase: delta specs synced to baseline (`openspec/specs/admin-operations`, `tournament-management` merged; `date-history` created), design.md Open Questions OQ1/OQ2 closed with resolutions + PR #18 fixes recorded as post-delivery notes, archive report written, change folder moved to `openspec/changes/archive/2026-08-02-date-creation-history/`. Date: 2026-08-02.

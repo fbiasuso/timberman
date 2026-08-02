@@ -131,5 +131,20 @@ Recommended: 5–6 chained PRs, each targeting the previous branch until merged.
 
 ## Open Questions
 
-- [ ] `POST /api/admin/dates` body carries `tournamentId` explicitly (client knows active tournament) — confirmed by spec? (Spec names no body shape; design assumes `{ tournamentId }`.)
-- [ ] HistorySection tournament scope when multiple tournaments exist (design: filter to active-date tournament, fallback all non-open).
+- [x] `POST /api/admin/dates` body carries `tournamentId` explicitly (client knows active tournament) — **RESOLVED: yes** — the design's assumption held; implementation sends `{ tournamentId }` (zod `createDateSchema` in `admin-routes.ts`, verified in `api.test.ts`). No spec change needed.
+- [x] HistorySection tournament scope when multiple tournaments exist (design: filter to active-date tournament, fallback all non-open) — **RESOLVED: all non-open dates across tournaments, sorted chronologically** (the design's fallback) — `HistorySection` lists every non-open date regardless of tournament; the open-date tournament is NOT used to filter. Verified in `HistorySection.tsx` + tests.
+
+## Post-Delivery Notes & Deviations (PR #18, commit `6403102`)
+
+Post-delivery fixes landed after the original 7 PRs (#10–#16). They are code fixes with **no spec behavior change**; all date-history scenarios remain compliant (see verify-report).
+
+| # | Note | Detail |
+|---|------|--------|
+| N1 | Audit/tournament repo id-strip | `drizzle-audit-log-repo.ts` / `drizzle-tournament-repo.ts` strip the `id: 0` sentinel on insert so the serial PK assigns the id — root cause of the close-date 500 on a second insert. Repo-layer fix; use cases unchanged. |
+| N2 | ConfigPanel pesos units | Bet amount edited/displayed in pesos (cents ÷ 100) with validation — fixes units, aligns with the `betAmount` from config requirement. |
+| N3 | HistorySection L/E/V layout | Centered "L/E/V" score layout between team names + user's own bet badge (already-bet flow) — matches the date-history read-only rows with results scenarios. |
+| N4 | MatchEditor date order | Date ordering: open date first, then descending — matches the "default-expand open date" scenario intent. |
+| N5 | CarteleraPage already-bet flow | "ya hiciste tu jugada - ver ticket" lock flow — consistent with the out-of-scope note that betting is read-only once placed. |
+| N6 | Line forecast undershoot | design.md file-change forecast (~1,640 Δ) undershot the actual diff (3,859+/202− across 34 files incl. artifacts) — forecast-only, no design impact. |
+
+D9 remains the only design decision that deviates from the proposal (`HistoryMatchRow` instead of `MatchCard` + `showResults`), already recorded in the Architecture Decisions table above.

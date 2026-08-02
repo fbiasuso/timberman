@@ -40,8 +40,8 @@ Chain strategy: pending
 
 ## Phase 2: CreateDate Wiring (PR1b — signature change)
 
-- [ ] 2.1 Modify `create-date-use-case.ts`: input `{ tournamentId, betAmount? }`, auto `dateNumber = max+1`, reject when open date exists (OpenDateExistsError 409), ctor gains `SystemConfig` for default betAmount. AC: next-after-results → number 2 open pozo 0; open exists → 409; betAmount from config. PR1b
-- [ ] 2.2 Update existing CreateDate tests in `tournament-use-cases.test.ts` to new signature (auto/guard/config). AC: no broken tests — full suite green. PR1b
+- [x] 2.1 Modify `create-date-use-case.ts`: input `{ tournamentId, betAmount? }`, auto `dateNumber = max+1`, reject when open date exists (OpenDateExistsError 409), ctor gains `SystemConfig` for default betAmount. AC: next-after-results → number 2 open pozo 0; open exists → 409; betAmount from config. PR1b
+- [x] 2.2 Update existing CreateDate tests in `tournament-use-cases.test.ts` to new signature (auto/guard/config). AC: no broken tests — full suite green. PR1b
 
 ## Phase 3: Server Routes (PR2)
 

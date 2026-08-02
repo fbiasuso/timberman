@@ -18,6 +18,7 @@ import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
 import { User } from '../../domain/entities/user.js';
 import { PozoCalculator } from '../betting/pozo-calculator.js';
 import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
+import type { SystemConfig } from '../../domain/entities/system-config.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
@@ -27,6 +28,7 @@ import {
   MatchDateNotOpenError,
   UserNotFoundError,
   MatchesNotReadyError,
+  OpenDateExistsError,
 } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -135,43 +137,97 @@ function createFakeUow(repos: TransactionRepos) {
 // ── CreateDateUseCase ──────────────────────────────────────────────
 
 describe('CreateDateUseCase', () => {
-  it('creates a match date with default bet amount', async () => {
+  const config: SystemConfig = {
+    commission: 15,
+    allowRegistration: true,
+    defaultBetAmount: 1500,
+  };
+
+  function makeDate(id: number, dateNumber: number, status: 'open' | 'closed' | 'results') {
+    return MatchDate.create({
+      id,
+      tournamentId: 1,
+      dateNumber,
+      status,
+      pozo: status === 'open' ? 0 : 5000,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+  }
+
+  it('creates the first date with dateNumber 1 and the config default bet amount', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test' });
     vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([]);
     vi.mocked(tournamentRepo.saveMatchDate).mockImplementation(async (md) => md);
 
-    const uc = new CreateDateUseCase(tournamentRepo);
-    const result = await uc.execute({ tournamentId: 1, dateNumber: 1 });
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    const result = await uc.execute({ tournamentId: 1 });
 
     expect(result.tournamentId).toBe(1);
-    expect(result.dateNumber).toBe(1);
+    expect(result.dateNumber).toBe(1); // max(∅) + 1
     expect(result.status).toBe('open');
-    expect(result.betAmount).toBe(1500);
+    expect(result.betAmount).toBe(1500); // from system config
     expect(result.pozo).toBe(0);
     expect(tournamentRepo.findById).toHaveBeenCalledWith(1);
+    expect(tournamentRepo.findMatchDatesByTournamentId).toHaveBeenCalledWith(1);
     expect(tournamentRepo.saveMatchDate).toHaveBeenCalledOnce();
   });
 
-  it('creates a match date with custom bet amount', async () => {
+  it('creates the next date after results — dateNumber max+1, open, pozo 0, config bet amount', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     const tournament = Tournament.new({ id: 1, name: 'Test' });
     vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([
+      makeDate(1, 1, 'results'),
+    ]);
+    vi.mocked(tournamentRepo.saveMatchDate).mockImplementation(async (md) => md);
 
-    const uc = new CreateDateUseCase(tournamentRepo);
-    const result = await uc.execute({ tournamentId: 1, dateNumber: 2, betAmount: 2000 });
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    const result = await uc.execute({ tournamentId: 1 });
+
+    expect(result.dateNumber).toBe(2); // max(1) + 1
+    expect(result.status).toBe('open');
+    expect(result.pozo).toBe(0);
+    expect(result.betAmount).toBe(1500); // from system config, not provided
+  });
+
+  it('rejects when an open date already exists — OpenDateExistsError, nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([
+      makeDate(1, 1, 'open'),
+    ]);
+
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    await expect(uc.execute({ tournamentId: 1 })).rejects.toThrow(OpenDateExistsError);
+    expect(tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+  });
+
+  it('allows a custom bet amount override', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const tournament = Tournament.new({ id: 1, name: 'Test' });
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(tournament);
+    vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([
+      makeDate(1, 1, 'closed'),
+    ]);
+
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    const result = await uc.execute({ tournamentId: 1, betAmount: 2000 });
 
     expect(result.betAmount).toBe(2000);
+    expect(result.dateNumber).toBe(2);
   });
 
   it('throws TournamentNotFoundError when tournament does not exist', async () => {
     const tournamentRepo = createTournamentRepoMocks();
     vi.mocked(tournamentRepo.findById).mockResolvedValue(null);
 
-    const uc = new CreateDateUseCase(tournamentRepo);
-    await expect(uc.execute({ tournamentId: 999, dateNumber: 1 })).rejects.toThrow(
-      TournamentNotFoundError,
-    );
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    await expect(uc.execute({ tournamentId: 999 })).rejects.toThrow(TournamentNotFoundError);
     expect(tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
   });
 });

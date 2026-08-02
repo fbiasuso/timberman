@@ -64,9 +64,9 @@ Chain strategy: pending
 
 ## Phase 6: Cartelera History UI (PR5)
 
-- [ ] 6.1 New `HistorySection.tsx`: "Fechas anteriores" rows (Fecha N + lock/$ icons), expand → `useMatchHistory(dateId)` → read-only rows (closed: teams only, no results). AC: closed hides results; results shows full; expand fetches history. PR5
-- [ ] 6.2 `CarteleraPage.tsx`: render `<HistorySection/>` below active content AND below no-cartelera branch. AC: both branches show section. PR5
-- [ ] 6.3 Tests `HistorySection.test.tsx` (icons, expand, hidden results) + update `CarteleraPage.test.tsx` (both branches, mock useMatchHistory). AC: green. PR5
+- [x] 6.1 New `HistorySection.tsx`: "Fechas anteriores" rows (Fecha N + lock/$ icons), expand → `useMatchHistory(dateId)` → read-only rows (closed: teams only, no results). AC: closed hides results; results shows full; expand fetches history. PR5
+- [x] 6.2 `CarteleraPage.tsx`: render `<HistorySection/>` below active content AND below no-cartelera branch. AC: both branches show section. PR5
+- [x] 6.3 Tests `HistorySection.test.tsx` (icons, expand, hidden results) + update `CarteleraPage.test.tsx` (both branches, mock useMatchHistory). AC: green. PR5
 
 ## Phase 7: Integration Verification (final)
 

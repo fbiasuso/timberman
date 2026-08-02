@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import CarteleraPage from '../matches/CarteleraPage';
 
 // --- Mocks ---
@@ -15,6 +15,16 @@ const mockMatchesData = {
 
 vi.mock('../../hooks/use-matches', () => ({
   useCurrentMatches: vi.fn(),
+  useMatchDates: vi.fn(() => ({
+    data: { dates: [] },
+    isLoading: false,
+    error: null,
+  })),
+  useMatchHistory: vi.fn(() => ({
+    data: null,
+    isLoading: false,
+    error: null,
+  })),
 }));
 
 vi.mock('../../hooks/use-bets', () => ({
@@ -68,9 +78,38 @@ vi.mock('../bets/TicketModal', () => ({
   ),
 }));
 
-import { useCurrentMatches } from '../../hooks/use-matches';
+import { useCurrentMatches, useMatchDates, useMatchHistory } from '../../hooks/use-matches';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.mocked(useMatchDates).mockReset();
+  vi.mocked(useMatchDates).mockReturnValue({
+    data: { dates: [] },
+    isLoading: false,
+    error: null,
+  } as any);
+  vi.mocked(useMatchHistory).mockReset();
+  vi.mocked(useMatchHistory).mockReturnValue({
+    data: null,
+    isLoading: false,
+    error: null,
+  } as any);
+});
+
+// --- Fixtures for the Fechas anteriores section ---
+
+const previousDates = [
+  { id: 1, tournamentId: 1, dateNumber: 1, status: 'closed', pozo: 5700, betAmount: 1500, commission: 10, carryover: 0, createdAt: '2026-07-20T00:00:00.000Z' },
+  { id: 2, tournamentId: 1, dateNumber: 2, status: 'results', pozo: 1000, betAmount: 1500, commission: 10, carryover: 0, createdAt: '2026-07-27T00:00:00.000Z' },
+];
+
+function mockPreviousDates(dates: unknown[]) {
+  vi.mocked(useMatchDates).mockReturnValue({
+    data: { dates },
+    isLoading: false,
+    error: null,
+  } as any);
+}
 
 describe('CarteleraPage', () => {
   it('shows loading state', () => {
@@ -167,5 +206,57 @@ describe('CarteleraPage', () => {
     expect(
       screen.getByText(/No incluye las jugadas de esta fecha/),
     ).toBeDefined();
+  });
+
+  it('renders Fechas anteriores below the active date content', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    mockPreviousDates(previousDates);
+
+    render(<CarteleraPage />);
+    // Active content first, then the history section
+    expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
+    expect(screen.getByText('Fechas anteriores')).toBeDefined();
+    expect(screen.getByText('Fecha 1')).toBeDefined();
+    expect(screen.getByText('Fecha 2')).toBeDefined();
+    // Lock icon for the closed date, $ icon for the results date
+    expect(screen.getByText('🔒')).toBeDefined();
+    expect(screen.getByText('$')).toBeDefined();
+  });
+
+  it('renders Fechas anteriores below the no-cartelera message', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({
+      data: { matchDate: null, matches: [] },
+      isLoading: false,
+      error: null,
+    } as any);
+    mockPreviousDates(previousDates);
+
+    render(<CarteleraPage />);
+    expect(screen.getByText('No hay cartelera disponible')).toBeDefined();
+    expect(screen.getByText('Fechas anteriores')).toBeDefined();
+    expect(screen.getByText('Fecha 1')).toBeDefined();
+    expect(screen.getByText('Fecha 2')).toBeDefined();
+  });
+
+  it('expands a Fechas anteriores row and fetches its history', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    mockPreviousDates(previousDates);
+    vi.mocked(useMatchHistory).mockReturnValue({
+      data: {
+        matchDate: previousDates[0],
+        matches: [
+          { id: 21, matchDateId: 1, localTeam: 'Gimnasia', visitorTeam: 'Estudiantes', localImg: null, visitorImg: null, scheduledAt: null, result: null, score: null },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(<CarteleraPage />);
+    fireEvent.click(screen.getByRole('button', { name: /Fecha 1/ }));
+
+    expect(vi.mocked(useMatchHistory)).toHaveBeenCalledWith(1);
+    expect(screen.getByText(/Gimnasia/)).toBeDefined();
+    expect(screen.getByText(/Estudiantes/)).toBeDefined();
   });
 });

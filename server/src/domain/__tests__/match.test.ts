@@ -49,6 +49,75 @@ describe('Match', () => {
     });
   });
 
+  describe('withDetails', () => {
+    it('merges provided fields and keeps the rest unchanged', () => {
+      const match = Match.new({
+        ...baseProps,
+        localImg: 'river.png',
+        visitorImg: 'boca.png',
+        scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      });
+
+      const updated = match.withDetails({ visitorTeam: 'Gimnasia' });
+
+      expect(updated.localTeam).toBe('River Plate'); // unchanged
+      expect(updated.visitorTeam).toBe('Gimnasia'); // edited
+      expect(updated.localImg).toBe('river.png'); // unchanged
+      expect(updated.visitorImg).toBe('boca.png'); // unchanged
+      expect(updated.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z')); // unchanged
+      expect(updated.result).toBeNull();
+      expect(updated.score).toBeNull();
+    });
+
+    it('clears images and scheduledAt when null is passed', () => {
+      const match = Match.new({
+        ...baseProps,
+        localImg: 'river.png',
+        visitorImg: 'boca.png',
+        scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      });
+
+      const updated = match.withDetails({
+        localImg: null,
+        visitorImg: null,
+        scheduledAt: null,
+      });
+
+      expect(updated.localImg).toBeNull();
+      expect(updated.visitorImg).toBeNull();
+      expect(updated.scheduledAt).toBeNull();
+    });
+
+    it('never touches result or score', () => {
+      const match = Match.new(baseProps).setResult('L', '2-1');
+
+      const updated = match.withDetails({ localTeam: 'Racing' });
+
+      expect(updated.result).toBe('L');
+      expect(updated.score).toBe('2-1');
+      expect(updated.hasResult()).toBe(true);
+    });
+
+    it('is immutable — the original match is unchanged', () => {
+      const match = Match.new({
+        ...baseProps,
+        localImg: 'river.png',
+        scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      });
+
+      const updated = match.withDetails({
+        localTeam: 'Racing',
+        localImg: null,
+        scheduledAt: null,
+      });
+
+      expect(updated).not.toBe(match);
+      expect(match.localTeam).toBe('River Plate');
+      expect(match.localImg).toBe('river.png');
+      expect(match.scheduledAt).not.toBeNull();
+    });
+  });
+
   describe('isCorrect', () => {
     it('returns true when prediction matches result', () => {
       const match = Match.new(baseProps);

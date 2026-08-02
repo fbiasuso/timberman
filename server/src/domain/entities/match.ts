@@ -57,6 +57,35 @@ export class Match {
     );
   }
 
+  /**
+   * Update editable match details — returns a NEW Match instance (immutable).
+   *
+   * Only localTeam, visitorTeam, localImg, visitorImg and scheduledAt can be
+   * edited here. Passing `null` for localImg/visitorImg/scheduledAt CLEARS the
+   * value; leaving a field `undefined` keeps the current value. Result and
+   * score are NEVER touched by this method — results are set via setResult.
+   */
+  withDetails(details: {
+    localTeam?: string;
+    visitorTeam?: string;
+    localImg?: string | null;
+    visitorImg?: string | null;
+    scheduledAt?: Date | null;
+  }): Match {
+    return new Match(
+      this.id,
+      this.matchDateId,
+      details.localTeam !== undefined ? details.localTeam : this.localTeam,
+      details.visitorTeam !== undefined ? details.visitorTeam : this.visitorTeam,
+      details.localImg !== undefined ? details.localImg : this.localImg,
+      details.visitorImg !== undefined ? details.visitorImg : this.visitorImg,
+      details.scheduledAt !== undefined ? details.scheduledAt : this.scheduledAt,
+      this._result,
+      this._score,
+      this.createdAt,
+    );
+  }
+
   /** Check if a given prediction matches the actual result */
   isCorrect(prediction: Prediction): boolean {
     return this._result !== null && this._result === prediction;

@@ -90,6 +90,15 @@ export class DateNotClosedError extends DomainError {
   get statusCode(): number { return 409; }
 }
 
+export class OpenDateExistsError extends DomainError {
+  constructor(tournamentId: number) {
+    super(`Tournament ${tournamentId} already has an open match date. Only one betting round can be open at a time.`);
+  }
+
+  get code(): string { return 'OPEN_DATE_EXISTS'; }
+  get statusCode(): number { return 409; }
+}
+
 export class MatchDateNotOpenError extends DomainError {
   constructor(matchDateId: number, status: string) {
     super(`Match date ${matchDateId} is not open for closing. Current status: "${status}"`);

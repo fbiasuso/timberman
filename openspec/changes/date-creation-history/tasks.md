@@ -57,8 +57,8 @@ Chain strategy: pending
 
 ## Phase 5: Admin Accordion UI (PR4a shell + PR4b row)
 
-- [ ] 5.1 Rewrite `MatchEditor.tsx` as accordion of ALL dates via `useAdminTournaments` (default-expand open date; lock icon closed, $ icon results; "Nueva fecha" → `useCreateDate`). AC: all dates listed with icons; Nueva fecha creates + refetches. PR4a
-- [ ] 5.2 New `AddMatchForm.tsx` (open date only) → `useCreateMatch`; new match appears in expanded date. AC: form only on open date; POST on submit. PR4a
+- [x] 5.1 Rewrite `MatchEditor.tsx` as accordion of ALL dates via `useAdminTournaments` (default-expand open date; lock icon closed, $ icon results; "Nueva fecha" → `useCreateDate`). AC: all dates listed with icons; Nueva fecha creates + refetches. PR4a
+- [x] 5.2 New `AddMatchForm.tsx` (open date only) → `useCreateMatch`; new match appears in expanded date. AC: form only on open date; POST on submit. PR4a
 - [ ] 5.3 New `MatchRow.tsx`: editable fields + per-row save → `useUpdateMatchDetails` (open); view-only matches+results for closed/results, no edit/add controls. AC: PATCH only on open; closed renders read-only. PR4b
 - [ ] 5.4 Tests `MatchEditor.test.tsx` (accordion, Nueva fecha, add match — PR4a) + `MatchRow.test.tsx` (save mutation, view-only — PR4b); closed view-only scenario in PR4b. AC: client suite green per PR. PR4a/PR4b
 

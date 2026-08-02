@@ -32,6 +32,26 @@ export interface MatchDTO {
   score: string | null;
 }
 
+/** Body for POST /api/admin/matches — create a match on an open date */
+export interface CreateMatchPayload {
+  matchDateId: number;
+  localTeam: string;
+  visitorTeam: string;
+  /** Image URLs / scheduled time are optional; null clears when updating */
+  localImg?: string | null;
+  visitorImg?: string | null;
+  scheduledAt?: string | null;
+}
+
+/** Body for PATCH /api/admin/matches/:matchId — partial match details update */
+export interface UpdateMatchDetailsPayload {
+  localTeam?: string;
+  visitorTeam?: string;
+  localImg?: string | null;
+  visitorImg?: string | null;
+  scheduledAt?: string | null;
+}
+
 /** Ticket prediction DTO */
 export interface TicketPredictionDTO {
   matchId: number;

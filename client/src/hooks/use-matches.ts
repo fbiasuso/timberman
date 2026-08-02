@@ -40,3 +40,17 @@ export function useMatchesByDate(dateId?: number) {
     staleTime: 30_000,
   });
 }
+
+/**
+ * Fetch a date's sanitized history (any authenticated user) — non-admin safe,
+ * results nulled unless the date status is 'results'.
+ * Used by HistorySection in the Cartelera. Disabled until a dateId is provided.
+ */
+export function useMatchHistory(dateId?: number) {
+  return useQuery({
+    queryKey: ['matches', 'history', dateId],
+    queryFn: () => matchApi.getHistory(dateId!),
+    enabled: dateId != null,
+    staleTime: 30_000,
+  });
+}

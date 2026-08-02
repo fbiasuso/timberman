@@ -51,9 +51,9 @@ Chain strategy: pending
 
 ## Phase 4: Client API + Hooks (PR3)
 
-- [ ] 4.1 `client/src/api/admin-api.ts`: `createDate`, `createMatch`, `updateMatchDetails` + payload interfaces; `match-api.ts`: `getHistory(dateId)` (DateMatchesResponse). AC: typed calls hit right endpoints. PR3
-- [ ] 4.2 `client/src/types/index.ts`: `CreateMatchPayload`, `UpdateMatchDetailsPayload`. AC: compiles. PR3
-- [ ] 4.3 `use-admin.ts`: `useCreateDate`/`useCreateMatch`/`useUpdateMatchDetails` (invalidate `['admin','tournaments']` + `['matches']`); `use-matches.ts`: `useMatchHistory(dateId?)`. AC: mutations invalidate both prefixes (matches byDate/history/dates/current). PR3
+- [x] 4.1 `client/src/api/admin-api.ts`: `createDate`, `createMatch`, `updateMatchDetails` + payload interfaces; `match-api.ts`: `getHistory(dateId)` (DateMatchesResponse). AC: typed calls hit right endpoints. PR3
+- [x] 4.2 `client/src/types/index.ts`: `CreateMatchPayload`, `UpdateMatchDetailsPayload`. AC: compiles. PR3
+- [x] 4.3 `use-admin.ts`: `useCreateDate`/`useCreateMatch`/`useUpdateMatchDetails` (invalidate `['admin','tournaments']` + `['matches']`); `use-matches.ts`: `useMatchHistory(dateId?)`. AC: mutations invalidate both prefixes (matches byDate/history/dates/current). PR3
 
 ## Phase 5: Admin Accordion UI (PR4a shell + PR4b row)
 

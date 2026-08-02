@@ -1,6 +1,7 @@
 import client from './client';
 import type { UserDTO } from './auth-api';
-import type { MatchDateStatus } from '../types';
+import type { MatchDateStatus, MatchDTO, MatchDateDTO } from '../types';
+import type { CreateMatchPayload, UpdateMatchDetailsPayload } from '../types';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,11 @@ export interface CreateTournamentPayload {
   betAmount?: number;
 }
 
+/** Body for POST /api/admin/dates — the tournament that gets the new date */
+export interface CreateDatePayload {
+  tournamentId: number;
+}
+
 export interface SetMatchResultPayload {
   result: string;
   score?: string;
@@ -121,6 +127,27 @@ export const adminApi = {
   setMatchResult(matchId: number, payload: SetMatchResultPayload) {
     return client
       .patch(`/admin/matches/${matchId}/result`, payload)
+      .then((r) => r.data.match);
+  },
+
+  /** POST /api/admin/dates — create the next date for a tournament (open, auto-numbered) */
+  createDate(payload: CreateDatePayload) {
+    return client
+      .post<{ matchDate: MatchDateDTO }>('/admin/dates', payload)
+      .then((r) => r.data.matchDate);
+  },
+
+  /** POST /api/admin/matches — create a match on an open date */
+  createMatch(payload: CreateMatchPayload) {
+    return client
+      .post<{ match: MatchDTO }>('/admin/matches', payload)
+      .then((r) => r.data.match);
+  },
+
+  /** PATCH /api/admin/matches/:matchId — partial update of match details (open date only) */
+  updateMatchDetails(matchId: number, payload: UpdateMatchDetailsPayload) {
+    return client
+      .patch<{ match: MatchDTO }>(`/admin/matches/${matchId}`, payload)
       .then((r) => r.data.match);
   },
 

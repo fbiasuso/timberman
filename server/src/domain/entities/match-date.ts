@@ -121,6 +121,20 @@ export class MatchDate {
     );
   }
 
+  /** Set the bet amount — returns a NEW MatchDate (immutable) */
+  withBetAmount(amount: Money): MatchDate {
+    return new MatchDate(
+      this.id,
+      this.tournamentId,
+      this.dateNumber,
+      this._status,
+      this._pozo,
+      amount.cents,
+      this._commission,
+      this.createdAt,
+    );
+  }
+
   // ── Factory ──────────────────────────────────────────────────
 
   static create(snapshot: MatchDateSnapshot): MatchDate {

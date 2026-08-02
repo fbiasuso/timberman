@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MatchDate } from '../entities/match-date.js';
+import { Money } from '../value-objects/money.js';
 import { DateNotClosedError, MatchDateNotOpenError } from '../errors/index.js';
 
 describe('MatchDate', () => {
@@ -96,6 +97,36 @@ describe('MatchDate', () => {
     it('throws DateNotClosedError when the date already has results', () => {
       const published = MatchDate.create({ ...baseSnapshot, status: 'results' });
       expect(() => published.publishResults()).toThrow(DateNotClosedError);
+    });
+  });
+
+  describe('withBetAmount', () => {
+    it('returns a new instance with the bet amount set', () => {
+      const date = MatchDate.create(baseSnapshot);
+      const updated = date.withBetAmount(Money.fromCents(2500));
+
+      expect(updated).not.toBe(date);
+      expect(updated.betAmount.cents).toBe(2500);
+    });
+
+    it('preserves all other fields', () => {
+      const date = MatchDate.create(baseSnapshot);
+      const updated = date.withBetAmount(Money.fromCents(3000));
+
+      expect(updated.id).toBe(date.id);
+      expect(updated.tournamentId).toBe(date.tournamentId);
+      expect(updated.dateNumber).toBe(date.dateNumber);
+      expect(updated.status).toBe(date.status);
+      expect(updated.pozo.cents).toBe(date.pozo.cents);
+      expect(updated.commission).toBe(date.commission);
+      expect(updated.createdAt).toBe(date.createdAt);
+    });
+
+    it('does not mutate the original instance', () => {
+      const date = MatchDate.create(baseSnapshot);
+      date.withBetAmount(Money.fromCents(5000));
+
+      expect(date.betAmount.cents).toBe(1500);
     });
   });
 });

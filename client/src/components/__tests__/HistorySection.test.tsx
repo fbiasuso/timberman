@@ -151,18 +151,27 @@ describe('HistorySection', () => {
     expect(screen.queryByText('Fechas anteriores')).toBeNull();
   });
 
-  it('renders rows with lock and $ icons, hiding the open date', () => {
+  it('renders rows with lock and check icons, hiding the open date', () => {
     mockDates([closedDate, openDate, resultsDate]);
 
     render(<HistorySection />);
     expect(screen.getByText('Fechas anteriores')).toBeDefined();
     expect(screen.getByText('Fecha 1')).toBeDefined();
     expect(screen.getByText('Fecha 2')).toBeDefined();
-    // Lock icon for the closed date, $ icon for the results date
-    expect(screen.getByText('🔒')).toBeDefined();
-    expect(screen.getByText('$')).toBeDefined();
+    // Lock icon on both closed and results dates, check icon on the paid (results) date
+    expect(screen.getAllByText('🔒').length).toBe(2);
+    expect(screen.getByText('✅')).toBeDefined();
     // The open (current) date is not a "fecha anterior"
     expect(screen.queryByText('Fecha 3')).toBeNull();
+  });
+
+  it('renders only the lock icon for a closed date', () => {
+    mockDates([closedDate]);
+
+    render(<HistorySection />);
+    expect(screen.getByText('🔒')).toBeDefined();
+    expect(screen.getByTitle('Fecha cerrada')).toBeDefined();
+    expect(screen.queryByText('✅')).toBeNull();
   });
 
   it('expanding a closed date fetches its history and shows teams only, no results', () => {
@@ -198,8 +207,8 @@ describe('HistorySection', () => {
     mockDates([closedDate, resultsDate]);
 
     render(<HistorySection />);
-    // Lock icon on closed dates, $ icon on published (paid) dates
-    expect(screen.getByTitle('Fecha cerrada')).toBeDefined();
+    // Lock tooltip on both closed and results dates, paid tooltip on the results date
+    expect(screen.getAllByTitle('Fecha cerrada').length).toBe(2);
     expect(screen.getByTitle('Fecha pagada')).toBeDefined();
     // Accordion chevrons on both rows
     expect(screen.getAllByTitle('expandir').length).toBe(2);

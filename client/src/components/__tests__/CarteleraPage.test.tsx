@@ -38,7 +38,9 @@ vi.mock('../../hooks/use-bets', () => ({
   useBets: vi.fn(() => ({
     data: { tickets: [] },
     isLoading: false,
+    isFetching: false,
     error: null,
+    refetch: vi.fn(),
   })),
 }));
 
@@ -105,7 +107,9 @@ afterEach(() => {
   vi.mocked(useBets).mockReturnValue({
     data: { tickets: [] },
     isLoading: false,
+    isFetching: false,
     error: null,
+    refetch: vi.fn(),
   } as any);
 });
 
@@ -275,9 +279,9 @@ describe('CarteleraPage', () => {
     expect(screen.getByText('Fechas anteriores')).toBeDefined();
     expect(screen.getByText('Fecha 1')).toBeDefined();
     expect(screen.getByText('Fecha 2')).toBeDefined();
-    // Lock icon for the closed date, $ icon for the results date
-    expect(screen.getByText('🔒')).toBeDefined();
-    expect(screen.getByText('$')).toBeDefined();
+    // Lock icon on both closed and results dates, check icon on the results (paid) date
+    expect(screen.getAllByText('🔒').length).toBe(2);
+    expect(screen.getByText('✅')).toBeDefined();
   });
 
   it('renders Fechas anteriores below the no-cartelera message', () => {
@@ -363,6 +367,68 @@ describe('CarteleraPage', () => {
     expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
     expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
     expect(screen.getByText('ya hiciste tu jugada - ver ticket')).toBeDefined();
+  });
+
+  it('shows the checking state while the bets query is still loading', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isFetching: true,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    // Ticket status unknown → no betting/pay flow yet
+    expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
+    expect(screen.getByText('Verificando tu jugada...')).toBeDefined();
+  });
+
+  it('keeps the checking state when the bets query has no data and no error (offline/paused)', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    // Offline/paused fetch: status unknown, pay flow must not render
+    expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
+    expect(screen.getByText('Verificando tu jugada...')).toBeDefined();
+  });
+
+  it('shows the verification error with a retry button that refetches', () => {
+    const refetch = vi.fn();
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error('fail'),
+      refetch,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    // Query failed → no betting/pay flow, show the error + retry
+    expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
+    expect(screen.getByText('No se pudo verificar tu jugada')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: /Reintentar/ }));
+    expect(refetch).toHaveBeenCalled();
   });
 
   it('navigates to the tickets page with the active date when clicking the ticket link', () => {

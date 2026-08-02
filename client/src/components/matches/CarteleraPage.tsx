@@ -27,7 +27,7 @@ export default function CarteleraPage() {
 
   // The user's tickets for the active date: a ticket on the open date means
   // they already played this round (no new bet allowed, show their ticket).
-  const { data: betsData } = useBets(data?.matchDate?.id);
+  const betsQuery = useBets(data?.matchDate?.id);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('todos');
@@ -98,8 +98,17 @@ export default function CarteleraPage() {
   const isExpired = matchDate.status !== 'open';
 
   // The user already placed a bet on this date → they cannot pick a new one,
-  // only view their ticket.
-  const alreadyBet = (betsData?.tickets.length ?? 0) > 0;
+  // only view their ticket. While the ticket query is still loading we do not
+  // know yet whether they played, so betting must stay locked; if it fails we
+  // cannot confirm the no-bet case either, so the pay flow stays hidden. The
+  // last clause also covers the offline/paused fetch (data undefined, no error
+  // yet), so the pay flow never renders with an unknown ticket status.
+  const betsChecking =
+    betsQuery.isLoading ||
+    (betsQuery.isFetching && !betsQuery.data) ||
+    (betsQuery.data === undefined && !betsQuery.isError);
+  const betsFailed = betsQuery.isError;
+  const alreadyBet = !betsFailed && (betsQuery.data?.tickets.length ?? 0) > 0;
 
   // Accumulated prize pool: only the carryover rolled over from previous
   // dates without winners. The server snapshots a date's pozo at close, so
@@ -195,7 +204,7 @@ export default function CarteleraPage() {
             key={match.id}
             match={match}
             isExpired={isExpired}
-            lockBetting={alreadyBet}
+            lockBetting={alreadyBet || betsChecking || betsFailed}
           />
         ))}
       </div>
@@ -203,7 +212,62 @@ export default function CarteleraPage() {
       {/* Bet / ticket button (only when date is open) */}
       {!isExpired && !showConfirm && (
         <div style={{ marginTop: 24, textAlign: 'center' }}>
-          {alreadyBet ? (
+          {betsChecking ? (
+            <button
+              disabled
+              style={{
+                width: '100%',
+                maxWidth: 400,
+                padding: '14px 0',
+                border: 'none',
+                borderRadius: 10,
+                background: theme.disabled,
+                color: theme.textoSecundario,
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: 'not-allowed',
+                transition: 'all 0.15s',
+              }}
+            >
+              Verificando tu jugada...
+            </button>
+          ) : betsFailed ? (
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                disabled
+                style={{
+                  flex: 1,
+                  maxWidth: 400,
+                  padding: '14px 0',
+                  border: 'none',
+                  borderRadius: 10,
+                  background: theme.disabled,
+                  color: theme.textoSecundario,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  cursor: 'not-allowed',
+                  transition: 'all 0.15s',
+                }}
+              >
+                No se pudo verificar tu jugada
+              </button>
+              <button
+                onClick={() => betsQuery.refetch()}
+                style={{
+                  padding: '0 24px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 10,
+                  background: theme.tarjeta,
+                  color: theme.blanco,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : alreadyBet ? (
             <button
               onClick={() => navigate(`/tickets?matchDateId=${matchDateId}`)}
               style={{

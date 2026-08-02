@@ -70,4 +70,4 @@ Chain strategy: pending
 
 ## Phase 7: Integration Verification (final)
 
-- [ ] 7.1 Full server + client vitest suites + typecheck/build both apps; confirm no schema change. AC: 0 failures, 0 migrations. Final PR
+- [x] 7.1 Full server + client vitest suites + typecheck/build both apps; confirm no schema change. AC: 0 failures, 0 migrations. Final PR

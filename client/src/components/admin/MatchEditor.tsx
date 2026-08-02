@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useAdminTournaments, useCreateDate } from '../../hooks/use-admin';
 import { useMatchesByDate } from '../../hooks/use-matches';
-import { formatDate } from '../../utils/format';
-import type { MatchDTO, MatchDateStatus } from '../../types';
+import type { MatchDateStatus } from '../../types';
 import theme from '../../styles/theme';
 import AddMatchForm from './AddMatchForm';
+import MatchRow from './MatchRow';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
@@ -63,23 +63,6 @@ const panel: React.CSSProperties = {
   padding: '4px 16px 16px',
 };
 
-const matchRow: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 16,
-  flexWrap: 'wrap',
-  padding: '12px 16px',
-  background: theme.searchBg,
-  borderRadius: 8,
-};
-
-const teamImg: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  objectFit: 'contain',
-};
-
 const errorBox: React.CSSProperties = {
   padding: '10px 16px',
   background: theme.dangerBg,
@@ -97,50 +80,6 @@ const statusIcon: Record<MatchDateStatus, string | null> = {
   closed: '🔒',
   results: '$',
 };
-
-function formatScheduledAt(iso: string): string {
-  const d = new Date(iso);
-  const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-  return `${formatDate(d)} ${time}`;
-}
-
-function hideBrokenImg(e: React.SyntheticEvent<HTMLImageElement>) {
-  (e.target as HTMLImageElement).style.display = 'none';
-}
-
-/**
- * Read-only match row (teams, shields, schedule, result/score where applicable).
- * PR4b replaces this with an editable `MatchRow` component for open dates.
- */
-function MatchRowView({ match, showResult }: { match: MatchDTO; showResult: boolean }) {
-  return (
-    <div style={matchRow}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 180 }}>
-        {match.localImg && (
-          <img src={match.localImg} alt={match.localTeam} style={teamImg} onError={hideBrokenImg} />
-        )}
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-            {match.localTeam}
-            <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
-            {match.visitorTeam}
-          </div>
-          {match.scheduledAt && (
-            <div style={{ fontSize: 12, color: theme.textoSecundario, marginTop: 2 }}>
-              {formatScheduledAt(match.scheduledAt)}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showResult && (
-        <div style={{ fontSize: 14, fontWeight: 700, color: theme.blanco }}>
-          {match.result ? `${match.result}${match.score ? ` (${match.score})` : ''}` : '—'}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -290,10 +229,10 @@ export default function MatchEditor() {
                     )}
 
                     {matches.map((match) => (
-                      <MatchRowView
+                      <MatchRow
                         key={match.id}
                         match={match}
-                        showResult={date.status === 'closed' || date.status === 'results'}
+                        editable={date.status === 'open'}
                       />
                     ))}
 

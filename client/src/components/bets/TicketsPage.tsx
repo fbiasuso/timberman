@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useBets } from '../../hooks/use-bets';
 import { useMatchDates } from '../../hooks/use-matches';
 import TicketCard from './TicketCard';
@@ -9,10 +10,22 @@ import theme from '../../styles/theme';
 /**
  * TicketsPage — list of the authenticated user's tickets with date filter.
  *
- * Clicking a ticket opens the full detail modal.
+ * Clicking a ticket opens the full detail modal. The optional ?matchDateId=
+ * query param preselects the date filter (used by the Cartelera's "ver
+ * ticket" link for an already-played date).
  */
 export default function TicketsPage() {
-  const [selectedDateId, setSelectedDateId] = useState<number | undefined>(undefined);
+  const [searchParams] = useSearchParams();
+
+  // Initial date filter from the URL (?matchDateId=), otherwise all dates.
+  const initialDateId = (() => {
+    const raw = searchParams.get('matchDateId');
+    if (!raw) return undefined;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  })();
+
+  const [selectedDateId, setSelectedDateId] = useState<number | undefined>(initialDateId);
   const [modalTicket, setModalTicket] = useState<TicketDTO | null>(null);
 
   const { data: datesData } = useMatchDates();

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import CarteleraPage from '../matches/CarteleraPage';
 
 // --- Mocks ---
@@ -34,6 +35,11 @@ vi.mock('../../hooks/use-bets', () => ({
     error: null,
     reset: vi.fn(),
   }),
+  useBets: vi.fn(() => ({
+    data: { tickets: [] },
+    isLoading: false,
+    error: null,
+  })),
 }));
 
 vi.mock('../../stores/bet-slip-store', () => ({
@@ -79,6 +85,7 @@ vi.mock('../bets/TicketModal', () => ({
 }));
 
 import { useCurrentMatches, useMatchDates, useMatchHistory } from '../../hooks/use-matches';
+import { useBets } from '../../hooks/use-bets';
 
 afterEach(() => {
   cleanup();
@@ -91,6 +98,12 @@ afterEach(() => {
   vi.mocked(useMatchHistory).mockReset();
   vi.mocked(useMatchHistory).mockReturnValue({
     data: null,
+    isLoading: false,
+    error: null,
+  } as any);
+  vi.mocked(useBets).mockReset();
+  vi.mocked(useBets).mockReturnValue({
+    data: { tickets: [] },
     isLoading: false,
     error: null,
   } as any);
@@ -115,14 +128,22 @@ describe('CarteleraPage', () => {
   it('shows loading state', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: null, isLoading: true, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('Cargando cartelera...')).toBeDefined();
   });
 
   it('shows error state', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: null, isLoading: false, error: new Error('fail') } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('Error al cargar la cartelera. Intenta de nuevo.')).toBeDefined();
   });
 
@@ -133,14 +154,22 @@ describe('CarteleraPage', () => {
       error: null,
     } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('No hay cartelera disponible')).toBeDefined();
   });
 
   it('renders matches when data is available', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('River Plate vs Boca Juniors')).toBeDefined();
     expect(screen.getByText('Racing vs Independiente')).toBeDefined();
     expect(screen.getByText('San Lorenzo vs Huracán')).toBeDefined();
@@ -149,21 +178,33 @@ describe('CarteleraPage', () => {
   it('shows the date number in the header', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
   });
 
   it('shows the pay button when date is open', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/Pagar Jugada/)).toBeDefined();
   });
 
   it('shows filters when date is open', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     const filters = screen.getByTestId('mock-filters');
     expect(filters).toBeDefined();
   });
@@ -175,7 +216,11 @@ describe('CarteleraPage', () => {
     };
     vi.mocked(useCurrentMatches).mockReturnValue({ data: closedData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText(/Estado: closed/)).toBeDefined();
     // Pay button should NOT be shown when closed
     expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
@@ -188,7 +233,11 @@ describe('CarteleraPage', () => {
       error: null,
     } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('Pozo acumulado de fechas anteriores')).toBeDefined();
     // carryover 1500 → $15.00 (the open date's wagers are NOT included)
     expect(screen.getByText('$15.00')).toBeDefined();
@@ -200,7 +249,11 @@ describe('CarteleraPage', () => {
   it('shows zero accumulated pozo for a fresh tournament', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('Pozo acumulado de fechas anteriores')).toBeDefined();
     expect(screen.getByText('$0.00')).toBeDefined();
     expect(
@@ -212,7 +265,11 @@ describe('CarteleraPage', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
     mockPreviousDates(previousDates);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     // Active content first, then the history section
     expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
     expect(screen.getByText('Fechas anteriores')).toBeDefined();
@@ -231,7 +288,11 @@ describe('CarteleraPage', () => {
     } as any);
     mockPreviousDates(previousDates);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     expect(screen.getByText('No hay cartelera disponible')).toBeDefined();
     expect(screen.getByText('Fechas anteriores')).toBeDefined();
     expect(screen.getByText('Fecha 1')).toBeDefined();
@@ -252,11 +313,85 @@ describe('CarteleraPage', () => {
       error: null,
     } as any);
 
-    render(<CarteleraPage />);
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
     fireEvent.click(screen.getByRole('button', { name: /Fecha 1/ }));
 
     expect(vi.mocked(useMatchHistory)).toHaveBeenCalledWith(1);
     expect(screen.getByText(/Gimnasia/)).toBeDefined();
     expect(screen.getByText(/Estudiantes/)).toBeDefined();
+  });
+
+  it('keeps the pay button when the user has no bet on the active date', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: { tickets: [] },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/Pagar Jugada/)).toBeDefined();
+    expect(screen.queryByText(/ver ticket/)).toBeNull();
+  });
+
+  it('hides the pay button and shows the ticket link when the user already bet', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: {
+        tickets: [
+          { id: 7, userId: 'u1', matchDateId: 10, betAmount: 1500, prizeWon: null, predictions: [], createdAt: '2026-08-02T00:00:00.000Z' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    // The date still renders, but no new bet can be picked
+    expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
+    expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
+    expect(screen.getByText('ya hiciste tu jugada - ver ticket')).toBeDefined();
+  });
+
+  it('navigates to the tickets page with the active date when clicking the ticket link', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    vi.mocked(useBets).mockReturnValue({
+      data: {
+        tickets: [
+          { id: 7, userId: 'u1', matchDateId: 10, betAmount: 1500, prizeWon: null, predictions: [], createdAt: '2026-08-02T00:00:00.000Z' },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    function LocationProbe() {
+      const location = useLocation();
+      return <div data-testid="location">{location.pathname + location.search}</div>;
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<CarteleraPage />} />
+          <Route path="/tickets" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /ver ticket/ }));
+
+    expect(screen.getByTestId('location').textContent).toBe('/tickets?matchDateId=10');
   });
 });

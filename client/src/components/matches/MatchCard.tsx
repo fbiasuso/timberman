@@ -8,13 +8,15 @@ interface MatchCardProps {
   match: MatchDTO;
   /** Whether the match date is expired (closed or results published) */
   isExpired: boolean;
+  /** Lock bet picking without the expired visuals (user already bet this date) */
+  lockBetting?: boolean;
 }
 
 /**
  * Displays a single match card with team info, score/VS, bet buttons,
  * and an expired badge if the match date is past.
  */
-export default function MatchCard({ match, isExpired }: MatchCardProps) {
+export default function MatchCard({ match, isExpired, lockBetting = false }: MatchCardProps) {
   const currentPrediction = useBetSlipStore(
     (s) => s.predictions[match.id.toString()] ?? null,
   );
@@ -116,7 +118,7 @@ export default function MatchCard({ match, isExpired }: MatchCardProps) {
       {/* Bet buttons */}
       <BetButtons
         matchId={match.id.toString()}
-        disabled={isExpired}
+        disabled={isExpired || lockBetting}
         currentPrediction={currentPrediction}
       />
     </div>

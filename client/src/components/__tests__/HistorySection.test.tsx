@@ -18,7 +18,16 @@ vi.mock('../../hooks/use-matches', () => ({
   })),
 }));
 
+vi.mock('../../hooks/use-bets', () => ({
+  useBets: vi.fn(() => ({
+    data: { tickets: [] },
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 import { useMatchDates, useMatchHistory } from '../../hooks/use-matches';
+import { useBets } from '../../hooks/use-bets';
 
 afterEach(() => {
   cleanup();
@@ -31,6 +40,12 @@ afterEach(() => {
   vi.mocked(useMatchHistory).mockReset();
   vi.mocked(useMatchHistory).mockReturnValue({
     data: null,
+    isLoading: false,
+    error: null,
+  } as any);
+  vi.mocked(useBets).mockReset();
+  vi.mocked(useBets).mockReturnValue({
+    data: { tickets: [] },
     isLoading: false,
     error: null,
   } as any);
@@ -98,6 +113,14 @@ function mockHistory(matchDate: MatchDateDTO, matches: unknown[]) {
   } as any);
 }
 
+function mockTickets(tickets: unknown[]) {
+  vi.mocked(useBets).mockReturnValue({
+    data: { tickets },
+    isLoading: false,
+    error: null,
+  } as any);
+}
+
 // --- Tests ---
 
 describe('HistorySection', () => {
@@ -157,7 +180,7 @@ describe('HistorySection', () => {
     expect(screen.queryByText('L (2-1)')).toBeNull();
   });
 
-  it('expanding a results date shows teams and the full result', () => {
+  it('expanding a results date shows teams and the score centered between them', () => {
     mockDates([resultsDate]);
     mockHistory(resultsDate, resultsMatches);
 
@@ -167,7 +190,53 @@ describe('HistorySection', () => {
     expect(vi.mocked(useMatchHistory)).toHaveBeenCalledWith(resultsDate.id);
     expect(screen.getByText(/River Plate/)).toBeDefined();
     expect(screen.getByText(/Boca Juniors/)).toBeDefined();
-    expect(screen.getByText('L (2-1)')).toBeDefined();
+    // Score "2-1" → home 2, away 1, rendered centered between the teams
+    expect(screen.getByText('2 - 1')).toBeDefined();
+  });
+
+  it('adds tooltips to the date-row icons', () => {
+    mockDates([closedDate, resultsDate]);
+
+    render(<HistorySection />);
+    // Lock icon on closed dates, $ icon on published (paid) dates
+    expect(screen.getByTitle('Fecha cerrada')).toBeDefined();
+    expect(screen.getByTitle('Fecha pagada')).toBeDefined();
+    // Accordion chevrons on both rows
+    expect(screen.getAllByTitle('expandir').length).toBe(2);
+  });
+
+  it('shows the user bet (L/E/V) on the far right when they have a ticket', () => {
+    mockDates([resultsDate]);
+    mockHistory(resultsDate, resultsMatches);
+    mockTickets([
+      {
+        id: 1,
+        userId: 'u1',
+        matchDateId: resultsDate.id,
+        betAmount: 1500,
+        prizeWon: null,
+        predictions: [{ matchId: 31, prediction: 'V' }],
+        createdAt: '2026-07-27T00:00:00.000Z',
+      },
+    ]);
+
+    render(<HistorySection />);
+    fireEvent.click(screen.getByRole('button', { name: /Fecha 2/ }));
+
+    // The user's own bet appears for the match they bet on
+    expect(screen.getByText('V')).toBeDefined();
+    expect(screen.getByTitle('Visitante')).toBeDefined();
+  });
+
+  it('does not show a bet when the user has no ticket for the date', () => {
+    mockDates([resultsDate]);
+    mockHistory(resultsDate, resultsMatches);
+
+    render(<HistorySection />);
+    fireEvent.click(screen.getByRole('button', { name: /Fecha 2/ }));
+
+    expect(screen.queryByText('V')).toBeNull();
+    expect(screen.queryByText('L')).toBeNull();
   });
 
   it('collapses an expanded row when clicked again', () => {

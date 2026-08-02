@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCurrentMatches } from '../../hooks/use-matches';
-import { usePlaceBet } from '../../hooks/use-bets';
+import { usePlaceBet, useBets } from '../../hooks/use-bets';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
 import Filters from './Filters';
 import MatchCard from './MatchCard';
@@ -22,6 +23,11 @@ export default function CarteleraPage() {
   const placeBet = usePlaceBet();
   const predictions = useBetSlipStore((s) => s.predictions);
   const reset = useBetSlipStore((s) => s.reset);
+  const navigate = useNavigate();
+
+  // The user's tickets for the active date: a ticket on the open date means
+  // they already played this round (no new bet allowed, show their ticket).
+  const { data: betsData } = useBets(data?.matchDate?.id);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('todos');
@@ -90,6 +96,10 @@ export default function CarteleraPage() {
   const { matchDate } = data;
   const matchDateId = matchDate.id;
   const isExpired = matchDate.status !== 'open';
+
+  // The user already placed a bet on this date → they cannot pick a new one,
+  // only view their ticket.
+  const alreadyBet = (betsData?.tickets.length ?? 0) > 0;
 
   // Accumulated prize pool: only the carryover rolled over from previous
   // dates without winners. The server snapshots a date's pozo at close, so
@@ -181,35 +191,61 @@ export default function CarteleraPage() {
           </div>
         )}
         {filteredMatches.map((match) => (
-          <MatchCard key={match.id} match={match} isExpired={isExpired} />
+          <MatchCard
+            key={match.id}
+            match={match}
+            isExpired={isExpired}
+            lockBetting={alreadyBet}
+          />
         ))}
       </div>
 
-      {/* Pay button (only when date is open) */}
+      {/* Bet / ticket button (only when date is open) */}
       {!isExpired && !showConfirm && (
         <div style={{ marginTop: 24, textAlign: 'center' }}>
-          <button
-            onClick={() => {
-              if (!allPredicted) return;
-              setShowConfirm(true);
-            }}
-            disabled={!allPredicted}
-            style={{
-              width: '100%',
-              maxWidth: 400,
-              padding: '14px 0',
-              border: 'none',
-              borderRadius: 10,
-              background: allPredicted ? theme.verdeBet : theme.disabled,
-              color: allPredicted ? theme.blanco : theme.textoSecundario,
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: allPredicted ? 'pointer' : 'not-allowed',
-              transition: 'all 0.15s',
-            }}
-          >
-            Pagar Jugada ({predictedCount}/{totalMatches}) — {formatMoney(matchDate.betAmount)}
-          </button>
+          {alreadyBet ? (
+            <button
+              onClick={() => navigate(`/tickets?matchDateId=${matchDateId}`)}
+              style={{
+                width: '100%',
+                maxWidth: 400,
+                padding: '14px 0',
+                border: 'none',
+                borderRadius: 10,
+                background: theme.verdeBet,
+                color: theme.blanco,
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              ya hiciste tu jugada - ver ticket
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (!allPredicted) return;
+                setShowConfirm(true);
+              }}
+              disabled={!allPredicted}
+              style={{
+                width: '100%',
+                maxWidth: 400,
+                padding: '14px 0',
+                border: 'none',
+                borderRadius: 10,
+                background: allPredicted ? theme.verdeBet : theme.disabled,
+                color: allPredicted ? theme.blanco : theme.textoSecundario,
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: allPredicted ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s',
+              }}
+            >
+              Pagar Jugada ({predictedCount}/{totalMatches}) — {formatMoney(matchDate.betAmount)}
+            </button>
+          )}
         </div>
       )}
 

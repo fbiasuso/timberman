@@ -64,11 +64,21 @@ const btnDisabled: React.CSSProperties = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+/**
+ * Convert a pesos amount string to integer cents (the server contract).
+ * Math.round + EPSILON guard: floating point would otherwise drop a cent for
+ * values like 5.55 (5.55 × 100 = 554.9999...).
+ */
+function betAmountToCents(pesos: string): number {
+  return Math.round((Number(pesos) + Number.EPSILON) * 100);
+}
+
 export default function ConfigPanel() {
   const { data: config, isLoading, error } = useAdminConfig();
   const updateConfig = useUpdateConfig();
 
-  // Local form state (initialised from server data)
+  // Local form state (initialised from server data). Money amounts are edited
+  // in PESOS; the server stores integer cents (converted on save).
   const [commission, setCommission] = useState('');
   const [allowRegistration, setAllowRegistration] = useState(false);
   const [defaultBetAmount, setDefaultBetAmount] = useState('');
@@ -79,7 +89,8 @@ export default function ConfigPanel() {
     if (config) {
       setCommission(String(config.commission));
       setAllowRegistration(config.allowRegistration);
-      setDefaultBetAmount(String(config.defaultBetAmount));
+      // The server stores cents; the admin edits pesos.
+      setDefaultBetAmount(String(config.defaultBetAmount / 100));
     }
   }, [config]);
 
@@ -89,7 +100,7 @@ export default function ConfigPanel() {
     const changed =
       commission !== String(config.commission) ||
       allowRegistration !== config.allowRegistration ||
-      defaultBetAmount !== String(config.defaultBetAmount);
+      betAmountToCents(defaultBetAmount) !== config.defaultBetAmount;
     setDirty(changed);
   }, [commission, allowRegistration, defaultBetAmount, config]);
 
@@ -98,7 +109,8 @@ export default function ConfigPanel() {
     if (!config) return;
 
     const commissionNum = parseFloat(commission);
-    const betAmountNum = parseFloat(defaultBetAmount);
+    const betAmountPesos = parseFloat(defaultBetAmount);
+    const betAmountCents = betAmountToCents(defaultBetAmount);
 
     if (commission !== String(config.commission) && !isNaN(commissionNum)) {
       updateConfig.mutate({ key: 'commission', value: commissionNum });
@@ -108,8 +120,16 @@ export default function ConfigPanel() {
       updateConfig.mutate({ key: 'allowRegistration', value: allowRegistration });
     }
 
-    if (defaultBetAmount !== String(config.defaultBetAmount) && !isNaN(betAmountNum)) {
-      updateConfig.mutate({ key: 'defaultBetAmount', value: betAmountNum });
+    // Bet amount is edited in pesos but the server expects integer cents:
+    // convert ×100, rounded to the nearest cent. Sane bounds: $1 minimum,
+    // $10,000 maximum.
+    if (
+      !isNaN(betAmountPesos) &&
+      betAmountPesos >= 1 &&
+      betAmountPesos <= 10000 &&
+      betAmountCents !== config.defaultBetAmount
+    ) {
+      updateConfig.mutate({ key: 'defaultBetAmount', value: betAmountCents });
     }
   };
 
@@ -185,14 +205,15 @@ export default function ConfigPanel() {
           </div>
         </div>
 
-        {/* Default bet amount */}
+        {/* Default bet amount — edited in pesos, stored as integer cents */}
         <div>
           <label style={label}>Monto de apuesta por defecto</label>
           <input
             style={input}
             type="number"
             step="0.01"
-            min="0"
+            min="1"
+            max="10000"
             value={defaultBetAmount}
             onChange={(e) => setDefaultBetAmount(e.target.value)}
           />

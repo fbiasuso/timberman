@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { CreateDateUseCase } from '../tournament/create-date-use-case.js';
 import { CloseDateUseCase } from '../tournament/close-date-use-case.js';
 import { PublishResultsUseCase } from '../tournament/publish-results-use-case.js';
+import { CreateMatchUseCase } from '../tournament/create-match-use-case.js';
+import { UpdateMatchDetailsUseCase } from '../tournament/update-match-details-use-case.js';
 import { PointsCalculator } from '../tournament/points-calculator.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
@@ -19,6 +21,8 @@ import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-wo
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
+  MatchNotFoundError,
+  DateNotOpenError,
   DateNotClosedError,
   MatchDateNotOpenError,
   UserNotFoundError,
@@ -842,6 +846,244 @@ describe('PublishResultsUseCase', () => {
     expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
     expect(userRepo.update).toHaveBeenCalledOnce();
     expect(ticketRepo.update).toHaveBeenCalledOnce();
+  });
+});
+
+// ── CreateMatchUseCase ─────────────────────────────────────────────
+
+describe('CreateMatchUseCase', () => {
+  const openDate = MatchDate.create({
+    id: 10,
+    tournamentId: 1,
+    dateNumber: 1,
+    status: 'open',
+    pozo: 0,
+    betAmount: 1500,
+    commission: 0,
+    createdAt: new Date(),
+  });
+
+  const closedDate = MatchDate.create({
+    ...openDate.toSnapshot(),
+    status: 'closed',
+    pozo: 5000,
+  });
+
+  const resultsDate = MatchDate.create({
+    ...openDate.toSnapshot(),
+    status: 'results',
+    pozo: 5000,
+  });
+
+  function buildUseCase(tournamentRepo: TournamentRepo, matchRepo: MatchRepo) {
+    return new CreateMatchUseCase(tournamentRepo, matchRepo);
+  }
+
+  it('creates and persists a match on an open date', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.save).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    const result = await uc.execute({
+      matchDateId: 10,
+      localTeam: 'River Plate',
+      visitorTeam: 'Boca Juniors',
+      localImg: 'river.png',
+      scheduledAt: new Date('2026-08-02T20:00:00Z'),
+    });
+
+    expect(result.matchDateId).toBe(10);
+    expect(result.localTeam).toBe('River Plate');
+    expect(result.visitorTeam).toBe('Boca Juniors');
+    expect(result.localImg).toBe('river.png');
+    expect(result.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z'));
+    expect(result.result).toBeNull();
+    expect(result.score).toBeNull();
+
+    expect(tournamentRepo.findMatchDateById).toHaveBeenCalledWith(10);
+    expect(matchRepo.save).toHaveBeenCalledOnce();
+    const saved = vi.mocked(matchRepo.save).mock.calls[0][0];
+    expect(saved.toSnapshot()).toMatchObject({
+      matchDateId: 10,
+      localTeam: 'River Plate',
+      visitorTeam: 'Boca Juniors',
+      localImg: 'river.png',
+      scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      result: null,
+      score: null,
+    });
+  });
+
+  it('rejects creation when the date is closed — 422, nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(DateNotOpenError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects creation when the date has published results — 422, nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(resultsDate);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(DateNotOpenError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('throws MatchDateNotFoundError when the date does not exist', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 999, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(MatchDateNotFoundError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+// ── UpdateMatchDetailsUseCase ──────────────────────────────────────
+
+describe('UpdateMatchDetailsUseCase', () => {
+  const openDate = MatchDate.create({
+    id: 10,
+    tournamentId: 1,
+    dateNumber: 1,
+    status: 'open',
+    pozo: 0,
+    betAmount: 1500,
+    commission: 0,
+    createdAt: new Date(),
+  });
+
+  const closedDate = MatchDate.create({
+    ...openDate.toSnapshot(),
+    status: 'closed',
+    pozo: 5000,
+  });
+
+  const matchWithDetails = Match.create({
+    id: 1,
+    matchDateId: 10,
+    localTeam: 'River Plate',
+    visitorTeam: 'Boca Juniors',
+    localImg: 'river.png',
+    visitorImg: 'boca.png',
+    scheduledAt: new Date('2026-08-02T20:00:00Z'),
+    result: null,
+    score: null,
+    createdAt: new Date(),
+  });
+
+  function buildUseCase(matchRepo: MatchRepo, tournamentRepo: TournamentRepo) {
+    return new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
+  }
+
+  it('applies a partial change and persists it via repo.update', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    const result = await uc.execute({ matchId: 1, visitorTeam: 'Gimnasia' });
+
+    // Only the visitor team changed
+    expect(result.visitorTeam).toBe('Gimnasia');
+    expect(result.localTeam).toBe('River Plate');
+    expect(result.localImg).toBe('river.png');
+    expect(result.visitorImg).toBe('boca.png');
+    expect(result.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z'));
+
+    expect(matchRepo.update).toHaveBeenCalledOnce();
+    const saved = vi.mocked(matchRepo.update).mock.calls[0][0];
+    expect(saved.toSnapshot()).toMatchObject({
+      id: 1,
+      localTeam: 'River Plate',
+      visitorTeam: 'Gimnasia',
+      localImg: 'river.png',
+      scheduledAt: new Date('2026-08-02T20:00:00Z'),
+    });
+  });
+
+  it('clears images and scheduledAt when null is passed', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    const result = await uc.execute({
+      matchId: 1,
+      localImg: null,
+      visitorImg: null,
+      scheduledAt: null,
+    });
+
+    expect(result.localImg).toBeNull();
+    expect(result.visitorImg).toBeNull();
+    expect(result.scheduledAt).toBeNull();
+    expect(matchRepo.update).toHaveBeenCalledOnce();
+  });
+
+  it('empty body is a no-op — current match returned, nothing written', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    const result = await uc.execute({ matchId: 1 });
+
+    expect(result.localTeam).toBe('River Plate');
+    expect(result.visitorTeam).toBe('Boca Juniors');
+    expect(matchRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('throws MatchNotFoundError when the match does not exist', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(null);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    await expect(uc.execute({ matchId: 999, localTeam: 'A' }))
+      .rejects.toThrow(MatchNotFoundError);
+    expect(tournamentRepo.findMatchDateById).not.toHaveBeenCalled();
+    expect(matchRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('throws DateNotOpenError when the parent date is not open — nothing written', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    await expect(uc.execute({ matchId: 1, localTeam: 'Racing' }))
+      .rejects.toThrow(DateNotOpenError);
+    expect(matchRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('throws MatchDateNotFoundError when the parent date is missing', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(null);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo);
+    await expect(uc.execute({ matchId: 1, localTeam: 'Racing' }))
+      .rejects.toThrow(MatchDateNotFoundError);
+    expect(matchRepo.update).not.toHaveBeenCalled();
   });
 });
 

@@ -27,9 +27,12 @@ export class DrizzleMatchRepo implements MatchRepo {
 
   async save(match: Match): Promise<Match> {
     const snap = match.toSnapshot();
+    // New records carry the id: 0 sentinel — omit it so the serial PK
+    // assigns the id. Inserting an explicit 0 would collide on the second row.
+    const values = snap.id <= 0 ? { ...snap, id: undefined } : snap;
     const [row] = await this.db
       .insert(schema.matches)
-      .values(snap as any)
+      .values(values as any)
       .returning();
     return Match.create(row as unknown as MatchSnapshot);
   }
@@ -54,7 +57,8 @@ export class DrizzleMatchRepo implements MatchRepo {
 
   async saveMany(matches: Match[]): Promise<Match[]> {
     if (matches.length === 0) return [];
-    const snapshots = matches.map((m) => m.toSnapshot());
+    // All saved matches are new records — omit the id: 0 sentinel (see save()).
+    const snapshots = matches.map((m) => ({ ...m.toSnapshot(), id: undefined }));
     const rows = await this.db
       .insert(schema.matches)
       .values(snapshots as any)

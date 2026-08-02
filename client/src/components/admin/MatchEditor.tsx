@@ -146,7 +146,13 @@ export default function MatchEditor() {
     );
   }
 
-  const dates = [...tournament.dates].sort((a, b) => a.dateNumber - b.dateNumber);
+  // The current betting round (open date) is the most relevant row, so it is
+  // listed first; the rest are ordered descending by dateNumber (newest first).
+  const dates = [...tournament.dates].sort((a, b) => {
+    if (a.status === 'open' && b.status !== 'open') return -1;
+    if (b.status === 'open' && a.status !== 'open') return 1;
+    return b.dateNumber - a.dateNumber;
+  });
   const matches = expandedData?.matches ?? [];
 
   return (

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMatchDates, useMatchHistory } from '../../hooks/use-matches';
+import { useBets } from '../../hooks/use-bets';
 import { formatDate } from '../../utils/format';
-import type { MatchDTO, MatchDateStatus } from '../../types';
+import type { MatchDTO, Prediction } from '../../types';
 import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -79,20 +80,47 @@ const scheduleText: React.CSSProperties = {
   marginTop: 2,
 };
 
-const resultText: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
+/** Right-side icons group: status icon + accordion chevron, spaced apart */
+const statusIcons: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  color: theme.textoSecundario,
+};
+
+/** Score rendered between the team names (home - away) */
+const scoreText: React.CSSProperties = {
   color: theme.blanco,
+  margin: '0 8px',
+  fontWeight: 700,
+};
+
+/** The user's own bet badge (L/E/V), far right of the match row */
+const betBadge: React.CSSProperties = {
+  fontWeight: 700,
+  fontSize: 14,
+  color: theme.blanco,
+  background: theme.searchBg,
+  borderRadius: 6,
+  padding: '4px 10px',
+  minWidth: 32,
+  textAlign: 'center',
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Icon per date status: lock for closed, $ for published results, none for open */
-const statusIcon: Record<MatchDateStatus, string | null> = {
-  open: null,
-  closed: '🔒',
-  results: '$',
-};
+/**
+ * Normalize a "2-1" score string to "2 - 1" (home goals - away goals) for the
+ * centered layout. The first number belongs to the local/home team, the second
+ * to the visitor/away team. Returns null when there is no score yet — the
+ * server nulls scores on non-'results' dates.
+ */
+function formatScore(score: string | null): string | null {
+  if (!score) return null;
+  const [home, away] = score.split('-').map((s) => s.trim());
+  if (home === undefined || away === undefined) return score;
+  return `${home} - ${away}`;
+}
 
 function formatScheduledAt(iso: string): string {
   const d = new Date(iso);
@@ -106,34 +134,63 @@ function hideBrokenImg(e: React.SyntheticEvent<HTMLImageElement>) {
 
 // ─── Read-only history row ──────────────────────────────────────────────────
 
-function HistoryMatchRow({ match }: { match: MatchDTO }) {
+interface HistoryMatchRowProps {
+  match: MatchDTO;
+  /** The user's prediction for this match, when they have a bet on this date */
+  bet?: Prediction | null;
+}
+
+function HistoryMatchRow({ match, bet }: HistoryMatchRowProps) {
+  const score = formatScore(match.score);
+
   return (
     <div style={row}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 180 }}>
-        {match.localImg && (
-          <img src={match.localImg} alt={match.localTeam} style={teamImg} onError={hideBrokenImg} />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          flex: 1,
+          minWidth: 180,
+        }}
+      >
+        {/* Top line: scheduled date/time */}
+        {match.scheduledAt && (
+          <div style={scheduleText}>{formatScheduledAt(match.scheduledAt)}</div>
         )}
-        <span style={teamName}>
-          {match.localTeam}
-          <span style={vsText}>vs</span>
-          {match.visitorTeam}
-        </span>
-        {match.visitorImg && (
-          <img src={match.visitorImg} alt={match.visitorTeam} style={teamImg} onError={hideBrokenImg} />
-        )}
+
+        {/* Team names with the score centered between them (home - away) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {match.localImg && (
+            <img src={match.localImg} alt={match.localTeam} style={teamImg} onError={hideBrokenImg} />
+          )}
+          <span style={teamName}>
+            {match.localTeam}
+            {score ? (
+              <>
+                <span style={scoreText}>{score}</span>
+                <span>{match.visitorTeam}</span>
+              </>
+            ) : (
+              <>
+                <span style={vsText}>vs</span>
+                <span>{match.visitorTeam}</span>
+              </>
+            )}
+          </span>
+          {match.visitorImg && (
+            <img src={match.visitorImg} alt={match.visitorTeam} style={teamImg} onError={hideBrokenImg} />
+          )}
+        </div>
       </div>
 
-      {match.scheduledAt && (
-        <div style={scheduleText}>{formatScheduledAt(match.scheduledAt)}</div>
-      )}
-
-      {/* The history endpoint sanitizes server-side: result/score are null on
-          non-'results' (closed) dates, so this only renders for published
-          dates. No client-side sanitization here — render only when present. */}
-      {match.result && (
-        <div style={resultText}>
-          {match.result}
-          {match.score ? ` (${match.score})` : ''}
+      {/* Far right: the user's own bet for this match (L/E/V), if any */}
+      {bet && (
+        <div
+          style={betBadge}
+          title={bet === 'L' ? 'Local' : bet === 'E' ? 'Empate' : 'Visitante'}
+        >
+          {bet}
         </div>
       )}
     </div>
@@ -148,7 +205,9 @@ function HistoryMatchRow({ match }: { match: MatchDTO }) {
  * Lists every non-open date (the open date is the current betting round
  * rendered above). Expanding a row fetches that date's sanitized history via
  * useMatchHistory and renders read-only match rows: teams only for 'closed'
- * dates (server nulls results), teams + results for 'results' dates.
+ * dates (server nulls results), teams + score for 'results' dates. When the
+ * user has a ticket for the expanded date, each match shows their own bet
+ * (L/E/V) on the right.
  */
 export default function HistorySection() {
   const { data, isLoading, error } = useMatchDates();
@@ -159,6 +218,21 @@ export default function HistorySection() {
   const { data: historyData, isLoading: historyLoading, error: historyError } = useMatchHistory(
     expandedDateId ?? undefined,
   );
+
+  // The user's ticket for the expanded date (reused ticket data). The history
+  // endpoint does not include bets, so the ticket predictions are joined by
+  // matchId to show the user's L/E/V per match.
+  const { data: betsData } = useBets(expandedDateId ?? undefined);
+
+  const betByMatchId = useMemo(() => {
+    const map = new Map<number, Prediction>();
+    for (const ticket of betsData?.tickets ?? []) {
+      for (const tp of ticket.predictions) {
+        map.set(tp.matchId, tp.prediction);
+      }
+    }
+    return map;
+  }, [betsData]);
 
   // "Fechas anteriores": every non-open date, sorted chronologically.
   const dates = (data?.dates ?? [])
@@ -204,11 +278,16 @@ export default function HistorySection() {
                 aria-expanded={expanded}
               >
                 <span>Fecha {date.dateNumber}</span>
-                <span style={{ color: theme.textoSecundario }}>
-                  {statusIcon[date.status] && (
-                    <span aria-hidden="true">{statusIcon[date.status]}</span>
-                  )}{' '}
-                  <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
+                <span style={statusIcons}>
+                  {date.status === 'closed' && (
+                    <span title="Fecha cerrada" aria-hidden="true">🔒</span>
+                  )}
+                  {date.status === 'results' && (
+                    <span title="Fecha pagada" aria-hidden="true">$</span>
+                  )}
+                  <span title="expandir" aria-hidden="true">
+                    {expanded ? '▲' : '▼'}
+                  </span>
                 </span>
               </button>
 
@@ -231,7 +310,11 @@ export default function HistorySection() {
                   )}
 
                   {matches.map((match) => (
-                    <HistoryMatchRow key={match.id} match={match} />
+                    <HistoryMatchRow
+                      key={match.id}
+                      match={match}
+                      bet={betByMatchId.get(match.id)}
+                    />
                   ))}
                 </div>
               )}

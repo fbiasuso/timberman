@@ -61,6 +61,30 @@ describe('DrizzleTournamentRepo', () => {
     expect(loaded?.carryover).toBe(2500);
   });
 
+  it('strips the id: 0 sentinel from save() so the serial PK assigns it', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.insertReturning.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Torneo',
+        commission: '15.00',
+        isActive: true,
+        carryover: 0,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const saved = await repo.save(Tournament.new({ id: 0, name: 'Torneo' }));
+
+    // The snapshot's hardcoded id must never reach the SQL — inserting an
+    // explicit 0 into the serial PK would collide on the second tournament.
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.not.objectContaining({ id: expect.anything() }),
+    );
+    expect(saved.id).toBe(1);
+  });
+
   it('round-trips match date commission (save → load)', async () => {
     const { db, mocks } = createMockDb();
     const row = {

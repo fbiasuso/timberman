@@ -59,4 +59,13 @@ describe('MatchCard', () => {
     expect(betButtons.length).toBeGreaterThan(0);
     expect(betButtons[betButtons.length - 1].getAttribute('data-disabled')).toBe('true');
   });
+
+  it('disables BetButtons with lockBetting without the expired badge', () => {
+    render(<MatchCard match={baseMatch} isExpired={false} lockBetting={true} />);
+    // No closed badge on the card itself
+    expect(screen.queryByText(/Cerrado/)).toBeNull();
+    // But the bet buttons are disabled (user already bet this date)
+    const betButtons = screen.getAllByTestId('bet-buttons');
+    expect(betButtons[betButtons.length - 1].getAttribute('data-disabled')).toBe('true');
+  });
 });

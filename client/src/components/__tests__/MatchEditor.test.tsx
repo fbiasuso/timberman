@@ -165,6 +165,19 @@ describe('MatchEditor', () => {
     expect(screen.getByText('$')).toBeDefined();
   });
 
+  it('orders dates with the active (open) date first, then descending', () => {
+    mockTournaments(tournament([closedDate, openDate, resultsDate]));
+    mockMatchesByDate(openMatches);
+
+    render(<MatchEditor />);
+    const order = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent?.match(/^Fecha (\d+)/)?.[1])
+      .filter((n): n is string => !!n);
+    // Open date (2) on top, then 3 and 1 descending by dateNumber
+    expect(order).toEqual(['2', '3', '1']);
+  });
+
   it('default-expands the open date and shows its matches', () => {
     mockTournaments(tournament([closedDate, openDate, resultsDate]));
     mockMatchesByDate(openMatches);

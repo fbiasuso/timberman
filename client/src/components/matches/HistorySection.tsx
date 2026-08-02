@@ -80,7 +80,7 @@ const scheduleText: React.CSSProperties = {
   marginTop: 2,
 };
 
-/** Right-side icons group: status icon + accordion chevron, spaced apart */
+/** Right-side icons group: status icons + accordion chevron, spaced apart */
 const statusIcons: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -279,11 +279,13 @@ export default function HistorySection() {
               >
                 <span>Fecha {date.dateNumber}</span>
                 <span style={statusIcons}>
-                  {date.status === 'closed' && (
+                  {/* Both closed and results dates are closed for betting; a
+                      results date additionally shows the paid check. */}
+                  {(date.status === 'closed' || date.status === 'results') && (
                     <span title="Fecha cerrada" aria-hidden="true">🔒</span>
                   )}
                   {date.status === 'results' && (
-                    <span title="Fecha pagada" aria-hidden="true">$</span>
+                    <span title="Fecha pagada" aria-hidden="true">✅</span>
                   )}
                   <span title="expandir" aria-hidden="true">
                     {expanded ? '▲' : '▼'}

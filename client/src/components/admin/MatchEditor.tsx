@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAdminTournaments, useCreateDate } from '../../hooks/use-admin';
 import { useMatchesByDate } from '../../hooks/use-matches';
-import type { MatchDateStatus } from '../../types';
 import theme from '../../styles/theme';
 import AddMatchForm from './AddMatchForm';
 import MatchRow from './MatchRow';
@@ -72,13 +71,12 @@ const errorBox: React.CSSProperties = {
   fontSize: 14,
 };
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Icon per date status: lock for closed, $ for published results, none for open */
-const statusIcon: Record<MatchDateStatus, string | null> = {
-  open: null,
-  closed: '🔒',
-  results: '$',
+/** Right-side icons group: status icons + accordion chevron, spaced apart */
+const statusIcons: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  color: theme.textoSecundario,
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -208,11 +206,18 @@ export default function MatchEditor() {
                   aria-expanded={expanded}
                 >
                   <span>Fecha {date.dateNumber}</span>
-                  <span style={{ color: theme.textoSecundario }}>
-                    {statusIcon[date.status] && (
-                      <span aria-hidden="true">{statusIcon[date.status]}</span>
-                    )}{' '}
-                    <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
+                  <span style={statusIcons}>
+                    {/* Both closed and results dates are closed for betting; a
+                        results date additionally shows the paid check. */}
+                    {(date.status === 'closed' || date.status === 'results') && (
+                      <span title="Fecha cerrada" aria-hidden="true">🔒</span>
+                    )}
+                    {date.status === 'results' && (
+                      <span title="Fecha pagada" aria-hidden="true">✅</span>
+                    )}
+                    <span title="expandir" aria-hidden="true">
+                      {expanded ? '▲' : '▼'}
+                    </span>
                   </span>
                 </button>
 

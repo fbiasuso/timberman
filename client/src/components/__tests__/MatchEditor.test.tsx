@@ -152,7 +152,7 @@ describe('MatchEditor', () => {
     expect(screen.getByText('No hay torneos para gestionar partidos.')).toBeDefined();
   });
 
-  it('renders every date as an accordion row with its status icon', () => {
+  it('renders every date as an accordion row with its status icons and tooltips', () => {
     mockTournaments(tournament([closedDate, openDate, resultsDate]));
     mockMatchesByDate(openMatches);
 
@@ -160,9 +160,13 @@ describe('MatchEditor', () => {
     expect(screen.getByText('Fecha 1')).toBeDefined();
     expect(screen.getByText('Fecha 2')).toBeDefined();
     expect(screen.getByText('Fecha 3')).toBeDefined();
-    // Lock icon for the closed date, $ icon for the results date
-    expect(screen.getByText('🔒')).toBeDefined();
-    expect(screen.getByText('$')).toBeDefined();
+    // Lock icon on both closed and results dates, check icon on the paid (results) date
+    expect(screen.getAllByText('🔒').length).toBe(2);
+    expect(screen.getByText('✅')).toBeDefined();
+    // Tooltips: lock on closed + results rows, paid on the results row, chevron on every row
+    expect(screen.getAllByTitle('Fecha cerrada').length).toBe(2);
+    expect(screen.getByTitle('Fecha pagada')).toBeDefined();
+    expect(screen.getAllByTitle('expandir').length).toBe(3);
   });
 
   it('orders dates with the active (open) date first, then descending', () => {

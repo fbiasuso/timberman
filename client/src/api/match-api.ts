@@ -32,4 +32,9 @@ export const matchApi = {
   getMatchesByDate(dateId: number) {
     return client.get<DateMatchesResponse>(`/matches/dates/${dateId}`).then((r) => r.data);
   },
+
+  /** GET /api/matches/dates/:dateId/history — sanitized history for any authenticated user */
+  getHistory(dateId: number) {
+    return client.get<DateMatchesResponse>(`/matches/dates/${dateId}/history`).then((r) => r.data);
+  },
 };

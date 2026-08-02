@@ -99,6 +99,43 @@ export function useCloseDate() {
   });
 }
 
+/** Create the next date for a tournament — invalidates ['admin', 'tournaments'] + ['matches'] */
+export function useCreateDate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: adminApi.createDate,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
+/** Create a match on an open date — invalidates ['admin', 'tournaments'] + ['matches'] */
+export function useCreateMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: adminApi.createMatch,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
+/** Update match details (PATCH) — invalidates ['admin', 'tournaments'] + ['matches'] */
+export function useUpdateMatchDetails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ matchId, ...payload }: { matchId: number } & Parameters<typeof adminApi.updateMatchDetails>[1]) =>
+      adminApi.updateMatchDetails(matchId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+}
+
 /** Publish results for a closed date — invalidates admin, matches, bets and the user's data */
 export function usePublishResults() {
   const qc = useQueryClient();

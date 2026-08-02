@@ -4,6 +4,7 @@ import { usePlaceBet } from '../../hooks/use-bets';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
 import Filters from './Filters';
 import MatchCard from './MatchCard';
+import HistorySection from './HistorySection';
 import TicketModal from '../bets/TicketModal';
 import { formatMoney } from '../../utils/format';
 import type { FilterValue } from './Filters';
@@ -73,11 +74,15 @@ export default function CarteleraPage() {
   // No open date
   if (!data?.matchDate) {
     return (
-      <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
-        <h2 style={{ color: theme.blanco }}>No hay cartelera disponible</h2>
-        <p style={{ fontSize: 14, marginTop: 8 }}>
-          Espera a que el administrador publique una nueva fecha.
-        </p>
+      <div>
+        <div style={{ textAlign: 'center', padding: 48, color: theme.textoSecundario }}>
+          <h2 style={{ color: theme.blanco }}>No hay cartelera disponible</h2>
+          <p style={{ fontSize: 14, marginTop: 8 }}>
+            Espera a que el administrador publique una nueva fecha.
+          </p>
+        </div>
+        {/* Past dates still browsable when no active date exists */}
+        <HistorySection />
       </div>
     );
   }
@@ -316,6 +321,9 @@ export default function CarteleraPage() {
       {ticketModal && (
         <TicketModal ticket={ticketModal} onClose={handleTicketModalClose} />
       )}
+
+      {/* Past dates history — below the active date content */}
+      <HistorySection />
     </div>
   );
 }

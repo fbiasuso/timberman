@@ -22,6 +22,11 @@ import { SetMatchResultUseCase } from '../../../application/admin/set-match-resu
 import { PointsCalculator } from '../../../application/tournament/points-calculator.js';
 import { CloseDateUseCase } from '../../../application/tournament/close-date-use-case.js';
 import { PublishResultsUseCase } from '../../../application/tournament/publish-results-use-case.js';
+import { CreateDateUseCase } from '../../../application/tournament/create-date-use-case.js';
+import type { MatchDateDTO as CreatedMatchDateDTO } from '../../../application/tournament/create-date-use-case.js';
+import { CreateMatchUseCase } from '../../../application/tournament/create-match-use-case.js';
+import { UpdateMatchDetailsUseCase } from '../../../application/tournament/update-match-details-use-case.js';
+import type { MatchDTO as MatchDetailsDTO } from '../../../application/tournament/update-match-details-use-case.js';
 import { PozoCalculator } from '../../../application/betting/pozo-calculator.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
@@ -57,6 +62,96 @@ const updateConfigSchema = z.object({
 const dateParamsSchema = z.object({
   dateId: z.coerce.number().int().positive(),
 });
+
+const createDateSchema = z.object({
+  tournamentId: z.number().int().positive(),
+});
+
+// Shared editable match fields — used by create (all required except the
+// optionals) and by the details PATCH (partial).
+const matchDetailsFields = {
+  localTeam: z.string().min(1),
+  visitorTeam: z.string().min(1),
+  localImg: z.string().nullable().optional(),
+  visitorImg: z.string().nullable().optional(),
+  scheduledAt: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), 'Must be a valid ISO date string')
+    .nullable()
+    .optional(),
+};
+
+const createMatchSchema = z.object({
+  matchDateId: z.number().int().positive(),
+  ...matchDetailsFields,
+});
+
+const updateMatchDetailsSchema = z.object(matchDetailsFields).partial();
+
+// ── DTOs (shape of API responses) ─────────────────────────────────
+
+interface MatchDTO {
+  id: number;
+  matchDateId: number;
+  localTeam: string;
+  visitorTeam: string;
+  localImg: string | null;
+  visitorImg: string | null;
+  scheduledAt: string | null;
+  result: string | null;
+  score: string | null;
+}
+
+interface MatchDateDTO {
+  id: number;
+  tournamentId: number;
+  dateNumber: number;
+  status: string;
+  pozo: number;
+  betAmount: number;
+  commission: number; // percent — snapshot taken at close (0 for a fresh date)
+  carryover: number; // cents — accumulated pozo from unpaid previous dates
+  createdAt: string;
+}
+
+function toMatchDTO(match: MatchDetailsDTO): MatchDTO {
+  return {
+    id: match.id,
+    matchDateId: match.matchDateId,
+    localTeam: match.localTeam,
+    visitorTeam: match.visitorTeam,
+    localImg: match.localImg,
+    visitorImg: match.visitorImg,
+    scheduledAt: match.scheduledAt?.toISOString() ?? null,
+    result: match.result,
+    score: match.score,
+  };
+}
+
+function toMatchDateDTO(md: CreatedMatchDateDTO, carryover: number): MatchDateDTO {
+  return {
+    id: md.id,
+    tournamentId: md.tournamentId,
+    dateNumber: md.dateNumber,
+    status: md.status,
+    pozo: md.pozo,
+    betAmount: md.betAmount,
+    commission: 0, // fresh date — commission is snapshotted at close
+    carryover,
+    createdAt: md.createdAt.toISOString(),
+  };
+}
+
+/**
+ * Convert an ISO `scheduledAt` string from the request body into the use case
+ * input: `undefined` keeps the current value (PATCH), `null` clears it, and a
+ * string becomes a Date (both endpoints).
+ */
+function toDateOrUndefined(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return new Date(value);
+}
 
 // ── Routes ────────────────────────────────────────────────────────
 
@@ -104,6 +199,9 @@ export function createAdminRoutes(
       userRepo,
       uow,
     );
+    const createDateUseCase = new CreateDateUseCase(tournamentRepo, config);
+    const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo);
+    const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
 
     // ── GET /api/admin/users ─────────────────────────────────────
     fastify.get('/api/admin/users', {
@@ -184,6 +282,55 @@ export function createAdminRoutes(
         score: body.score ?? null,
       });
       return reply.send({ match: result });
+    });
+
+    // ── POST /api/admin/dates ──────────────────────────────────────
+    fastify.post('/api/admin/dates', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createDateSchema.parse(request.body);
+      const matchDate = await createDateUseCase.execute({ tournamentId: body.tournamentId });
+
+      // The API DTO carries the parent tournament's carryover (same shape as
+      // the admin date read in match-routes). A fresh date has no commission
+      // snapshot yet.
+      const tournament = await tournamentRepo.findById(body.tournamentId);
+      return reply.status(201).send({
+        matchDate: toMatchDateDTO(matchDate, tournament?.carryover ?? 0),
+      });
+    });
+
+    // ── POST /api/admin/matches ────────────────────────────────────
+    fastify.post('/api/admin/matches', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createMatchSchema.parse(request.body);
+      const match = await createMatchUseCase.execute({
+        matchDateId: body.matchDateId,
+        localTeam: body.localTeam,
+        visitorTeam: body.visitorTeam,
+        localImg: body.localImg,
+        visitorImg: body.visitorImg,
+        scheduledAt: toDateOrUndefined(body.scheduledAt),
+      });
+      return reply.status(201).send({ match: toMatchDTO(match) });
+    });
+
+    // ── PATCH /api/admin/matches/:matchId ──────────────────────────
+    fastify.patch('/api/admin/matches/:matchId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { matchId } = request.params as { matchId: string };
+      const body = updateMatchDetailsSchema.parse(request.body);
+      const match = await updateMatchDetailsUseCase.execute({
+        matchId: Number(matchId),
+        localTeam: body.localTeam,
+        visitorTeam: body.visitorTeam,
+        localImg: body.localImg,
+        visitorImg: body.visitorImg,
+        scheduledAt: toDateOrUndefined(body.scheduledAt),
+      });
+      return reply.send({ match: toMatchDTO(match) });
     });
 
     // ── GET /api/admin/config ────────────────────────────────────

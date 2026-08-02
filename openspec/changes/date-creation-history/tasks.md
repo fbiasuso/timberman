@@ -45,9 +45,9 @@ Chain strategy: pending
 
 ## Phase 3: Server Routes (PR2)
 
-- [ ] 3.1 `admin-routes.ts`: `POST /api/admin/dates` (zod `{tournamentId}`), `POST /api/admin/matches` (createMatchSchema), `PATCH /api/admin/matches/:matchId` (updateMatchDetailsSchema `.partial()`) + error mapping (403/409/422/404). AC: 201/403/422/404/409 route tests. PR2
-- [ ] 3.2 `match-routes.ts`: `GET /api/matches/dates/:dateId/history` auth-only (non-admin OK, 401 no token, 404 unknown) + `sanitizeMatches(status, ...)`. AC: closed→null, results→full via history. PR2
-- [ ] 3.3 Extend `server/src/infrastructure/http/__tests__/api.test.ts`: all 4 endpoints + history sanitization. AC: api suite green. PR2
+- [x] 3.1 `admin-routes.ts`: `POST /api/admin/dates` (zod `{tournamentId}`), `POST /api/admin/matches` (createMatchSchema), `PATCH /api/admin/matches/:matchId` (updateMatchDetailsSchema `.partial()`) + error mapping (403/409/422/404). AC: 201/403/422/404/409 route tests. PR2
+- [x] 3.2 `match-routes.ts`: `GET /api/matches/dates/:dateId/history` auth-only (non-admin OK, 401 no token, 404 unknown) + `sanitizeMatches(status, ...)`. AC: closed→null, results→full via history. PR2
+- [x] 3.3 Extend `server/src/infrastructure/http/__tests__/api.test.ts`: all 4 endpoints + history sanitization. AC: api suite green. PR2
 
 ## Phase 4: Client API + Hooks (PR3)
 

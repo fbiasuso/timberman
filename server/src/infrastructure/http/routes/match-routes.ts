@@ -6,6 +6,7 @@ import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import { MatchDateNotFoundError } from '../../../domain/errors/index.js';
+import { sanitizeMatches } from '../../../application/tournament/sanitize-matches.js';
 
 // ── DTOs (shape of API responses) ─────────────────────────────────
 
@@ -173,6 +174,37 @@ export function createMatchRoutes(
       return reply.send({
         matchDate: toMatchDateDTO(matchDate.toSnapshot(), tournament?.carryover ?? 0),
         matches: matches.map((m) => toMatchDTO(m.toSnapshot())),
+      } satisfies DateMatchesResponse);
+    });
+
+    /**
+     * GET /api/matches/dates/:dateId/history
+     *
+     * Returns a SPECIFIC match date (any status) with its matches for ANY
+     * authenticated user (admin NOT required). Unpublished results are hidden
+     * server-side: on 'closed' dates every match comes back with result/score
+     * null; only 'results' dates (published/paid) expose their stored results.
+     * Admins get the full picture via the admin-only GET /api/matches/dates/:dateId.
+     */
+    fastify.get('/api/matches/dates/:dateId/history', {
+      preHandler: [authMiddleware],
+    }, async (request, reply) => {
+      const { dateId } = dateParamsSchema.parse(request.params);
+
+      const matchDate = await tournamentRepo.findMatchDateById(dateId);
+      if (!matchDate) {
+        throw new MatchDateNotFoundError(dateId);
+      }
+
+      const tournament = await tournamentRepo.findById(matchDate.tournamentId);
+      const matches = await matchRepo.findByMatchDateId(dateId);
+
+      return reply.send({
+        matchDate: toMatchDateDTO(matchDate.toSnapshot(), tournament?.carryover ?? 0),
+        matches: sanitizeMatches(
+          matchDate.status,
+          matches.map((m) => toMatchDTO(m.toSnapshot())),
+        ),
       } satisfies DateMatchesResponse);
     });
   };

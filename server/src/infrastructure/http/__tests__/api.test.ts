@@ -777,4 +777,515 @@ describe('API Integration Tests', () => {
       expect(services.matchRepo.findByMatchDateId).not.toHaveBeenCalled();
     });
   });
+
+  describe('POST /api/admin/dates', () => {
+    const closedDate = MatchDate.create({
+      id: 1,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'closed',
+      pozo: 5000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('creates the next date with auto dateNumber, open status, pozo 0 and config bet amount (201)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 500 }),
+      );
+      vi.mocked(services.tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([closedDate]);
+      vi.mocked(services.tournamentRepo.saveMatchDate).mockImplementation(async (md) =>
+        MatchDate.create({ ...md.toSnapshot(), id: 2 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { tournamentId: 1 },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.matchDate).toMatchObject({
+        id: 2,
+        tournamentId: 1,
+        dateNumber: 2, // max(1) + 1
+        status: 'open',
+        pozo: 0,
+        betAmount: 1500, // from system config
+        carryover: 500,
+      });
+      expect(body.matchDate.createdAt).toEqual(expect.any(String));
+      expect(services.tournamentRepo.saveMatchDate).toHaveBeenCalledOnce();
+    });
+
+    it('rejects with 403 FORBIDDEN for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { tournamentId: 1 },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('FORBIDDEN');
+      expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 409 OPEN_DATE_EXISTS when the tournament already has an open date', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([
+        MatchDate.create({ ...closedDate.toSnapshot(), id: 1, status: 'open', pozo: 0 }),
+      ]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { tournamentId: 1 },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('OPEN_DATE_EXISTS');
+      expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 TOURNAMENT_NOT_FOUND for an unknown tournament', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { tournamentId: 999 },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_FOUND');
+      expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 400 VALIDATION_ERROR when tournamentId is missing', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/admin/matches', () => {
+    const openDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+
+    const closedDate = MatchDate.create({
+      ...openDate.toSnapshot(),
+      status: 'closed',
+      pozo: 5000,
+    });
+
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('creates and persists a match on an open date (201)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
+        Match.create({ ...m.toSnapshot(), id: 1 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'River Plate',
+          visitorTeam: 'Boca Juniors',
+          localImg: 'river.png',
+          scheduledAt: '2026-08-02T20:00:00Z',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        id: 1,
+        matchDateId: 10,
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+        localImg: 'river.png',
+        scheduledAt: '2026-08-02T20:00:00.000Z',
+        result: null,
+        score: null,
+      });
+      expect(services.matchRepo.save).toHaveBeenCalledOnce();
+      const saved = vi.mocked(services.matchRepo.save).mock.calls[0][0];
+      expect(saved.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z'));
+    });
+
+    it('rejects with 422 DATE_NOT_OPEN when the parent date is closed', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, localTeam: 'A', visitorTeam: 'B' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('DATE_NOT_OPEN');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 MATCH_DATE_NOT_FOUND for an unknown date', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 999, localTeam: 'A', visitorTeam: 'B' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_DATE_NOT_FOUND');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 FORBIDDEN for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, localTeam: 'A', visitorTeam: 'B' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('FORBIDDEN');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 400 VALIDATION_ERROR for an invalid scheduledAt', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'River Plate',
+          visitorTeam: 'Boca Juniors',
+          scheduledAt: 'not-a-date',
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /api/admin/matches/:matchId', () => {
+    const openDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+
+    const closedDate = MatchDate.create({
+      ...openDate.toSnapshot(),
+      status: 'closed',
+      pozo: 5000,
+    });
+
+    const matchWithDetails = Match.create({
+      id: 1,
+      matchDateId: 10,
+      localTeam: 'River Plate',
+      visitorTeam: 'Boca Juniors',
+      localImg: 'river.png',
+      visitorImg: 'boca.png',
+      scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      result: null,
+      score: null,
+      createdAt: new Date(),
+    });
+
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('applies a partial details update and returns the match (200)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { visitorTeam: 'Gimnasia' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        id: 1,
+        localTeam: 'River Plate', // untouched
+        visitorTeam: 'Gimnasia', // changed
+        localImg: 'river.png',
+        scheduledAt: '2026-08-02T20:00:00.000Z',
+      });
+      expect(services.matchRepo.update).toHaveBeenCalledOnce();
+      const saved = vi.mocked(services.matchRepo.update).mock.calls[0][0];
+      expect(saved.visitorTeam).toBe('Gimnasia');
+    });
+
+    it('rejects with 422 DATE_NOT_OPEN when the parent date is closed', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeam: 'Racing' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('DATE_NOT_OPEN');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 MATCH_NOT_FOUND for an unknown match', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/999',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeam: 'Racing' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_NOT_FOUND');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 403 FORBIDDEN for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { visitorTeam: 'Gimnasia' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('FORBIDDEN');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/matches/dates/:dateId/history', () => {
+    const closedDate = MatchDate.create({
+      id: 10,
+      tournamentId: 1,
+      dateNumber: 1,
+      status: 'closed',
+      pozo: 6000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+
+    const resultsDate = MatchDate.create({
+      ...closedDate.toSnapshot(),
+      status: 'results',
+    });
+
+    const matchesWithResults = [
+      Match.new({ id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca' })
+        .setResult('L', '2-0'),
+      Match.new({ id: 2, matchDateId: 10, localTeam: 'Racing', visitorTeam: 'Independiente' })
+        .setResult('V', '1-0'),
+    ];
+
+    function mockUser() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    it('returns the date with sanitized matches for a non-admin (closed → result/score null)', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(closedDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 500 }),
+      );
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/10/history',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.matchDate).toMatchObject({ id: 10, status: 'closed', carryover: 500 });
+      expect(body.matches).toHaveLength(2);
+      // Unpublished results are hidden server-side, teams stay visible
+      expect(body.matches[0]).toMatchObject({ id: 1, localTeam: 'River Plate', result: null, score: null });
+      expect(body.matches[1]).toMatchObject({ id: 2, localTeam: 'Racing', result: null, score: null });
+    });
+
+    it('returns full results for a published (results) date', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(resultsDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue(matchesWithResults);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/10/history',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.matchDate.status).toBe('results');
+      expect(body.matches).toHaveLength(2);
+      expect(body.matches[0]).toMatchObject({ id: 1, result: 'L', score: '2-0' });
+      expect(body.matches[1]).toMatchObject({ id: 2, result: 'V', score: '1-0' });
+    });
+
+    it('returns 401 UNAUTHORIZED without a token', async () => {
+      vi.clearAllMocks();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/10/history',
+      });
+
+      expect(res.statusCode).toBe(401);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('UNAUTHORIZED');
+      expect(services.tournamentRepo.findMatchDateById).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 MATCH_DATE_NOT_FOUND for an unknown date', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates/999/history',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_DATE_NOT_FOUND');
+    });
+  });
 });

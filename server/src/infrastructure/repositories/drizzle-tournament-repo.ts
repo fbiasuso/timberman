@@ -83,9 +83,12 @@ export class DrizzleTournamentRepo implements TournamentRepo {
 
   async save(tournament: Tournament): Promise<Tournament> {
     const snap = tournament.toSnapshot();
+    // New tournaments carry the id: 0 sentinel — omit it so the serial PK
+    // assigns the id. Inserting an explicit 0 would collide on the second row.
+    const { id: _ignored, ...values } = snap;
     const [row] = await this.db
       .insert(schema.tournaments)
-      .values(snap as any)
+      .values(values as any)
       .returning();
     return Tournament.create({
       id: row.id,

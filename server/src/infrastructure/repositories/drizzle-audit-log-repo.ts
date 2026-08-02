@@ -10,9 +10,12 @@ export class DrizzleAuditLogRepo implements AuditLogRepo {
 
   async save(log: AuditLog): Promise<AuditLog> {
     const snap = log.toSnapshot();
+    // New audit logs carry the id: 0 sentinel — omit it so the serial PK
+    // assigns the id. Inserting an explicit 0 would collide on the second row.
+    const { id: _ignored, ...values } = snap;
     const [row] = await this.db
       .insert(schema.auditLogs)
-      .values(snap as any)
+      .values(values as any)
       .returning();
     return AuditLog.create(row as unknown as AuditLogSnapshot);
   }

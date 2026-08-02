@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import MatchEditor from '../admin/MatchEditor';
 import type { AdminTournamentDTO, TournamentDateDTO } from '../../api/admin-api';
 
@@ -20,6 +20,12 @@ vi.mock('../../hooks/use-admin', () => ({
   }),
   useCreateMatch: () => ({
     mutate: createMatchMutate,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useUpdateMatchDetails: () => ({
+    mutate: vi.fn(),
     isPending: false,
     isError: false,
     error: null,
@@ -165,11 +171,11 @@ describe('MatchEditor', () => {
 
     render(<MatchEditor />);
     expect(vi.mocked(useMatchesByDate)).toHaveBeenCalledWith(openDate.id);
-    // Team names render across nested nodes ("River Plate" <span>vs</span> "Boca Juniors")
-    expect(screen.getByText(/River Plate/)).toBeDefined();
-    expect(screen.getByText(/Boca Juniors/)).toBeDefined();
-    expect(screen.getByText(/Racing/)).toBeDefined();
-    expect(screen.getByText(/Independiente/)).toBeDefined();
+    // Open-date rows are editable: teams render as input values
+    expect(screen.getByDisplayValue('River Plate')).toBeDefined();
+    expect(screen.getByDisplayValue('Boca Juniors')).toBeDefined();
+    expect(screen.getByDisplayValue('Racing')).toBeDefined();
+    expect(screen.getByDisplayValue('Independiente')).toBeDefined();
   });
 
   it('collapses the open date when its header is clicked again', () => {
@@ -178,12 +184,12 @@ describe('MatchEditor', () => {
 
     render(<MatchEditor />);
     // Default-expanded open date
-    expect(screen.getByText(/River Plate/)).toBeDefined();
+    expect(screen.getByDisplayValue('River Plate')).toBeDefined();
 
     // Clicking the open-date header collapses it (user interaction wins over default)
     fireEvent.click(screen.getByRole('button', { name: /Fecha 2/ }));
 
-    expect(screen.queryByText(/River Plate/)).toBeNull();
+    expect(screen.queryByDisplayValue('River Plate')).toBeNull();
     expect(vi.mocked(useMatchesByDate)).toHaveBeenLastCalledWith(undefined);
   });
 
@@ -193,7 +199,7 @@ describe('MatchEditor', () => {
     render(<MatchEditor />);
     // No open date → no default expansion → the per-date query stays disabled
     expect(vi.mocked(useMatchesByDate)).toHaveBeenCalledWith(undefined);
-    expect(screen.queryByText(/River Plate/)).toBeNull();
+    expect(screen.queryByDisplayValue('River Plate')).toBeNull();
     expect(screen.queryByText('Agregar partido')).toBeNull();
   });
 
@@ -260,8 +266,14 @@ describe('MatchEditor', () => {
     mockMatchesByDate(openMatches);
 
     render(<MatchEditor />);
-    fireEvent.change(screen.getByLabelText('Equipo Local'), { target: { value: 'San Lorenzo' } });
-    fireEvent.change(screen.getByLabelText('Equipo Visitante'), { target: { value: 'Huracán' } });
+    // Scope to the add-match form — the editable MatchRow inputs share label names
+    const form = screen.getByText('Agregar partido').closest('form') as HTMLElement;
+    fireEvent.change(within(form).getByLabelText('Equipo Local'), {
+      target: { value: 'San Lorenzo' },
+    });
+    fireEvent.change(within(form).getByLabelText('Equipo Visitante'), {
+      target: { value: 'Huracán' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Crear partido/ }));
 
     expect(createMatchMutate).toHaveBeenCalledWith(
@@ -282,8 +294,13 @@ describe('MatchEditor', () => {
     mockMatchesByDate(openMatches);
 
     const view = render(<MatchEditor />);
-    fireEvent.change(screen.getByLabelText('Equipo Local'), { target: { value: 'San Lorenzo' } });
-    fireEvent.change(screen.getByLabelText('Equipo Visitante'), { target: { value: 'Huracán' } });
+    const form = screen.getByText('Agregar partido').closest('form') as HTMLElement;
+    fireEvent.change(within(form).getByLabelText('Equipo Local'), {
+      target: { value: 'San Lorenzo' },
+    });
+    fireEvent.change(within(form).getByLabelText('Equipo Visitante'), {
+      target: { value: 'Huracán' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Crear partido/ }));
 
     // The create succeeds server-side; the invalidated per-date query refetches
@@ -293,8 +310,16 @@ describe('MatchEditor', () => {
     ]);
     view.rerender(<MatchEditor />);
 
-    expect(screen.getByText(/San Lorenzo/)).toBeDefined();
-    expect(screen.getByText(/Huracán/)).toBeDefined();
+    // The new match renders as an editable row → team names are input values
+    // (scoped to the new row: the add-match form keeps its typed values)
+    const newRowLocal = screen.getByLabelText('Equipo Local', {
+      selector: '#row-local-13',
+    }) as HTMLInputElement;
+    const newRowVisitor = screen.getByLabelText('Equipo Visitante', {
+      selector: '#row-visitor-13',
+    }) as HTMLInputElement;
+    expect(newRowLocal.value).toBe('San Lorenzo');
+    expect(newRowVisitor.value).toBe('Huracán');
   });
 
   it('shows a loading message while the expanded date matches are loading', () => {

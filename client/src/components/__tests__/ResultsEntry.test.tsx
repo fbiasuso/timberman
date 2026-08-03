@@ -53,6 +53,7 @@ const openDate: TournamentDateDTO = {
   dateNumber: 3,
   status: 'open',
   pozo: 0,
+  betAmount: 1500,
   commission: 15,
   winners: [],
 };
@@ -62,6 +63,7 @@ const closedDate: TournamentDateDTO = {
   dateNumber: 4,
   status: 'closed',
   pozo: 5700,
+  betAmount: 1500,
   commission: 10,
   winners: [],
 };
@@ -71,6 +73,7 @@ const resultsDate: TournamentDateDTO = {
   dateNumber: 5,
   status: 'results',
   pozo: 1000,
+  betAmount: 1500,
   commission: 15,
   winners: [
     { ticketId: 7, userId: 'u1', username: 'ana', prize: 334 },
@@ -242,6 +245,7 @@ describe('ResultsEntry', () => {
       dateNumber: 1,
       status: 'open',
       pozo: 0,
+      betAmount: 1500,
       commission: 15,
       winners: [],
     };

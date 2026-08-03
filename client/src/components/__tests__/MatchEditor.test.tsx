@@ -72,6 +72,7 @@ const closedDate: TournamentDateDTO = {
   dateNumber: 1,
   status: 'closed',
   pozo: 5700,
+  betAmount: 1500,
   commission: 10,
   winners: [],
 };
@@ -81,6 +82,7 @@ const openDate: TournamentDateDTO = {
   dateNumber: 2,
   status: 'open',
   pozo: 0,
+  betAmount: 2000,
   commission: 10,
   winners: [],
 };
@@ -90,6 +92,7 @@ const resultsDate: TournamentDateDTO = {
   dateNumber: 3,
   status: 'results',
   pozo: 1000,
+  betAmount: 1500,
   commission: 10,
   winners: [],
 };
@@ -157,9 +160,9 @@ describe('MatchEditor', () => {
     mockMatchesByDate(openMatches);
 
     render(<MatchEditor />);
-    expect(screen.getByText('Fecha 1')).toBeDefined();
-    expect(screen.getByText('Fecha 2')).toBeDefined();
-    expect(screen.getByText('Fecha 3')).toBeDefined();
+    expect(screen.getByText(/^Fecha 1 ·/)).toBeDefined();
+    expect(screen.getByText(/^Fecha 2 ·/)).toBeDefined();
+    expect(screen.getByText(/^Fecha 3 ·/)).toBeDefined();
     // Lock icon on both closed and results dates, check icon on the paid (results) date
     expect(screen.getAllByText('🔒').length).toBe(2);
     expect(screen.getByText('✅')).toBeDefined();
@@ -240,12 +243,12 @@ describe('MatchEditor', () => {
       tournament([
         closedDate,
         resultsDate,
-        { id: 4, dateNumber: 4, status: 'open', pozo: 0, commission: 10, winners: [] },
+        { id: 4, dateNumber: 4, status: 'open', pozo: 0, betAmount: 1500, commission: 10, winners: [] },
       ]),
     );
     view.rerender(<MatchEditor />);
 
-    expect(screen.getByText('Fecha 4')).toBeDefined();
+    expect(screen.getByText(/^Fecha 4 ·/)).toBeDefined();
   });
 
   it('expanding a closed date loads its matches read-only with results', () => {
@@ -349,5 +352,16 @@ describe('MatchEditor', () => {
 
     render(<MatchEditor />);
     expect(screen.getByText('Cargando partidos...')).toBeDefined();
+  });
+
+  it('shows the per-date bet amount next to the date number (cents → pesos)', () => {
+    mockTournaments(tournament([closedDate, openDate, resultsDate]));
+    mockMatchesByDate([]);
+
+    render(<MatchEditor />);
+    // 2000 cents → $20,00 ; 1500 cents → $15,00 (Argentine comma decimal)
+    expect(screen.getByText('Fecha 2 · $20,00')).toBeDefined();
+    expect(screen.getByText('Fecha 3 · $15,00')).toBeDefined();
+    expect(screen.getByText('Fecha 1 · $15,00')).toBeDefined();
   });
 });

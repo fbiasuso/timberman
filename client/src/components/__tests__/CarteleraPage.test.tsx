@@ -7,6 +7,7 @@ import CarteleraPage from '../matches/CarteleraPage';
 
 const mockMatchesData = {
   matchDate: { id: 10, dateNumber: 3, status: 'open', pozo: 0, betAmount: 1500 },
+  tournamentName: 'Torneo 1',
   matches: [
     { id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors', localImg: null, visitorImg: null, scheduledAt: null, result: null, score: null },
     { id: 2, matchDateId: 10, localTeam: 'Racing', visitorTeam: 'Independiente', localImg: null, visitorImg: null, scheduledAt: null, result: null, score: null },
@@ -193,7 +194,7 @@ describe('CarteleraPage', () => {
         <CarteleraPage />
       </MemoryRouter>
     );
-    expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
+    expect(screen.getByText(/Torneo 1 — Fecha 3/)).toBeDefined();
   });
 
   it('shows the pay button when date is open', () => {
@@ -281,7 +282,7 @@ describe('CarteleraPage', () => {
       </MemoryRouter>
     );
     // Active content first, then the history section
-    expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
+    expect(screen.getByText(/Torneo 1 — Fecha 3/)).toBeDefined();
     expect(screen.getByText('Fechas anteriores')).toBeDefined();
     expect(screen.getByText('Fecha 1')).toBeDefined();
     expect(screen.getByText('Fecha 2')).toBeDefined();
@@ -370,7 +371,7 @@ describe('CarteleraPage', () => {
       </MemoryRouter>
     );
     // The date still renders, but no new bet can be picked
-    expect(screen.getByText(/Cartelera — Fecha 3/)).toBeDefined();
+    expect(screen.getByText(/Torneo 1 — Fecha 3/)).toBeDefined();
     expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
     expect(screen.getByText('ya hiciste tu jugada - ver ticket')).toBeDefined();
   });

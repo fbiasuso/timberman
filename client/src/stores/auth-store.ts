@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { UserDTO } from '../api/auth-api';
+import { useBetSlipStore } from './bet-slip-store';
 
 interface AuthState {
   /** JWT token — persists to localStorage */
@@ -30,6 +31,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem('auth-token');
+    // The bet-slip store is persisted per browser, not per user. Wipe any
+    // selections left by this user so the next user on this device starts
+    // clean. Runs on explicit logout AND on session-expiry auto-logout.
+    useBetSlipStore.getState().reset();
+    useBetSlipStore.persist.clearStorage();
     set({ token: null, user: null, isAuthenticated: false });
   },
 }));

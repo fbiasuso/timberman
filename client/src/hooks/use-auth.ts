@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/auth-api';
 import { useAuthStore } from '../stores/auth-store';
+import { useBetSlipStore } from '../stores/bet-slip-store';
 
 /** Login mutation — stores token + user on success */
 export function useLogin() {
@@ -12,6 +13,11 @@ export function useLogin() {
       authApi.login(username, password).then((r) => r.data),
     onSuccess: (data) => {
       setAuth(data.token, data.user);
+      // The bet-slip store is persisted per browser, not per user — clear any
+      // selections left by a previous user on this device (covers a direct
+      // login when the previous session did not go through logout).
+      useBetSlipStore.getState().reset();
+      useBetSlipStore.persist.clearStorage();
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },
   });
@@ -55,6 +61,7 @@ export function useLogout() {
   const queryClient = useQueryClient();
 
   return () => {
+    // logout() also wipes the persisted bet-slip (per-browser store).
     logout();
     queryClient.clear();
   };

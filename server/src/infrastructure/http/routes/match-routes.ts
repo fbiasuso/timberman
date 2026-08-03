@@ -38,6 +38,7 @@ interface CurrentDateResponse {
   matchDate: MatchDateDTO | null;
   matches: MatchDTO[];
   carryover: number; // cents — accumulated pozo from unpaid previous dates
+  tournamentName: string;
 }
 
 interface DatesResponse {
@@ -103,7 +104,7 @@ export function createMatchRoutes(
     }, async (_request, _reply) => {
       const openDates = await tournamentRepo.findOpenMatchDates();
       if (openDates.length === 0) {
-        return { matchDate: null, matches: [], carryover: 0 } satisfies CurrentDateResponse;
+        return { matchDate: null, matches: [], carryover: 0, tournamentName: 'Torneo' } satisfies CurrentDateResponse;
       }
 
       // Use the most recent open date
@@ -119,6 +120,7 @@ export function createMatchRoutes(
         matchDate: toMatchDateDTO(snap, tournament?.carryover ?? 0),
         matches: matches.map((m) => toMatchDTO(m.toSnapshot())),
         carryover: tournament?.carryover ?? 0,
+        tournamentName: tournament?.name ?? 'Torneo',
       } satisfies CurrentDateResponse;
     });
 

@@ -171,7 +171,7 @@ export default function CarteleraPage() {
     <div>
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ margin: 0, fontSize: 22, color: theme.blanco }}>
-          Cartelera — Fecha {matchDate.dateNumber}
+          Torneo {data.tournamentName} — Fecha {matchDate.dateNumber}
         </h2>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
           {matchDate.status === 'open'

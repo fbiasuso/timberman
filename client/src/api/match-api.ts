@@ -6,6 +6,8 @@ export interface CurrentDateResponse {
   matches: MatchDTO[];
   /** Cents — unpaid pozo accumulated from previous dates without winners */
   carryover: number;
+  /** Name of the parent tournament (for the cartelera header) */
+  tournamentName: string;
 }
 
 export interface DatesResponse {

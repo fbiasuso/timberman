@@ -44,12 +44,16 @@ vi.mock('../../hooks/use-bets', () => ({
   })),
 }));
 
+const { mockStorePredictions } = vi.hoisted(() => ({ mockStorePredictions: {} as Record<string, string> }));
+
 vi.mock('../../stores/bet-slip-store', () => ({
   useBetSlipStore: vi.fn((selector: any) => {
     const state = {
-      predictions: {},
+      predictions: mockStorePredictions,
       setPrediction: vi.fn(),
-      removePrediction: vi.fn(),
+      removePrediction: (id: string) => {
+        delete mockStorePredictions[id];
+      },
       reset: vi.fn(),
       getPredictions: () => ({}),
       count: () => 0,
@@ -91,6 +95,8 @@ import { useBets } from '../../hooks/use-bets';
 
 afterEach(() => {
   cleanup();
+  // vi.hoisted values are constants — mutate the object, don't reassign.
+  Object.keys(mockStorePredictions).forEach((k) => delete mockStorePredictions[k]);
   vi.mocked(useMatchDates).mockReset();
   vi.mocked(useMatchDates).mockReturnValue({
     data: { dates: [] },
@@ -459,5 +465,63 @@ describe('CarteleraPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /ver ticket/ }));
 
     expect(screen.getByTestId('location').textContent).toBe('/tickets?matchDateId=10');
+  });
+
+  it('keeps persisted predictions while the cartelera is still loading', () => {
+    // Fresh page load: the query has not resolved yet, so data is undefined.
+    // The cleanup must NOT run against an empty match set or it would wipe the
+    // user's in-progress selections on every refresh.
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: undefined, isLoading: true, error: null } as any);
+    mockStorePredictions['1'] = 'L';
+    mockStorePredictions['2'] = 'E';
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+
+    expect(mockStorePredictions['1']).toBe('L');
+    expect(mockStorePredictions['2']).toBe('E');
+  });
+
+  it('ignores orphaned predictions from previous dates in the pay button counter', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    // The persisted store still holds predictions for matches 99/100 (old date);
+    // only matches 1/2/3 belong to the active date.
+    mockStorePredictions['99'] = 'L';
+    mockStorePredictions['100'] = 'V';
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+
+    // Counter shows the real ratio (0/3), not 2/3, and the button stays disabled.
+    expect(screen.getByText(/Pagar Jugada \(0\/3\)/)).toBeDefined();
+    expect(
+      (screen.getByRole('button', { name: /Pagar Jugada/ }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it('enables the pay button only when every active match has a prediction, ignoring orphans', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
+    // One orphan from a previous date + predictions for all three active matches.
+    mockStorePredictions['99'] = 'L';
+    mockStorePredictions['1'] = 'L';
+    mockStorePredictions['2'] = 'E';
+    mockStorePredictions['3'] = 'V';
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Pagar Jugada \(3\/3\)/)).toBeDefined();
+    expect(
+      (screen.getByRole('button', { name: /Pagar Jugada/ }) as HTMLButtonElement).disabled
+    ).toBe(false);
   });
 });

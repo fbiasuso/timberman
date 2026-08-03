@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCurrentMatches } from '../../hooks/use-matches';
 import { usePlaceBet, useBets } from '../../hooks/use-bets';
@@ -22,6 +22,7 @@ export default function CarteleraPage() {
   const { data, isLoading, error } = useCurrentMatches();
   const placeBet = usePlaceBet();
   const predictions = useBetSlipStore((s) => s.predictions);
+  const removePrediction = useBetSlipStore((s) => s.removePrediction);
   const reset = useBetSlipStore((s) => s.reset);
   const navigate = useNavigate();
 
@@ -36,6 +37,28 @@ export default function CarteleraPage() {
 
   // Derived data — must run before any early return to respect the Rules of Hooks
   const matches = data?.matches ?? [];
+
+  // Clean stale predictions from previous dates out of the persisted bet-slip
+  // store. The store is global and survives between dates, so a match id that
+  // is not part of the current date is orphaned and must be dropped — otherwise
+  // the counter shows impossible ratios like 4/3 and the pay button stays
+  // disabled forever. The effect keyed on the match ids runs whenever the
+  // active date (or its match list) changes.
+  const activeMatchIds = useMemo(() => {
+    return new Set(matches.map((m) => m.id.toString()));
+  }, [matches]);
+
+  useEffect(() => {
+    // Only clean when we have an authoritative match list for an active date.
+    // During loading/error/no-date renders `matches` is [] and an empty
+    // activeMatchIds would wipe every persisted prediction on refresh.
+    if (!data?.matchDate) return;
+    for (const matchId of Object.keys(predictions)) {
+      if (!activeMatchIds.has(matchId)) {
+        removePrediction(matchId);
+      }
+    }
+  }, [activeMatchIds, predictions, removePrediction, data]);
 
   // Filtered matches
   const filteredMatches = useMemo(() => {
@@ -116,7 +139,7 @@ export default function CarteleraPage() {
   const carryover = data.carryover ?? 0;
 
   const totalMatches = matches.length;
-  const predictedCount = Object.keys(predictions).length;
+  const predictedCount = Object.keys(predictions).filter((id) => activeMatchIds.has(id)).length;
   const allPredicted = totalMatches > 0 && predictedCount === totalMatches;
 
   // Handle confirm and place bet
@@ -124,8 +147,11 @@ export default function CarteleraPage() {
     placeBet.mutate(
       {
         matchDateId,
+        // Only send predictions for matches of the active date; the persisted
+        // store may still hold orphaned ids from a previous date until the
+        // cleanup effect runs.
         predictions: Object.fromEntries(
-          Object.entries(predictions).map(([id, pred]) => [id, pred]),
+          Object.entries(predictions).filter(([id]) => activeMatchIds.has(id)),
         ) as Record<string, 'L' | 'E' | 'V'>,
       },
       {

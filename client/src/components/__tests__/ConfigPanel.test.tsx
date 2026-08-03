@@ -147,8 +147,8 @@ describe('ConfigPanel — propagation results for defaultBetAmount', () => {
     updateConfigState.data = {
       config: { commission: 10, allowRegistration: true, defaultBetAmount: 500 },
       updatedDates: [
-        { id: 46, dateNumber: 46 },
-        { id: 47, dateNumber: 47 },
+        { id: 46, dateNumber: 46, betAmount: 500 },
+        { id: 47, dateNumber: 47, betAmount: 500 },
       ],
       blockedDates: [],
     };
@@ -173,8 +173,8 @@ describe('ConfigPanel — propagation results for defaultBetAmount', () => {
     updateConfigState.variables = { key: 'defaultBetAmount', value: 500 };
     updateConfigState.data = {
       config: { commission: 10, allowRegistration: true, defaultBetAmount: 500 },
-      updatedDates: [{ id: 46, dateNumber: 46 }],
-      blockedDates: [{ id: 45, dateNumber: 45 }],
+      updatedDates: [{ id: 46, dateNumber: 46, betAmount: 500 }],
+      blockedDates: [{ id: 45, dateNumber: 45, betAmount: 1500 }],
     };
     view.rerender(<ConfigPanel />);
 
@@ -196,8 +196,8 @@ describe('ConfigPanel — propagation results for defaultBetAmount', () => {
       config: { commission: 10, allowRegistration: true, defaultBetAmount: 500 },
       updatedDates: [],
       blockedDates: [
-        { id: 45, dateNumber: 45 },
-        { id: 44, dateNumber: 44 },
+        { id: 45, dateNumber: 45, betAmount: 1500 },
+        { id: 44, dateNumber: 44, betAmount: 1500 },
       ],
     };
     view.rerender(<ConfigPanel />);

@@ -54,6 +54,8 @@ export interface AdminConfigDTO {
 export interface DatePropagationResult {
   id: number;
   dateNumber: number;
+  /** Cents — new amount for updated dates, unchanged amount for blocked dates */
+  betAmount: number;
 }
 
 /** Full PATCH /api/admin/config response body */

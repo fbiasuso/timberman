@@ -294,7 +294,7 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.config.defaultBetAmount).toBe(500);
-      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46 }]);
+      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46, betAmount: 500 }]);
       expect(body.blockedDates).toEqual([]);
       // The persisted date carries the new amount
       const saved = vi.mocked(services.tournamentRepo.updateMatchDate).mock.calls[0][0];
@@ -319,8 +319,9 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.config.defaultBetAmount).toBe(500);
-      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46 }]);
-      expect(body.blockedDates).toEqual([{ id: 45, dateNumber: 45 }]);
+      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46, betAmount: 500 }]);
+      // Blocked date keeps its current (unchanged) amount — 1500
+      expect(body.blockedDates).toEqual([{ id: 45, dateNumber: 45, betAmount: 1500 }]);
       // Only the ticket-free date is persisted — the ticketed one keeps its amount
       expect(services.tournamentRepo.updateMatchDate).toHaveBeenCalledTimes(1);
     });

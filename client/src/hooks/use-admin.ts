@@ -151,13 +151,14 @@ export function usePublishResults() {
   });
 }
 
-/** Update system config — invalidates ['admin', 'config'] */
+/** Update system config — invalidates ['admin', 'config'] + ['admin', 'tournaments'] (Partidos refresh) */
 export function useUpdateConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: adminApi.updateConfig,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'config'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
     },
   });
 }

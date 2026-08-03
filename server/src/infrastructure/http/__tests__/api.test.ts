@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { UserRepo } from '../../../domain/ports/user-repo.js';
 import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
@@ -229,6 +229,151 @@ describe('API Integration Tests', () => {
       expect(regBody.error).toBe('REGISTRATION_DISABLED');
 
       services.config.allowRegistration = true; // restore for other tests
+    });
+  });
+
+  describe('PATCH /api/admin/config — defaultBetAmount propagation', () => {
+    const freeDate = MatchDate.create({
+      id: 46,
+      tournamentId: 1,
+      dateNumber: 46,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+    const ticketedDate = MatchDate.create({
+      id: 45,
+      tournamentId: 1,
+      dateNumber: 45,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    afterEach(() => {
+      // UpdateConfigUseCase publishes to the SHARED config reference — restore
+      // the original values so later tests (close, create-date) read 15%/1500.
+      services.config.commission = 15;
+      services.config.allowRegistration = true;
+      services.config.defaultBetAmount = 1500;
+    });
+
+    function mockOpenDates(dates: typeof freeDate[]) {
+      vi.mocked(services.tournamentRepo.findOpenMatchDates).mockResolvedValue(dates);
+      vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockImplementation(
+        async (id) => dates.find((d) => d.id === id) ?? null,
+      );
+      vi.mocked(services.tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    }
+
+    it('propagates the new amount to ticket-free open dates and returns the full response shape (200)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockOpenDates([freeDate]);
+      vi.mocked(services.ticketRepo.countByMatchDateId).mockResolvedValue(0);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/config',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { key: 'defaultBetAmount', value: 500 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.config.defaultBetAmount).toBe(500);
+      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46, betAmount: 500 }]);
+      expect(body.blockedDates).toEqual([]);
+      // The persisted date carries the new amount
+      const saved = vi.mocked(services.tournamentRepo.updateMatchDate).mock.calls[0][0];
+      expect(saved.betAmount.cents).toBe(500);
+    });
+
+    it('reports ticketed open dates as blocked in a 200 partial success (never 4xx)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockOpenDates([freeDate, ticketedDate]);
+      vi.mocked(services.ticketRepo.countByMatchDateId).mockImplementation(async (id) =>
+        id === 45 ? 3 : 0,
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/config',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { key: 'defaultBetAmount', value: 500 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.config.defaultBetAmount).toBe(500);
+      expect(body.updatedDates).toEqual([{ id: 46, dateNumber: 46, betAmount: 500 }]);
+      // Blocked date keeps its current (unchanged) amount — 1500
+      expect(body.blockedDates).toEqual([{ id: 45, dateNumber: 45, betAmount: 1500 }]);
+      // Only the ticket-free date is persisted — the ticketed one keeps its amount
+      expect(services.tournamentRepo.updateMatchDate).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes both audit rows for the propagation', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockOpenDates([freeDate, ticketedDate]);
+      vi.mocked(services.ticketRepo.countByMatchDateId).mockImplementation(async (id) =>
+        id === 45 ? 3 : 0,
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/config',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { key: 'defaultBetAmount', value: 500 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(services.auditLogRepo.save).toHaveBeenCalledTimes(2);
+      const [configAudit, propagationAudit] = vi
+        .mocked(services.auditLogRepo.save)
+        .mock.calls.map((c) => c[0]);
+      expect(configAudit.action).toBe('default_bet_amount_update');
+      expect(configAudit.amount?.cents).toBe(500);
+      expect(configAudit.adminId).toBe('admin-1');
+      expect(propagationAudit.action).toBe('default_bet_amount_propagation');
+      expect(propagationAudit.amount?.cents).toBe(500);
+      // The propagation row ALWAYS carries the JSON reason (both keys present)
+      expect(JSON.parse(propagationAudit.reason as string)).toEqual({ changed: [46], blocked: [45] });
+    });
+
+    it('returns empty propagation arrays for a non-defaultBetAmount key', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/config',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { key: 'commission', value: 20 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.config.commission).toBe(20);
+      expect(body.updatedDates).toEqual([]);
+      expect(body.blockedDates).toEqual([]);
+      // The propagation use case is never invoked for other keys
+      expect(services.tournamentRepo.findOpenMatchDates).not.toHaveBeenCalled();
+      expect(services.auditLogRepo.save).not.toHaveBeenCalled();
     });
   });
 

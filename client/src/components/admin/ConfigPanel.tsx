@@ -62,7 +62,40 @@ const btnDisabled: React.CSSProperties = {
   color: theme.textoSecundario,
 };
 
+/** Grouped propagation feedback — green for saved/updated, red for blocked */
+const successBox: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '10px 16px',
+  background: 'rgba(0,168,38,0.15)',
+  border: '1px solid rgba(0,168,38,0.4)',
+  color: theme.verdeBet,
+  borderRadius: 8,
+  fontSize: 14,
+};
+
+const errorBox: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '10px 16px',
+  background: theme.dangerBg,
+  border: '1px solid rgba(255,77,77,0.4)',
+  color: theme.rojo,
+  borderRadius: 8,
+  fontSize: 14,
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
+
+/**
+ * Format integer cents as Argentine-style pesos: 500 → "$5,00" (comma as the
+ * decimal separator, per the client's Rioplatense user-facing copy).
+ */
+function formatPesos(cents: number): string {
+  return `$${(cents / 100).toFixed(2).replace('.', ',')}`;
+}
 
 /**
  * Convert a pesos amount string to integer cents (the server contract).
@@ -246,6 +279,40 @@ export default function ConfigPanel() {
               ? '✓ Configuración Guardada'
               : 'Guardar Configuración'}
         </button>
+
+        {/* Propagation results — only for defaultBetAmount saves. The green
+            default line always shows once the config persisted, even when
+            every open date was blocked (spec: config MUST save regardless). */}
+        {updateConfig.isSuccess &&
+          updateConfig.variables?.key === 'defaultBetAmount' &&
+          updateConfig.data && (
+            <>
+              <div style={successBox}>
+                <span>
+                  Éxito: se guardó el nuevo monto de apuesta (
+                  {formatPesos(updateConfig.data.config.defaultBetAmount)}) para
+                  futuras fechas.
+                </span>
+                {updateConfig.data.updatedDates.map((d) => (
+                  <span key={d.id}>
+                    Éxito: se modificó correctamente el monto de la apuesta en la
+                    fecha {d.dateNumber}.
+                  </span>
+                ))}
+              </div>
+              {updateConfig.data.blockedDates.length > 0 && (
+                <div style={errorBox}>
+                  {updateConfig.data.blockedDates.map((d) => (
+                    <span key={d.id}>
+                      Error: no se pudo cambiar el monto de la apuesta en la
+                      fecha {d.dateNumber} porque ya existen jugadas para esa
+                      fecha.
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
       </div>
     </div>
   );

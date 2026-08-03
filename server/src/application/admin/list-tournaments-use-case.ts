@@ -16,6 +16,7 @@ export interface TournamentDateDTO {
   dateNumber: number;
   status: string;
   pozo: number; // cents
+  betAmount: number; // cents
   commission: number; // percent — snapshot taken at close
   winners: WinnerDTO[];
 }
@@ -74,6 +75,7 @@ export class ListTournamentsUseCase {
           dateNumber: dateSnap.dateNumber,
           status: dateSnap.status,
           pozo: dateSnap.pozo,
+          betAmount: dateSnap.betAmount,
           commission: dateSnap.commission,
           winners,
         });

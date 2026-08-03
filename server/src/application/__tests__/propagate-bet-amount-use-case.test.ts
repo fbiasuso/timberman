@@ -97,8 +97,8 @@ describe('PropagateBetAmountUseCase', () => {
 
     expect(withTransaction).toHaveBeenCalledOnce();
     expect(result.updatedDates).toEqual([
-      { id: 10, dateNumber: 1 },
-      { id: 11, dateNumber: 2 },
+      { id: 10, dateNumber: 1, betAmount: 800 },
+      { id: 11, dateNumber: 2, betAmount: 800 },
     ]);
     expect(result.blockedDates).toEqual([]);
     expect(tournamentRepo.updateMatchDate).toHaveBeenCalledTimes(2);
@@ -128,10 +128,10 @@ describe('PropagateBetAmountUseCase', () => {
     const result = await uc.execute(ADMIN_ID, NEW_AMOUNT);
 
     expect(withTransaction).toHaveBeenCalledOnce();
-    expect(result.updatedDates).toEqual([{ id: 10, dateNumber: 1 }]);
+    expect(result.updatedDates).toEqual([{ id: 10, dateNumber: 1, betAmount: 800 }]);
     expect(result.blockedDates).toEqual([
-      { id: 11, dateNumber: 2 },
-      { id: 12, dateNumber: 3 },
+      { id: 11, dateNumber: 2, betAmount: 1500 },
+      { id: 12, dateNumber: 3, betAmount: 1500 },
     ]);
     // Only the ticket-free date was updated
     expect(tournamentRepo.updateMatchDate).toHaveBeenCalledTimes(1);
@@ -156,8 +156,8 @@ describe('PropagateBetAmountUseCase', () => {
     expect(withTransaction).toHaveBeenCalledOnce();
     expect(result.updatedDates).toEqual([]);
     expect(result.blockedDates).toEqual([
-      { id: 10, dateNumber: 1 },
-      { id: 11, dateNumber: 2 },
+      { id: 10, dateNumber: 1, betAmount: 1500 },
+      { id: 11, dateNumber: 2, betAmount: 1500 },
     ]);
     // No dates updated
     expect(tournamentRepo.updateMatchDate).not.toHaveBeenCalled();
@@ -201,7 +201,7 @@ describe('PropagateBetAmountUseCase', () => {
     const uc = new PropagateBetAmountUseCase(tournamentRepo, ticketRepo, auditLogRepo);
     const result = await uc.execute(ADMIN_ID, NEW_AMOUNT);
 
-    expect(result.updatedDates).toEqual([{ id: 10, dateNumber: 1 }]);
+    expect(result.updatedDates).toEqual([{ id: 10, dateNumber: 1, betAmount: 800 }]);
     expect(tournamentRepo.findOpenMatchDates).toHaveBeenCalled();
     expect(auditLogRepo.save).toHaveBeenCalledTimes(2);
   });

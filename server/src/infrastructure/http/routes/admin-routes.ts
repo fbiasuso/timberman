@@ -16,6 +16,8 @@ import { AdjustBalanceUseCase } from '../../../application/admin/adjust-balance-
 import { DeleteUserUseCase } from '../../../application/admin/delete-user-use-case.js';
 import { GetConfigUseCase } from '../../../application/admin/get-config-use-case.js';
 import { UpdateConfigUseCase } from '../../../application/admin/update-config-use-case.js';
+import { PropagateBetAmountUseCase } from '../../../application/admin/propagate-bet-amount-use-case.js';
+import { Money } from '../../../domain/value-objects/money.js';
 import { ListTournamentsUseCase } from '../../../application/admin/list-tournaments-use-case.js';
 import { CreateTournamentUseCase } from '../../../application/admin/create-tournament-use-case.js';
 import { SetMatchResultUseCase } from '../../../application/admin/set-match-result-use-case.js';
@@ -179,6 +181,12 @@ export function createAdminRoutes(
     const deleteUserUseCase = new DeleteUserUseCase(userRepo);
     const getConfigUseCase = new GetConfigUseCase(config);
     const updateConfigUseCase = new UpdateConfigUseCase(config, configRepo);
+    const propagateBetAmountUseCase = new PropagateBetAmountUseCase(
+      tournamentRepo,
+      ticketRepo,
+      auditLogRepo,
+      uow,
+    );
     const listTournamentsUseCase = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo);
     const createTournamentUseCase = new CreateTournamentUseCase(tournamentRepo, config);
     const setMatchResultUseCase = new SetMatchResultUseCase(matchRepo);
@@ -347,7 +355,19 @@ export function createAdminRoutes(
     }, async (request, reply) => {
       const body = updateConfigSchema.parse(request.body);
       const conf = await updateConfigUseCase.execute(body.key, body.value);
-      return reply.send({ config: conf });
+
+      // A defaultBetAmount update propagates to every open, ticket-free date
+      // (ticketed dates keep their amount and are reported as blocked — the
+      // config itself is already persisted and must not be rolled back).
+      if (body.key === 'defaultBetAmount') {
+        const result = await propagateBetAmountUseCase.execute(
+          request.user!.sub,
+          Money.fromCents(conf.defaultBetAmount),
+        );
+        return reply.send({ config: conf, ...result });
+      }
+
+      return reply.send({ config: conf, updatedDates: [], blockedDates: [] });
     });
 
     // ── POST /api/admin/dates/:dateId/close ──────────────────────

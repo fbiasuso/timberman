@@ -26,6 +26,8 @@ export interface TournamentDateDTO {
   status: MatchDateStatus;
   /** Cents — prize pool snapshot taken at close (includes carryover) */
   pozo: number;
+  /** Cents — the bet amount this date was played at */
+  betAmount: number;
   /** Commission percentage snapshot taken at close */
   commission: number;
   winners: WinnerDTO[];
@@ -46,6 +48,21 @@ export interface AdminConfigDTO {
   commission: number;
   allowRegistration: boolean;
   defaultBetAmount: number;
+}
+
+/** One date touched by a defaultBetAmount propagation (by dateNumber for UI copy) */
+export interface DatePropagationResult {
+  id: number;
+  dateNumber: number;
+  /** Cents — new amount for updated dates, unchanged amount for blocked dates */
+  betAmount: number;
+}
+
+/** Full PATCH /api/admin/config response body */
+export interface ConfigUpdateResult {
+  config: AdminConfigDTO;
+  updatedDates: DatePropagationResult[];
+  blockedDates: DatePropagationResult[];
 }
 
 // ─── Request shapes ─────────────────────────────────────────────────────────
@@ -173,7 +190,7 @@ export const adminApi = {
   /** PATCH /api/admin/config — update a single config key */
   updateConfig(payload: UpdateConfigPayload) {
     return client
-      .patch<{ config: AdminConfigDTO }>('/admin/config', payload)
-      .then((r) => r.data.config);
+      .patch<ConfigUpdateResult>('/admin/config', payload)
+      .then((r) => r.data);
   },
 };

@@ -10,6 +10,8 @@ import { AuditLog } from '../../domain/entities/audit-log.js';
 export interface PropagateBetAmountResultEntry {
   id: number;
   dateNumber: number;
+  /** Bet amount in integer cents — new amount for updated dates, current (unchanged) amount for blocked dates */
+  betAmount: number;
 }
 
 export interface PropagateBetAmountResult {
@@ -85,17 +87,22 @@ export class PropagateBetAmountUseCase {
       }
 
       const ticketCount = await ticketRepo.countByMatchDateId(locked.id);
-      const entry: PropagateBetAmountResultEntry = {
-        id: locked.id,
-        dateNumber: locked.dateNumber,
-      };
 
       if (ticketCount === 0) {
         const updated = locked.withBetAmount(betAmount);
         await tournamentRepo.updateMatchDate(updated);
-        updatedDates.push(entry);
+        updatedDates.push({
+          id: locked.id,
+          dateNumber: locked.dateNumber,
+          betAmount: betAmount.cents,
+        });
       } else {
-        blockedDates.push(entry);
+        // Blocked dates keep their current amount — report it unchanged
+        blockedDates.push({
+          id: locked.id,
+          dateNumber: locked.dateNumber,
+          betAmount: locked.betAmount.cents,
+        });
       }
     }
 

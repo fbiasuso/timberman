@@ -79,6 +79,11 @@ const statusIcons: React.CSSProperties = {
   color: theme.textoSecundario,
 };
 
+/** Format integer cents as Argentine-style pesos: 500 → "$5,00" */
+function formatPesos(cents: number): string {
+  return `$${(cents / 100).toFixed(2).replace('.', ',')}`;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function MatchEditor() {
@@ -205,7 +210,9 @@ export default function MatchEditor() {
                   style={headerBtn(expanded)}
                   aria-expanded={expanded}
                 >
-                  <span>Fecha {date.dateNumber}</span>
+                  <span>
+                    Fecha {date.dateNumber} · {formatPesos(date.betAmount)}
+                  </span>
                   <span style={statusIcons}>
                     {/* Both closed and results dates are closed for betting; a
                         results date additionally shows the paid check. */}

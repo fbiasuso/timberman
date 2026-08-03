@@ -36,13 +36,13 @@ Chain strategy: pending
 
 ## Phase 3: Route Wiring & DTO
 
-- [ ] 3.1 Add `betAmount` to `TournamentDateDTO` in `server/src/application/admin/list-tournaments-use-case.ts` — include `betAmount: dateSnap.betAmount` in DTO mapping. ~3 changed lines.
-- [ ] 3.2 Wire `PropagateBetAmountUseCase` in `server/src/infrastructure/http/routes/admin-routes.ts` PATCH handler: after `updateConfigUseCase.execute`, if `key === 'defaultBetAmount'`, call propagate UC; reply `{ config, updatedDates, blockedDates }`. Instantiate in `createAdminRoutes` factory (all ports + uow already in scope). ~30 changed lines.
-- [ ] 3.3 Add/update route integration tests in `server/src/infrastructure/http/__tests__/api.test.ts`: defaultBetAmount PATCH → 200 with `{config, updatedDates, blockedDates}`; blocked dates → 200; both audit rows written; non-defaultBetAmount key → empty arrays; `updateMatchDate` mock resolves entity. Existing mock factory already stubs all needed fns. ~60 new lines.
+- [x] 3.1 Add `betAmount` to `TournamentDateDTO` in `server/src/application/admin/list-tournaments-use-case.ts` — include `betAmount: dateSnap.betAmount` in DTO mapping. ~3 changed lines.
+- [x] 3.2 Wire `PropagateBetAmountUseCase` in `server/src/infrastructure/http/routes/admin-routes.ts` PATCH handler: after `updateConfigUseCase.execute`, if `key === 'defaultBetAmount'`, call propagate UC; reply `{ config, updatedDates, blockedDates }`. Instantiate in `createAdminRoutes` factory (all ports + uow already in scope). ~30 changed lines.
+- [x] 3.3 Add/update route integration tests in `server/src/infrastructure/http/__tests__/api.test.ts`: defaultBetAmount PATCH → 200 with `{config, updatedDates, blockedDates}`; blocked dates → 200; both audit rows written; non-defaultBetAmount key → empty arrays; `updateMatchDate` mock resolves entity. Existing mock factory already stubs all needed fns. ~60 new lines.
 
 ## Phase 4: Client
 
-- [ ] 4.1 Widen `updateConfig` return type in `client/src/api/admin-api.ts`: add `ConfigUpdateResult = { config, updatedDates, blockedDates }` DTO types, return full body; add `betAmount` to client `TournamentDateDTO`. ~15 changed lines.
-- [ ] 4.2 Update `useUpdateConfig` onSuccess in `client/src/hooks/use-admin.ts`: invalidate `['admin','tournaments']` alongside `['admin','config']`. ~2 changed lines.
-- [ ] 4.3 Add grouped green/red result boxes to `client/src/components/admin/ConfigPanel.tsx`: render when `data.variables.key === 'defaultBetAmount'`. Green group: default-save line (always, even all blocked) + one line per `updatedDates` (exact Spanish copy with `$5,00` formatting). Red group: one line per `blockedDates`. ~40 new lines.
-- [ ] 4.4 Display `betAmount` in `client/src/components/admin/MatchEditor.tsx` accordion header next to "Fecha {n}" (admin-only). Format cents→`"$5,00"`. ~3 changed lines.
+- [x] 4.1 Widen `updateConfig` return type in `client/src/api/admin-api.ts`: add `ConfigUpdateResult = { config, updatedDates, blockedDates }` DTO types, return full body; add `betAmount` to client `TournamentDateDTO`. ~15 changed lines.
+- [x] 4.2 Update `useUpdateConfig` onSuccess in `client/src/hooks/use-admin.ts`: invalidate `['admin','tournaments']` alongside `['admin','config']`. ~2 changed lines.
+- [x] 4.3 Add grouped green/red result boxes to `client/src/components/admin/ConfigPanel.tsx`: render when `data.variables.key === 'defaultBetAmount'`. Green group: default-save line (always, even all blocked) + one line per `updatedDates` (exact Spanish copy with `$5,00` formatting). Red group: one line per `blockedDates`. ~40 new lines.
+- [x] 4.4 Display `betAmount` in `client/src/components/admin/MatchEditor.tsx` accordion header next to "Fecha {n}" (admin-only). Format cents→`"$5,00"`. ~3 changed lines.

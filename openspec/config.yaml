@@ -46,3 +46,8 @@ archive:
     status: complete
     total_tests: 330
     prs: 8
+  bet-amount-propagation:
+    archived_at: "2026-08-02"
+    status: complete
+    total_tests: 351
+    prs: 0

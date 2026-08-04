@@ -8,14 +8,14 @@ Points leaderboard with per-tournament breakdown and historical ranking across a
 
 ### Requirement: Points Calculation
 
-The system MUST calculate points for each user based on correct match outcome predictions per tournament date.
+The system MUST calculate points for each user based on correct match outcome predictions per tournament date. Points MUST be calculated only when a date transitions to 'results' (publish-results) and MUST be persisted per user+tournament+date at that moment (see prize-payouts). Match results set on dates that are not yet published MUST NOT affect any user's points.
 
-#### Scenario: Correct prediction awards points
+#### Scenario: Correct prediction awards points at publish
 
-- GIVEN a user who bet on match outcomes for a date
-- WHEN the results for that date are published
+- GIVEN a user who bet on match outcomes for a closed date
+- WHEN results for that date are published
 - THEN the user receives points for each correctly predicted outcome
-- AND points accumulate in the user's total score
+- AND the points are persisted for user+tournament+date
 
 #### Scenario: Incorrect prediction awards zero
 
@@ -23,42 +23,77 @@ The system MUST calculate points for each user based on correct match outcome pr
 - WHEN the results are published
 - THEN that prediction awards zero points
 
-### Requirement: Global Ranking
+#### Scenario: Open date results award nothing
 
-The system MUST provide a global leaderboard sorted by total accumulated points across all tournaments.
+- GIVEN a match result set while the date is still 'open'
+- WHEN the user's points are checked
+- THEN no points are awarded or accumulated
+
+### Requirement: Tournament Ranking
+
+The system MUST provide a ranking for a specific tournament, read from persisted `tournament_points`. The endpoint MUST accept `tournamentId`; when omitted, it MUST default to the active tournament. When no tournament has status 'active', the response MUST be an empty list. Results MUST be sorted descending by tournament points; each entry MUST include username, tournament points, and rank position. Users with equal points MUST share the same rank position; the "fewer bets placed" tie-break MUST NOT be applied (pre-existing drift, never implemented, out of scope).
 
 #### Scenario: Ranking ordered by total points
 
-- GIVEN multiple users with different point totals
-- WHEN the global ranking is requested
-- THEN results are sorted descending by total points
-- AND each entry includes username, total points, and rank position
+- GIVEN multiple users with different point totals in a tournament
+- WHEN the ranking is requested with that tournamentId
+- THEN results are sorted descending by points
+- AND each entry includes username, points, and rank position
 
-#### Scenario: Tie-breaking
+#### Scenario: Defaults to active tournament
+
+- GIVEN no tournamentId in the request
+- WHEN the ranking is requested
+- THEN the active tournament's ranking is returned
+
+#### Scenario: Tie shows shared rank
 
 - GIVEN two users with the same total points
 - WHEN the ranking is computed
-- THEN the user with fewer bets placed is ranked higher
-- AND if still tied, the user who registered earlier is ranked higher
+- THEN both share the same rank position
+- AND no ticket-count tie-break is applied
+
+#### Scenario: Empty when no active tournament
+
+- GIVEN no tournament with status 'active'
+- WHEN the ranking is requested without tournamentId
+- THEN the response is an empty list
 
 ### Requirement: Per-Tournament Breakdown
 
-The system MUST provide a ranking filtered by a specific tournament showing each user's points within that tournament only.
+The system MUST provide a ranking filtered by a specific tournament showing each user's points within that tournament only, read from persisted `tournament_points` (see Tournament Ranking). The client MUST send `tournamentId` when requesting a non-default tournament.
 
 #### Scenario: Tournament-scoped ranking
 
-- GIVEN a specific tournament ID with dates and bets
+- GIVEN a specific tournament ID with published dates
 - WHEN the per-tournament ranking is requested
-- THEN only points earned in that tournament are included
+- THEN only points persisted for that tournament are included
 - AND the ranking is sorted descending by tournament points
 
 ### Requirement: Historical Ranking
 
-The system MUST preserve ranking snapshots so historical leaderboards remain accurate even after new tournaments start.
+The system MUST preserve ranking accuracy through persisted `tournament_points` rows: once a date is published its points never change, and archived tournaments remain queryable by explicit `tournamentId`. The "Histórico" UI section (all-tournament listing) is out of scope; only per-tournament views are surfaced.
 
 #### Scenario: Past tournaments retain ranking
 
-- GIVEN a closed tournament with finalized rankings
-- WHEN a new tournament is created and users earn new points
-- THEN querying the closed tournament's ranking returns the original scores
-- AND global ranking includes all historical points
+- GIVEN an archived tournament with persisted points
+- WHEN its ranking is requested by tournamentId
+- THEN the ranking returns the original persisted scores
+- AND no on-the-fly recomputation occurs
+
+### Requirement: Persisted Points Reads
+
+Ranking MUST read points exclusively from persisted `tournament_points` rows (per user+tournament+date), written when a date is published; ranking MUST NOT recompute points on-the-fly from tickets. Points exist only for paid ('results') dates; results set on open or closed dates MUST NOT contribute points. The migration MUST backfill `tournament_points` for every existing 'results' date so historical rankings match PointsCalculator output.
+
+#### Scenario: Ranking reflects only persisted points
+
+- GIVEN a published date whose points were persisted
+- WHEN the tournament ranking is requested
+- THEN each entry's points come from tournament_points rows
+- AND no ticket recomputation happens
+
+#### Scenario: Unpaid dates contribute no points
+
+- GIVEN a date with match results but status 'closed'
+- WHEN the ranking is requested
+- THEN that date contributes zero points to every user

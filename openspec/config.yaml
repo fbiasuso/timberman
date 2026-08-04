@@ -51,3 +51,8 @@ archive:
     status: complete
     total_tests: 351
     prs: 0
+  tournament-lifecycle:
+    archived_at: "2026-08-04"
+    status: complete
+    total_tests: 444
+    prs: 5

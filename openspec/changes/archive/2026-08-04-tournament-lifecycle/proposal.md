@@ -74,7 +74,7 @@ Status-only transitions, no money moved. Remove terminate/archive routes to disa
 
 ## Success Criteria
 
-- [ ] Terminate returns 409 on open date; archive accepts only 'finished'; archive creates next tournament.
-- [ ] Points persist only on paid dates; per-tournament ranking matches PointsCalculator output (incl. backfill).
-- [ ] Boot creates "Torneo 1"; date/match creation blocked on non-active tournaments.
-- [ ] Existing suites green; new use-case/route tests pass.
+- [x] Terminate returns 409 on open date; archive accepts only 'finished'; archive creates next tournament.
+- [x] Points persist only on paid dates; per-tournament ranking matches PointsCalculator output (incl. backfill).
+- [x] Boot creates "Torneo 1"; date/match creation blocked on non-active tournaments.
+- [x] Existing suites green; new use-case/route tests pass.

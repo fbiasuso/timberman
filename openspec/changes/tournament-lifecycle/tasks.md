@@ -52,12 +52,12 @@ Chain strategy: pending
 
 ## Phase 4: Lifecycle (S4)
 
-- [ ] **T16** (S4) new `application/admin/terminate-tournament-use-case.ts` — UoW lock; active guard; open-date 409; winners max>0; finish(); saveWinners; audit; DTO. AC: lifecycle UC tests. Deps: T2,T6
-- [ ] **T17** (S4) new `application/admin/archive-tournament-use-case.ts` — finished guard; archive(); create "Torneo N+1" (carryover 0, config commission); audit; DTO. AC: lifecycle UC tests. Deps: T16
-- [ ] **T18** (S4) `http/routes/admin-routes.ts` (points repo param, POST /terminate /archive) + ListTournaments/CreateTournament DTOs (status, finishedAt, tournamentWinners). AC: admin UC + api.test 200/409/422/403. Deps: T16,T17
-- [ ] **T19** (S4) client — `api/admin-api.ts` DTO + terminate/archive fns; `hooks/use-admin.ts` hooks + invalidation; new `TournamentManager.tsx`; AdminPage `torneos` tab; MatchEditor/ResultsEntry active-only. AC: TournamentManager.test + extended tests. Deps: T18
+- [x] **T16** (S4) new `application/admin/terminate-tournament-use-case.ts` — UoW lock; active guard; open-date 409; winners max>0; finish(); saveWinners; audit; DTO. AC: lifecycle UC tests. Deps: T2,T6
+- [x] **T17** (S4) new `application/admin/archive-tournament-use-case.ts` — finished guard; archive(); create "Torneo N+1" (carryover 0, config commission); audit; DTO. AC: lifecycle UC tests. Deps: T16
+- [x] **T18** (S4) `http/routes/admin-routes.ts` (points repo param, POST /terminate /archive) + ListTournaments/CreateTournament DTOs (status, finishedAt, tournamentWinners). AC: admin UC + api.test 200/409/422/403. Deps: T16,T17
+- [x] **T19** (S4) client — `api/admin-api.ts` DTO + terminate/archive fns; `hooks/use-admin.ts` hooks + invalidation; new `TournamentManager.tsx`; AdminPage `torneos` tab; MatchEditor/ResultsEntry active-only. AC: TournamentManager.test + extended tests. Deps: T18
 
 ## Phase 5: Boot + Polish (S5)
 
-- [ ] **T20** (S5) `server/src/index.ts` — boot auto-create "Torneo 1" (findAll()===[] → save). AC: boot test; no duplicate when exists. Deps: T2,T5
-- [ ] **T21** (S5) Polish — verify HistorySection/TicketsPage via scoped /matches/dates (D5); full suite + lint + build green. AC: all green. Deps: T1–T20
+- [x] **T20** (S5) `server/src/index.ts` — boot auto-create "Torneo 1" (findAll()===[] → save). AC: boot test; no duplicate when exists. Deps: T2,T5
+- [x] **T21** (S5) Polish — verify HistorySection/TicketsPage via scoped /matches/dates (D5); full suite + lint + build green. AC: all green. Deps: T1–T20

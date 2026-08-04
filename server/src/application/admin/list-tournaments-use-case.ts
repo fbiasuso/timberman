@@ -1,6 +1,7 @@
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
+import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
@@ -21,6 +22,11 @@ export interface TournamentDateDTO {
   winners: WinnerDTO[];
 }
 
+export interface TournamentWinnerDTO {
+  userId: string;
+  username: string;
+}
+
 export interface AdminTournamentDTO {
   id: number;
   name: string;
@@ -29,6 +35,8 @@ export interface AdminTournamentDTO {
   finishedAt: Date | null;
   carryover: number; // cents — unpaid pozo rolled to the next date
   createdAt: Date;
+  /** Tournament-level winners (tie at max points) persisted at terminate */
+  tournamentWinners: TournamentWinnerDTO[];
   dates: TournamentDateDTO[];
 }
 
@@ -37,21 +45,36 @@ export interface AdminTournamentDTO {
 /**
  * Returns all tournaments with their match dates and payout breakdown
  * (admin view). Winners are read from `tickets.prizeWon`, which is set
- * when results are published.
+ * when results are published. Tournament-level winners (design D7) come
+ * from the persisted `tournament_winners` table, written at terminate.
  */
 export class ListTournamentsUseCase {
   constructor(
     private readonly tournamentRepo: TournamentRepo,
     private readonly ticketRepo: TicketRepo,
     private readonly userRepo: UserRepo,
+    private readonly tournamentPointsRepo: TournamentPointsRepo,
   ) {}
 
   async execute(): Promise<AdminTournamentDTO[]> {
     const tournaments = await this.tournamentRepo.findAll();
+
+    // Usernames for tournament winners — one batch read (same pattern as
+    // GetRanking) instead of one query per winner row.
+    const users = await this.userRepo.findAll();
+    const usernameById = new Map(users.map((u) => [u.id, u.username]));
+
     const result: AdminTournamentDTO[] = [];
 
     for (const tournament of tournaments) {
       const snap = tournament.toSnapshot();
+
+      const winnerRows = await this.tournamentPointsRepo.findWinnersByTournamentId(tournament.id);
+      const tournamentWinners: TournamentWinnerDTO[] = winnerRows.map((row) => ({
+        userId: row.userId,
+        username: usernameById.get(row.userId) ?? 'unknown',
+      }));
+
       const dates = await this.tournamentRepo.findMatchDatesByTournamentId(tournament.id);
 
       const dateDTOs: TournamentDateDTO[] = [];
@@ -90,6 +113,7 @@ export class ListTournamentsUseCase {
         finishedAt: snap.finishedAt,
         carryover: snap.carryover,
         createdAt: snap.createdAt,
+        tournamentWinners,
         dates: dateDTOs,
       });
     }

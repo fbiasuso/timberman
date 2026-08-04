@@ -1871,4 +1871,269 @@ describe('API Integration Tests', () => {
       expect(body.error).toBe('MATCH_DATE_NOT_FOUND');
     });
   });
+
+  describe('POST /api/admin/tournaments/:tournamentId/terminate', () => {
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('terminates an active tournament and returns the winners', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+      vi.mocked(services.tournamentRepo.update).mockImplementation(async (t) => t);
+      vi.mocked(services.tournamentRepo.findOpenMatchDates).mockResolvedValue([]);
+      vi.mocked(services.tournamentPointsRepo.findByTournamentId).mockResolvedValue([
+        { userId: 'user-1', tournamentId: 1, matchDateId: 1, points: 12 },
+        { userId: 'user-2', tournamentId: 1, matchDateId: 1, points: 12 },
+        { userId: 'user-3', tournamentId: 1, matchDateId: 1, points: 5 },
+      ]);
+      vi.mocked(services.tournamentPointsRepo.saveWinners).mockResolvedValue(undefined);
+      vi.mocked(services.userRepo.findAll).mockResolvedValue([
+        User.create({
+          id: 'user-1',
+          username: 'alice',
+          passwordHash: 'hash',
+          role: 'user',
+          balance: 1000,
+          createdAt: new Date(),
+        }),
+        User.create({
+          id: 'user-2',
+          username: 'bob',
+          passwordHash: 'hash',
+          role: 'user',
+          balance: 1000,
+          createdAt: new Date(),
+        }),
+        User.create({
+          id: 'user-3',
+          username: 'carol',
+          passwordHash: 'hash',
+          role: 'user',
+          balance: 1000,
+          createdAt: new Date(),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/terminate',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.status).toBe('finished');
+      expect(body.finishedAt).toEqual(expect.any(String));
+      // Both users tied at the max (12) win; carol (5) does not
+      expect(body.winners).toEqual([
+        { userId: 'user-1', username: 'alice', points: 12 },
+        { userId: 'user-2', username: 'bob', points: 12 },
+      ]);
+      expect(services.tournamentPointsRepo.saveWinners).toHaveBeenCalledWith(1, [
+        'user-1',
+        'user-2',
+      ]);
+      // Audit written for the terminate action
+      expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
+      const log = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];
+      expect(log.action).toBe('tournament_finished');
+      expect(log.adminId).toBe('admin-1');
+    });
+
+    it('returns 409 TOURNAMENT_OPEN_DATE when a betting round is in flight', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+      vi.mocked(services.tournamentRepo.findOpenMatchDates).mockResolvedValue([
+        { id: 5, dateNumber: 1 } as never,
+      ]);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/terminate',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_OPEN_DATE');
+      expect(services.tournamentRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 422 TOURNAMENT_NOT_ACTIVE for a finished tournament', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
+        Tournament.create({
+          id: 1,
+          name: 'Torneo 1',
+          commission: 15,
+          status: 'finished',
+          finishedAt: new Date(),
+          carryover: 0,
+          createdAt: new Date(),
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/terminate',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_ACTIVE');
+      expect(services.tournamentRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 TOURNAMENT_NOT_FOUND for an unknown tournament', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/99/terminate',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_FOUND');
+    });
+
+    it('returns 403 for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/terminate',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(services.tournamentRepo.findByIdForUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/admin/tournaments/:tournamentId/archive', () => {
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('archives a finished tournament and creates the next one', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
+        Tournament.create({
+          id: 1,
+          name: 'Torneo 1',
+          commission: 15,
+          status: 'finished',
+          finishedAt: new Date(),
+          carryover: 0,
+          createdAt: new Date(),
+        }),
+      );
+      vi.mocked(services.tournamentRepo.update).mockImplementation(async (t) => t);
+      vi.mocked(services.tournamentRepo.save).mockImplementation(async (t) =>
+        Tournament.create({ ...t.toSnapshot(), id: 2 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/archive',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toEqual({
+        id: 1,
+        status: 'archived',
+        nextTournament: { id: 2, name: 'Torneo 2', status: 'active' },
+      });
+      // Archive (update) happens BEFORE the next save (single-active invariant)
+      const updateCall = vi.mocked(services.tournamentRepo.update).mock.invocationCallOrder[0];
+      const saveCall = vi.mocked(services.tournamentRepo.save).mock.invocationCallOrder[0];
+      expect(updateCall).toBeLessThan(saveCall);
+      expect(services.auditLogRepo.save).toHaveBeenCalledOnce();
+      const log = vi.mocked(services.auditLogRepo.save).mock.calls[0][0];
+      expect(log.action).toBe('tournament_archived');
+    });
+
+    it('returns 422 TOURNAMENT_NOT_FINISHED for an active tournament', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/archive',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_FINISHED');
+      expect(services.tournamentRepo.update).not.toHaveBeenCalled();
+      expect(services.tournamentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 TOURNAMENT_NOT_FOUND for an unknown tournament', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findByIdForUpdate).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/99/archive',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_FOUND');
+    });
+
+    it('returns 403 for non-admin users', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments/1/archive',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(services.tournamentRepo.findByIdForUpdate).not.toHaveBeenCalled();
+    });
+  });
 });

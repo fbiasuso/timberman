@@ -3,9 +3,10 @@ import MatchEditor from './MatchEditor';
 import ResultsEntry from './ResultsEntry';
 import UserManager from './UserManager';
 import ConfigPanel from './ConfigPanel';
+import TournamentManager from './TournamentManager';
 import theme from '../../styles/theme';
 
-type Tab = 'partidos' | 'resultados' | 'sistema';
+type Tab = 'partidos' | 'resultados' | 'torneos' | 'sistema';
 
 interface TabDefinition {
   id: Tab;
@@ -15,6 +16,7 @@ interface TabDefinition {
 const tabs: TabDefinition[] = [
   { id: 'partidos', label: 'Partidos' },
   { id: 'resultados', label: 'Resultados' },
+  { id: 'torneos', label: 'Torneos' },
   { id: 'sistema', label: 'Sistema' },
 ];
 
@@ -62,6 +64,8 @@ export default function AdminPage() {
         return <MatchEditor />;
       case 'resultados':
         return <ResultsEntry />;
+      case 'torneos':
+        return <TournamentManager />;
       case 'sistema':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

@@ -14,6 +14,7 @@ import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../domain/ports/system-config-repo.js';
+import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
 import type { BcryptService } from '../auth/register-use-case.js';
 import { User } from '../../domain/entities/user.js';
@@ -69,6 +70,17 @@ function createAuditLogRepoMocks() {
     findByAdminId: vi.fn(),
     findByUserId: vi.fn(),
     findAll: vi.fn(),
+  };
+  return repo;
+}
+
+function createPointsRepoMocks() {
+  const repo: TournamentPointsRepo = {
+    savePoints: vi.fn().mockResolvedValue(undefined),
+    findByTournamentId: vi.fn(),
+    findByUserAndTournament: vi.fn(),
+    saveWinners: vi.fn(),
+    findWinnersByTournamentId: vi.fn(),
   };
   return repo;
 }
@@ -265,6 +277,7 @@ describe('ListTournamentsUseCase', () => {
     const tournamentRepo = createTournamentRepoMocks();
     const ticketRepo = createTicketRepoMocks();
     const userRepo = createUserRepoMocks();
+    const pointsRepo = createPointsRepoMocks();
 
     const tournament = Tournament.new({ id: 1, name: 'Torneo', carryover: 500 });
     const date = MatchDate.create({
@@ -296,8 +309,10 @@ describe('ListTournamentsUseCase', () => {
     vi.mocked(tournamentRepo.findMatchDatesByTournamentId).mockResolvedValue([date]);
     vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue([winningTicket, losingTicket]);
     vi.mocked(userRepo.findById).mockResolvedValue(makeUser('user-1', 'Alice'));
+    vi.mocked(userRepo.findAll).mockResolvedValue([makeUser('user-1', 'Alice')]);
+    vi.mocked(pointsRepo.findWinnersByTournamentId).mockResolvedValue([{ userId: 'user-1' }]);
 
-    const uc = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo);
+    const uc = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo, pointsRepo);
     const result = await uc.execute();
 
     expect(result).toHaveLength(1);
@@ -315,6 +330,8 @@ describe('ListTournamentsUseCase', () => {
       { ticketId: 1, userId: 'user-1', username: 'Alice', prize: 6000 },
     ]);
     expect(userRepo.findById).toHaveBeenCalledWith('user-1');
+    // Tournament-level winners come from the persisted winners table (design D7)
+    expect(result[0].tournamentWinners).toEqual([{ userId: 'user-1', username: 'Alice' }]);
   });
 });
 

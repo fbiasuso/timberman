@@ -65,6 +65,7 @@ const tournament = (dates: TournamentDateDTO[]): AdminTournamentDTO => ({
   finishedAt: null,
   carryover: 0,
   createdAt: '2026-07-28T00:00:00.000Z',
+  tournamentWinners: [],
   dates,
 });
 
@@ -154,6 +155,28 @@ describe('MatchEditor', () => {
 
     render(<MatchEditor />);
     expect(screen.getByText('No hay torneos para gestionar partidos.')).toBeDefined();
+  });
+
+  it('lists only the active tournament dates — finished tournament dates are frozen and hidden', () => {
+    const finishedTournament: AdminTournamentDTO = {
+      id: 2,
+      name: 'Torneo 2',
+      commission: 15,
+      status: 'finished',
+      finishedAt: '2026-08-01T00:00:00.000Z',
+      carryover: 0,
+      createdAt: '2026-07-28T00:00:00.000Z',
+      tournamentWinners: [],
+      dates: [closedDate],
+    };
+    mockTournaments([tournament([openDate, resultsDate]), finishedTournament]);
+
+    render(<MatchEditor />);
+    // The active tournament's dates render
+    expect(screen.getByText(/Fecha 2/)).toBeDefined();
+    expect(screen.getByText(/Fecha 3/)).toBeDefined();
+    // The finished tournament's date (id 1, Fecha 1) must NOT render
+    expect(screen.queryByText(/Fecha 1/)).toBeNull();
   });
 
   it('renders every date as an accordion row with its status icons and tooltips', () => {

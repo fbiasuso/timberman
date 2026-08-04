@@ -240,8 +240,7 @@ describe('ResultsEntry', () => {
     expect(button.disabled).toBe(true);
   });
 
-  it('does not list open dates from other tournaments in the selector', () => {
-    const otherOpenDate: TournamentDateDTO = {
+  it('does not list open dates from other tournaments in the selector', () => {    const otherOpenDate: TournamentDateDTO = {
       id: 5,
       dateNumber: 1,
       status: 'open',
@@ -287,6 +286,52 @@ describe('ResultsEntry', () => {
     expect(select.textContent).not.toContain('Fecha 1');
     // Matches rendered belong to the current open date
     expect(screen.getByText(/River Plate/)).toBeDefined();
+  });
+
+  it('does not list dates from finished tournaments in the selector', () => {
+    const finishedDate: TournamentDateDTO = {
+      id: 7,
+      dateNumber: 1,
+      status: 'closed',
+      pozo: 2000,
+      betAmount: 1500,
+      commission: 15,
+      winners: [],
+    };
+    vi.mocked(useAdminTournaments).mockReturnValue({
+      data: [
+        {
+          id: 1,
+          name: 'Torneo 1',
+          commission: 15,
+          status: 'active',
+          finishedAt: null,
+          carryover: 0,
+          createdAt: '2026-07-28T00:00:00.000Z',
+          dates: [openDate],
+        },
+        {
+          id: 2,
+          name: 'Torneo 2',
+          commission: 15,
+          status: 'finished',
+          finishedAt: '2026-08-01T00:00:00.000Z',
+          carryover: 0,
+          createdAt: '2026-07-28T00:00:00.000Z',
+          dates: [finishedDate],
+        },
+      ],
+      isLoading: false,
+      error: null,
+    } as any);
+    mockCurrent(openDate, openMatches);
+
+    render(<ResultsEntry />);
+    // First combobox is the date selector
+    const select = screen.getAllByRole('combobox')[0];
+    // Only the active tournament's dates are selectable — the finished one is frozen
+    expect(select.textContent).toContain('Fecha 3');
+    expect(select.textContent).not.toContain('Fecha 1');
   });
 
   it('keeps a manual date selection when the current date changes', () => {

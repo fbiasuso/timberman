@@ -21,6 +21,8 @@ import { PropagateBetAmountUseCase } from '../../../application/admin/propagate-
 import { Money } from '../../../domain/value-objects/money.js';
 import { ListTournamentsUseCase } from '../../../application/admin/list-tournaments-use-case.js';
 import { CreateTournamentUseCase } from '../../../application/admin/create-tournament-use-case.js';
+import { TerminateTournamentUseCase } from '../../../application/admin/terminate-tournament-use-case.js';
+import { ArchiveTournamentUseCase } from '../../../application/admin/archive-tournament-use-case.js';
 import { SetMatchResultUseCase } from '../../../application/admin/set-match-result-use-case.js';
 import { PointsCalculator } from '../../../application/tournament/points-calculator.js';
 import { CloseDateUseCase } from '../../../application/tournament/close-date-use-case.js';
@@ -64,6 +66,10 @@ const updateConfigSchema = z.object({
 
 const dateParamsSchema = z.object({
   dateId: z.coerce.number().int().positive(),
+});
+
+const tournamentParamsSchema = z.object({
+  tournamentId: z.coerce.number().int().positive(),
 });
 
 const createDateSchema = z.object({
@@ -189,8 +195,26 @@ export function createAdminRoutes(
       auditLogRepo,
       uow,
     );
-    const listTournamentsUseCase = new ListTournamentsUseCase(tournamentRepo, ticketRepo, userRepo);
+    const listTournamentsUseCase = new ListTournamentsUseCase(
+      tournamentRepo,
+      ticketRepo,
+      userRepo,
+      tournamentPointsRepo,
+    );
     const createTournamentUseCase = new CreateTournamentUseCase(tournamentRepo, config);
+    const terminateTournamentUseCase = new TerminateTournamentUseCase(
+      tournamentRepo,
+      tournamentPointsRepo,
+      userRepo,
+      auditLogRepo,
+      uow,
+    );
+    const archiveTournamentUseCase = new ArchiveTournamentUseCase(
+      tournamentRepo,
+      auditLogRepo,
+      config,
+      uow,
+    );
     const setMatchResultUseCase = new SetMatchResultUseCase(matchRepo);
     const closeDateUseCase = new CloseDateUseCase(
       tournamentRepo,
@@ -278,6 +302,30 @@ export function createAdminRoutes(
         commission: body.commission,
       });
       return reply.status(201).send({ tournament });
+    });
+
+    // ── POST /api/admin/tournaments/:tournamentId/terminate ────────
+    fastify.post('/api/admin/tournaments/:tournamentId/terminate', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { tournamentId } = tournamentParamsSchema.parse(request.params);
+      const result = await terminateTournamentUseCase.execute(
+        request.user!.sub,
+        tournamentId,
+      );
+      return reply.send(result);
+    });
+
+    // ── POST /api/admin/tournaments/:tournamentId/archive ──────────
+    fastify.post('/api/admin/tournaments/:tournamentId/archive', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { tournamentId } = tournamentParamsSchema.parse(request.params);
+      const result = await archiveTournamentUseCase.execute(
+        request.user!.sub,
+        tournamentId,
+      );
+      return reply.send(result);
     });
 
     // ── PATCH /api/admin/matches/:matchId/result ─────────────────

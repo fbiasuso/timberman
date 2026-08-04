@@ -92,10 +92,11 @@ export default function MatchEditor() {
   const [selectedDateId, setSelectedDateId] = useState<number | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
 
-  // The tournament being edited: the one with an open date (the current betting
-  // round), falling back to the first tournament.
+  // The tournament being edited: only the ACTIVE tournament is editable —
+  // finished/archived tournaments are frozen (design D3/D5). With no active
+  // tournament there is nothing to manage.
   const tournament =
-    tournaments?.find((t) => t.dates.some((d) => d.status === 'open')) ?? tournaments?.[0] ?? null;
+    tournaments?.find((t) => t.status === 'active') ?? null;
 
   const openDate = tournament?.dates.find((d) => d.status === 'open') ?? null;
   // Default-expand the open date until the user interacts; an explicit

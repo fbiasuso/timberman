@@ -37,7 +37,8 @@ export interface AdminTournamentDTO {
   id: number;
   name: string;
   commission: number;
-  isActive: boolean;
+  status: string;
+  finishedAt: string | null;
   /** Cents — unpaid pozo rolled to the next date */
   carryover: number;
   createdAt: string;

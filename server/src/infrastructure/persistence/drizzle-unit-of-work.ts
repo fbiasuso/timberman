@@ -1,6 +1,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-work.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
+import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
@@ -22,6 +23,7 @@ export class DrizzleUnitOfWork implements UnitOfWork {
     private readonly db: PostgresJsDatabase<any>,
     private readonly repos: {
       tournamentRepo: (db: PostgresJsDatabase<any>) => TournamentRepo;
+      tournamentPointsRepo: (db: PostgresJsDatabase<any>) => TournamentPointsRepo;
       matchRepo: (db: PostgresJsDatabase<any>) => MatchRepo;
       ticketRepo: (db: PostgresJsDatabase<any>) => TicketRepo;
       userRepo: (db: PostgresJsDatabase<any>) => UserRepo;
@@ -36,6 +38,7 @@ export class DrizzleUnitOfWork implements UnitOfWork {
       const txDb = tx as unknown as PostgresJsDatabase<any>;
       return fn({
         tournamentRepo: this.repos.tournamentRepo(txDb),
+        tournamentPointsRepo: this.repos.tournamentPointsRepo(txDb),
         matchRepo: this.repos.matchRepo(txDb),
         ticketRepo: this.repos.ticketRepo(txDb),
         userRepo: this.repos.userRepo(txDb),

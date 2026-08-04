@@ -12,6 +12,7 @@ export {
 export type {
   UserRole,
   UserSnapshot,
+  TournamentStatus,
   TournamentSnapshot,
   MatchDateStatus,
   MatchDateSnapshot,
@@ -36,6 +37,7 @@ export type { Prediction } from './value-objects/index.js';
 export type {
   UserRepo,
   TournamentRepo,
+  TournamentPointsRepo,
   MatchRepo,
   TicketRepo,
   AuditLogRepo,
@@ -55,6 +57,9 @@ export {
   MatchDateNotOpenError,
   MatchesNotReadyError,
   BetModificationNotAllowedError,
+  TournamentOpenDateError,
+  TournamentNotActiveError,
+  TournamentNotFinishedError,
   RegistrationDisabledError,
   UserNotFoundError,
   TournamentNotFoundError,

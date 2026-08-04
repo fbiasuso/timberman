@@ -17,6 +17,10 @@ export interface TournamentRepo {
    * flows like carryover consumption on date close.
    */
   findByIdForUpdate(id: number): Promise<Tournament | null>;
+  /**
+   * Resolve the single tournament with status 'active' (lifecycle model —
+   * previously `is_active = true`). Returns null when none exists.
+   */
   findActive(): Promise<Tournament | null>;
   findAll(): Promise<Tournament[]>;
   save(tournament: Tournament): Promise<Tournament>;
@@ -33,7 +37,12 @@ export interface TournamentRepo {
    */
   findMatchDateByIdForUpdate(id: number): Promise<MatchDate | null>;
   findMatchDatesByTournamentId(tournamentId: number): Promise<MatchDate[]>;
-  findOpenMatchDates(): Promise<MatchDate[]>;
+  /**
+   * Open match dates of a tournament. When `tournamentId` is provided, only
+   * dates belonging to that tournament are returned (active-flow scoping);
+   * otherwise all open dates are returned.
+   */
+  findOpenMatchDates(tournamentId?: number): Promise<MatchDate[]>;
   saveMatchDate(matchDate: MatchDate): Promise<MatchDate>;
   updateMatchDate(matchDate: MatchDate): Promise<MatchDate>;
 }

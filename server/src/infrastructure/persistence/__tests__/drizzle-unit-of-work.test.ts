@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DrizzleUnitOfWork } from '../drizzle-unit-of-work.js';
 import { DrizzleTournamentRepo } from '../../repositories/drizzle-tournament-repo.js';
+import { DrizzleTournamentPointsRepo } from '../../repositories/drizzle-tournament-points-repo.js';
 import { DrizzleMatchRepo } from '../../repositories/drizzle-match-repo.js';
 import { DrizzleTicketRepo } from '../../repositories/drizzle-ticket-repo.js';
 import { DrizzleUserRepo } from '../../repositories/drizzle-user-repo.js';
@@ -13,7 +14,8 @@ const TOURNAMENT_ROW = {
   id: 1,
   name: 'Torneo',
   commission: '15.00',
-  isActive: true,
+  status: 'active',
+  finishedAt: null,
   carryover: 0,
   createdAt: new Date(),
 };
@@ -47,6 +49,7 @@ function createFakeClient() {
 function buildUow(db: any): UnitOfWork {
   return new DrizzleUnitOfWork(db as any, {
     tournamentRepo: (tx) => new DrizzleTournamentRepo(tx),
+    tournamentPointsRepo: (tx) => new DrizzleTournamentPointsRepo(tx),
     matchRepo: (tx) => new DrizzleMatchRepo(tx),
     ticketRepo: (tx) => new DrizzleTicketRepo(tx),
     userRepo: (tx) => new DrizzleUserRepo(tx),
@@ -81,6 +84,7 @@ describe('DrizzleUnitOfWork', () => {
     const db = { transaction: vi.fn(async (fn: (t: any) => Promise<unknown>) => fn(tx)) };
     const factories = {
       tournamentRepo: vi.fn((d: any) => new DrizzleTournamentRepo(d)),
+      tournamentPointsRepo: vi.fn((d: any) => new DrizzleTournamentPointsRepo(d)),
       matchRepo: vi.fn((d: any) => new DrizzleMatchRepo(d)),
       ticketRepo: vi.fn((d: any) => new DrizzleTicketRepo(d)),
       userRepo: vi.fn((d: any) => new DrizzleUserRepo(d)),

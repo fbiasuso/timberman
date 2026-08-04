@@ -165,13 +165,15 @@ export default function ResultsEntry() {
   // otherwise the most recent date so the admin can publish or review it.
   const openDateId = currentData?.matchDate?.id ?? null;
 
-  // All dates across tournaments, newest first. Matches only exist for the
-  // current open date (GET /matches/current), so any OTHER open date would
-  // render the wrong match cards (and saving would patch the wrong date's
-  // matches) — keep the current open date plus all non-open dates, which
-  // render financials only, no matches.
+  // All dates of the ACTIVE tournament, newest first (finished/archived
+  // tournaments are frozen — results cannot be managed there, design D3).
+  // Matches only exist for the current open date (GET /matches/current), so
+  // any OTHER open date would render the wrong match cards (and saving would
+  // patch the wrong date's matches) — keep the current open date plus all
+  // non-open dates, which render financials only, no matches.
   const selectableDates = useMemo(() => {
-    const all = (tournaments?.flatMap((t) => t.dates) ?? []).sort((a, b) => b.id - a.id);
+    const active = tournaments?.find((t) => t.status === 'active');
+    const all = (active?.dates ?? []).sort((a, b) => b.id - a.id);
     return all.filter((d) => d.id === openDateId || d.status !== 'open');
   }, [tournaments, openDateId]);
 

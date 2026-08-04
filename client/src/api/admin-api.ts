@@ -33,6 +33,12 @@ export interface TournamentDateDTO {
   winners: WinnerDTO[];
 }
 
+/** Tournament-level winner (tie at max points, persisted at terminate) */
+export interface TournamentWinnerDTO {
+  userId: string;
+  username: string;
+}
+
 export interface AdminTournamentDTO {
   id: number;
   name: string;
@@ -42,7 +48,29 @@ export interface AdminTournamentDTO {
   /** Cents — unpaid pozo rolled to the next date */
   carryover: number;
   createdAt: string;
+  tournamentWinners: TournamentWinnerDTO[];
   dates: TournamentDateDTO[];
+}
+
+/** Response of POST /api/admin/tournaments/:id/terminate */
+export interface TerminateTournamentResult {
+  id: number;
+  name: string;
+  status: string;
+  finishedAt: string | null;
+  winners: TournamentWinnerDTO & { points: number }[];
+  carryover: number;
+}
+
+/** Response of POST /api/admin/tournaments/:id/archive */
+export interface ArchiveTournamentResult {
+  id: number;
+  status: string;
+  nextTournament: {
+    id: number;
+    name: string;
+    status: string;
+  };
 }
 
 export interface AdminConfigDTO {
@@ -139,6 +167,20 @@ export const adminApi = {
     return client
       .post<{ tournament: AdminTournamentDTO }>('/admin/tournaments', payload)
       .then((r) => r.data.tournament);
+  },
+
+  /** POST /api/admin/tournaments/:tournamentId/terminate — freeze the active tournament */
+  terminateTournament(tournamentId: number) {
+    return client
+      .post<TerminateTournamentResult>(`/admin/tournaments/${tournamentId}/terminate`)
+      .then((r) => r.data);
+  },
+
+  /** POST /api/admin/tournaments/:tournamentId/archive — archive a finished tournament, auto-create the next */
+  archiveTournament(tournamentId: number) {
+    return client
+      .post<ArchiveTournamentResult>(`/admin/tournaments/${tournamentId}/archive`)
+      .then((r) => r.data);
   },
 
   /** PATCH /api/admin/matches/:matchId/result — set match result */

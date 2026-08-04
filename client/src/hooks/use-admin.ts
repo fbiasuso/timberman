@@ -74,6 +74,33 @@ export function useCreateTournament() {
   });
 }
 
+/** Terminate the active tournament (active → finished) — refreshes admin + ranking reads */
+export function useTerminateTournament() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tournamentId: number) => adminApi.terminateTournament(tournamentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      // The active-tournament resolution changed — the ranking default view may point elsewhere
+      qc.invalidateQueries({ queryKey: ['ranking'] });
+    },
+  });
+}
+
+/** Archive a finished tournament (auto-creates the next) — refreshes admin, matches and ranking */
+export function useArchiveTournament() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tournamentId: number) => adminApi.archiveTournament(tournamentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
+      // A NEW tournament is now active — scoped active-flow reads must refresh
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['ranking'] });
+    },
+  });
+}
+
 /** Set match result — invalidates ['admin', 'tournaments'] */
 export function useSetMatchResult() {
   const qc = useQueryClient();

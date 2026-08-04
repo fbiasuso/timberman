@@ -23,11 +23,15 @@ export interface PropagateBetAmountResult {
 
 /**
  * Propagates the new default bet amount to every open, ticket-free match date
- * across all active tournaments. Dates that already have tickets keep their
- * current amount and are reported as blocked — never thrown.
+ * of the ACTIVE tournament (spec system-config). Dates that already have
+ * tickets keep their current amount and are reported as blocked — never
+ * thrown. When NO tournament has status 'active', the loop is skipped
+ * entirely: no date is touched, but the audit rows are still written. Open
+ * dates of 'finished'/'archived' tournaments are never updated or listed.
  *
  * Transaction guarantees (inside UoW):
- * 1. The open-date list is read once.
+ * 1. The active tournament is resolved once; the open-date list is read once,
+ *    scoped to it via `findOpenMatchDates(active.id)`.
  * 2. Each date is locked FOR UPDATE before the ticket count is checked so a
  *    concurrent bet-placing request serializes its INSERT after this check,
  *    guaranteeing at-most-once propagation.
@@ -71,38 +75,44 @@ export class PropagateBetAmountUseCase {
   ): Promise<PropagateBetAmountResult> {
     const { tournamentRepo, ticketRepo, auditLogRepo } = repos;
 
-    // 1. Read all open dates (no tournament filter — see design D4)
-    const openDates = await tournamentRepo.findOpenMatchDates();
+    // 1. Resolve the ACTIVE tournament — propagation targets only its open
+    //    dates. No active tournament → skip the loop (no date is touched);
+    //    the audit rows below are still written.
+    const active = await tournamentRepo.findActive();
 
     const updatedDates: PropagateBetAmountResultEntry[] = [];
     const blockedDates: PropagateBetAmountResultEntry[] = [];
 
-    // 2. Per-date: lock row, check ticket count, update or block
-    for (const date of openDates) {
-      // Row-level lock — serializes concurrent bet placement
-      const locked = await tournamentRepo.findMatchDateByIdForUpdate(date.id);
-      if (!locked) {
-        // Rare edge case: date was deleted between findOpenMatchDates and now
-        continue;
-      }
+    if (active) {
+      const openDates = await tournamentRepo.findOpenMatchDates(active.id);
 
-      const ticketCount = await ticketRepo.countByMatchDateId(locked.id);
+      // 2. Per-date: lock row, check ticket count, update or block
+      for (const date of openDates) {
+        // Row-level lock — serializes concurrent bet placement
+        const locked = await tournamentRepo.findMatchDateByIdForUpdate(date.id);
+        if (!locked) {
+          // Rare edge case: date was deleted between findOpenMatchDates and now
+          continue;
+        }
 
-      if (ticketCount === 0) {
-        const updated = locked.withBetAmount(betAmount);
-        await tournamentRepo.updateMatchDate(updated);
-        updatedDates.push({
-          id: locked.id,
-          dateNumber: locked.dateNumber,
-          betAmount: betAmount.cents,
-        });
-      } else {
-        // Blocked dates keep their current amount — report it unchanged
-        blockedDates.push({
-          id: locked.id,
-          dateNumber: locked.dateNumber,
-          betAmount: locked.betAmount.cents,
-        });
+        const ticketCount = await ticketRepo.countByMatchDateId(locked.id);
+
+        if (ticketCount === 0) {
+          const updated = locked.withBetAmount(betAmount);
+          await tournamentRepo.updateMatchDate(updated);
+          updatedDates.push({
+            id: locked.id,
+            dateNumber: locked.dateNumber,
+            betAmount: betAmount.cents,
+          });
+        } else {
+          // Blocked dates keep their current amount — report it unchanged
+          blockedDates.push({
+            id: locked.id,
+            dateNumber: locked.dateNumber,
+            betAmount: locked.betAmount.cents,
+          });
+        }
       }
     }
 

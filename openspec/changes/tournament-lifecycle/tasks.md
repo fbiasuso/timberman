@@ -38,10 +38,10 @@ Chain strategy: pending
 
 ## Phase 2: Write Path (S2)
 
-- [ ] **T8** (S2) `application/tournament/publish-results-use-case.ts` — pick += tournamentPointsRepo; savePoints per ticket owner (incl. 0) after step 6. AC: txn row-per-owner test. Deps: T5
-- [ ] **T9** (S2) `create-date-use-case.ts` + `create-match-use-case.ts` — non-active → TournamentNotActiveError guards. AC: UC tests. Deps: T2
-- [ ] **T10** (S2) `application/admin/propagate-bet-amount-use-case.ts` — findActive() resolve; no active → skip loop (audit kept); else findOpenMatchDates(active.id). AC: finished-tournament dates untouched. Deps: T4
-- [ ] **T11** (S2) `http/routes/match-routes.ts` — /matches/current + /matches/dates resolve findActive() first, scope queries. AC: api.test scoped dates. Deps: T4
+- [x] **T8** (S2) `application/tournament/publish-results-use-case.ts` — pick += tournamentPointsRepo; savePoints per ticket owner (incl. 0) after step 6. AC: txn row-per-owner test. Deps: T5
+- [x] **T9** (S2) `create-date-use-case.ts` + `create-match-use-case.ts` — non-active → TournamentNotActiveError guards. AC: UC tests. Deps: T2
+- [x] **T10** (S2) `application/admin/propagate-bet-amount-use-case.ts` — findActive() resolve; no active → skip loop (audit kept); else findOpenMatchDates(active.id). AC: finished-tournament dates untouched. Deps: T4
+- [x] **T11** (S2) `http/routes/match-routes.ts` — /matches/current + /matches/dates resolve findActive() first, scope queries. AC: api.test scoped dates. Deps: T4
 
 ## Phase 3: Read Path (S3)
 

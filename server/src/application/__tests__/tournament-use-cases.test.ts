@@ -6,6 +6,7 @@ import { CreateMatchUseCase } from '../tournament/create-match-use-case.js';
 import { UpdateMatchDetailsUseCase } from '../tournament/update-match-details-use-case.js';
 import { PointsCalculator } from '../tournament/points-calculator.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
+import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
@@ -21,6 +22,7 @@ import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-wo
 import type { SystemConfig } from '../../domain/entities/system-config.js';
 import {
   TournamentNotFoundError,
+  TournamentNotActiveError,
   MatchDateNotFoundError,
   MatchNotFoundError,
   DateNotOpenError,
@@ -94,6 +96,17 @@ function createAuditLogRepoMocks() {
     findByAdminId: vi.fn(),
     findByUserId: vi.fn(),
     findAll: vi.fn(),
+  };
+  return repo;
+}
+
+function createPointsRepoMocks() {
+  const repo: TournamentPointsRepo = {
+    savePoints: vi.fn().mockResolvedValue(undefined),
+    findByTournamentId: vi.fn(),
+    findByUserAndTournament: vi.fn(),
+    saveWinners: vi.fn(),
+    findWinnersByTournamentId: vi.fn(),
   };
   return repo;
 }
@@ -228,6 +241,43 @@ describe('CreateDateUseCase', () => {
 
     const uc = new CreateDateUseCase(tournamentRepo, config);
     await expect(uc.execute({ tournamentId: 999 })).rejects.toThrow(TournamentNotFoundError);
+    expect(tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+  });
+
+  it('rejects with TournamentNotActiveError when the tournament is finished — nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const finished = Tournament.create({
+      id: 1,
+      name: 'Test',
+      commission: 15,
+      status: 'finished',
+      finishedAt: new Date(),
+      carryover: 0,
+      createdAt: new Date(),
+    });
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(finished);
+
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    await expect(uc.execute({ tournamentId: 1 })).rejects.toThrow(TournamentNotActiveError);
+    expect(tournamentRepo.findMatchDatesByTournamentId).not.toHaveBeenCalled();
+    expect(tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+  });
+
+  it('rejects with TournamentNotActiveError when the tournament is archived — nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const archived = Tournament.create({
+      id: 1,
+      name: 'Test',
+      commission: 15,
+      status: 'archived',
+      finishedAt: new Date(),
+      carryover: 0,
+      createdAt: new Date(),
+    });
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(archived);
+
+    const uc = new CreateDateUseCase(tournamentRepo, config);
+    await expect(uc.execute({ tournamentId: 1 })).rejects.toThrow(TournamentNotActiveError);
     expect(tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
   });
 });
@@ -582,6 +632,7 @@ describe('PublishResultsUseCase', () => {
     matchRepo: MatchRepo,
     ticketRepo: TicketRepo,
     userRepo: UserRepo,
+    pointsRepo: TournamentPointsRepo = createPointsRepoMocks(),
   ) {
     return new PublishResultsUseCase(
       tournamentRepo,
@@ -589,6 +640,7 @@ describe('PublishResultsUseCase', () => {
       ticketRepo,
       new PointsCalculator(),
       userRepo,
+      pointsRepo,
     );
   }
 
@@ -872,6 +924,7 @@ describe('PublishResultsUseCase', () => {
     const matchRepo = createMatchRepoMocks();
     const ticketRepo = createTicketRepoMocks();
     const userRepo = createUserRepoMocks();
+    const pointsRepo = createPointsRepoMocks();
 
     const results = matches.map((m) => m.setResult('L', '2-0'));
     vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
@@ -882,7 +935,7 @@ describe('PublishResultsUseCase', () => {
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
-      tournamentPointsRepo: undefined as never,
+      tournamentPointsRepo: pointsRepo,
       matchRepo,
       ticketRepo,
       userRepo,
@@ -895,6 +948,7 @@ describe('PublishResultsUseCase', () => {
       ticketRepo,
       new PointsCalculator(),
       userRepo,
+      pointsRepo,
       uow,
     );
     const result = await uc.execute(10);
@@ -905,6 +959,102 @@ describe('PublishResultsUseCase', () => {
     expect(tournamentRepo.updateMatchDate).toHaveBeenCalledOnce();
     expect(userRepo.update).toHaveBeenCalledOnce();
     expect(ticketRepo.update).toHaveBeenCalledOnce();
+    // The points row is persisted through the transaction-bound repo
+    // (ticket predicts L+E vs both L results → 1 correct)
+    expect(pointsRepo.savePoints).toHaveBeenCalledOnce();
+    expect(pointsRepo.savePoints).toHaveBeenCalledWith([
+      { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 1 },
+    ]);
+  });
+
+  it('persists one tournament_points row per ticket owner — including 0-point owners — inside the transaction', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const ticketRepo = createTicketRepoMocks();
+    const userRepo = createUserRepoMocks();
+    const pointsRepo = createPointsRepoMocks();
+
+    // Two matches: match 1 → L, match 2 → V. Three tickets:
+    //   user-1 predicts L + V → 2 correct (winner)
+    //   user-2 predicts L + L → 1 correct
+    //   user-3 predicts V + L → 0 correct
+    const results = [
+      matches[0].setResult('L', '2-0'),
+      matches[1].setResult('V', '1-0'),
+    ];
+    const tickets = [
+      Ticket.new({
+        id: 1,
+        userId: 'user-1',
+        matchDateId: 10,
+        betAmount: 1500,
+        predictions: [
+          TicketPrediction.new({ matchId: 1, prediction: 'L' }),
+          TicketPrediction.new({ matchId: 2, prediction: 'V' }),
+        ],
+      }),
+      Ticket.new({
+        id: 2,
+        userId: 'user-2',
+        matchDateId: 10,
+        betAmount: 1500,
+        predictions: [
+          TicketPrediction.new({ matchId: 1, prediction: 'L' }),
+          TicketPrediction.new({ matchId: 2, prediction: 'L' }),
+        ],
+      }),
+      Ticket.new({
+        id: 3,
+        userId: 'user-3',
+        matchDateId: 10,
+        betAmount: 1500,
+        predictions: [
+          TicketPrediction.new({ matchId: 1, prediction: 'V' }),
+          TicketPrediction.new({ matchId: 2, prediction: 'L' }),
+        ],
+      }),
+    ];
+
+    vi.mocked(tournamentRepo.findMatchDateByIdForUpdate).mockResolvedValue(closedDate);
+    vi.mocked(matchRepo.findByMatchDateId).mockResolvedValue(results);
+    vi.mocked(ticketRepo.findByMatchDateId).mockResolvedValue(tickets);
+    vi.mocked(tournamentRepo.updateMatchDate).mockImplementation(async (md) => md);
+    // Only user-1 wins (max correct > 0); the others never hit the payout path
+    vi.mocked(userRepo.findByIdForUpdate).mockResolvedValue(makeUser('user-1'));
+
+    const { uow, withTransaction } = createFakeUow({
+      tournamentRepo,
+      tournamentPointsRepo: pointsRepo,
+      matchRepo,
+      ticketRepo,
+      userRepo,
+      auditLogRepo: {} as never,
+    });
+
+    const uc = new PublishResultsUseCase(
+      tournamentRepo,
+      matchRepo,
+      ticketRepo,
+      new PointsCalculator(),
+      userRepo,
+      pointsRepo,
+      uow,
+    );
+    const result = await uc.execute(10);
+
+    // Winner + payouts as before
+    expect(result.points).toHaveLength(3);
+    expect(result.winners).toEqual([{ ticketId: 1, userId: 'user-1', prize: 6000 }]);
+
+    // The transaction persists ONE row per ticket owner — INCLUDING the
+    // 0-point owner (user-3) and the partial owner (user-2), not just the winner.
+    expect(withTransaction).toHaveBeenCalledOnce();
+    expect(pointsRepo.savePoints).toHaveBeenCalledOnce();
+    expect(pointsRepo.savePoints).toHaveBeenCalledWith([
+      { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 2 },
+      { userId: 'user-2', tournamentId: 1, matchDateId: 10, points: 1 },
+      { userId: 'user-3', tournamentId: 1, matchDateId: 10, points: 0 },
+    ]);
   });
 });
 
@@ -942,6 +1092,7 @@ describe('CreateMatchUseCase', () => {
     const tournamentRepo = createTournamentRepoMocks();
     const matchRepo = createMatchRepoMocks();
     vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(Tournament.new({ id: 1, name: 'Test' }));
     vi.mocked(matchRepo.save).mockImplementation(async (m) => m);
 
     const uc = buildUseCase(tournamentRepo, matchRepo);
@@ -1005,6 +1156,60 @@ describe('CreateMatchUseCase', () => {
     const uc = buildUseCase(tournamentRepo, matchRepo);
     await expect(uc.execute({ matchDateId: 999, localTeam: 'A', visitorTeam: 'B' }))
       .rejects.toThrow(MatchDateNotFoundError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects with TournamentNotFoundError when the parent tournament does not exist', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(null);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(TournamentNotFoundError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects with TournamentNotActiveError when the tournament is finished — nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const finished = Tournament.create({
+      id: 1,
+      name: 'Test',
+      commission: 15,
+      status: 'finished',
+      finishedAt: new Date(),
+      carryover: 0,
+      createdAt: new Date(),
+    });
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(finished);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(TournamentNotActiveError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects with TournamentNotActiveError when the tournament is archived — nothing saved', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const archived = Tournament.create({
+      id: 1,
+      name: 'Test',
+      commission: 15,
+      status: 'archived',
+      finishedAt: new Date(),
+      carryover: 0,
+      createdAt: new Date(),
+    });
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(archived);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo);
+    await expect(uc.execute({ matchDateId: 10, localTeam: 'A', visitorTeam: 'B' }))
+      .rejects.toThrow(TournamentNotActiveError);
     expect(matchRepo.save).not.toHaveBeenCalled();
   });
 });

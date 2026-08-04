@@ -96,13 +96,19 @@ export function createMatchRoutes(
     /**
      * GET /api/matches/current
      *
-     * Returns the current open match date (if any) with its matches.
-     * Used by the cartelera page to display available bets.
+     * Returns the current open match date of the ACTIVE tournament (if any)
+     * with its matches. Used by the cartelera page to display available bets.
+     * When no tournament is active, the response is the empty shape.
      */
     fastify.get('/api/matches/current', {
       preHandler: [authMiddleware],
     }, async (_request, _reply) => {
-      const openDates = await tournamentRepo.findOpenMatchDates();
+      const active = await tournamentRepo.findActive();
+      if (!active) {
+        return { matchDate: null, matches: [], carryover: 0, tournamentName: 'Torneo' } satisfies CurrentDateResponse;
+      }
+
+      const openDates = await tournamentRepo.findOpenMatchDates(active.id);
       if (openDates.length === 0) {
         return { matchDate: null, matches: [], carryover: 0, tournamentName: 'Torneo' } satisfies CurrentDateResponse;
       }
@@ -127,21 +133,23 @@ export function createMatchRoutes(
     /**
      * GET /api/matches/dates
      *
-     * Returns all match dates across all tournaments.
+     * Returns all match dates of the ACTIVE tournament only (design D5) —
+     * dates of 'finished'/'archived' tournaments never reach the client.
+     * When no tournament is active, the response is an empty list.
      */
     fastify.get('/api/matches/dates', {
       preHandler: [authMiddleware],
     }, async (_request, _reply) => {
-      // Get all tournaments then their dates
-      const tournaments = await tournamentRepo.findAll();
-      const allDates: MatchDateDTO[] = [];
-
-      for (const t of tournaments) {
-        const dates = await tournamentRepo.findMatchDatesByTournamentId(t.id);
-        for (const md of dates) {
-          allDates.push(toMatchDateDTO(md.toSnapshot(), t.carryover));
-        }
+      // Resolve the active tournament; its dates are the only ones surfaced
+      const active = await tournamentRepo.findActive();
+      if (!active) {
+        return { dates: [] } satisfies DatesResponse;
       }
+
+      const dates = await tournamentRepo.findMatchDatesByTournamentId(active.id);
+      const allDates: MatchDateDTO[] = dates.map((md) =>
+        toMatchDateDTO(md.toSnapshot(), active.carryover),
+      );
 
       // Sort by dateNumber descending (newest first)
       allDates.sort((a, b) => b.dateNumber - a.dateNumber);

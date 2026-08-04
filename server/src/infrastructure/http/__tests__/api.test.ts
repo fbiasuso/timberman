@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { UserRepo } from '../../../domain/ports/user-repo.js';
 import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
+import type { TournamentPointsRepo } from '../../../domain/ports/tournament-points-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
@@ -83,6 +84,14 @@ function createMockServices() {
     findAll: vi.fn(),
   };
 
+  const tournamentPointsRepo: TournamentPointsRepo = {
+    savePoints: vi.fn().mockResolvedValue(undefined),
+    findByTournamentId: vi.fn(),
+    findByUserAndTournament: vi.fn(),
+    saveWinners: vi.fn(),
+    findWinnersByTournamentId: vi.fn(),
+  };
+
   const configRepo: SystemConfigRepo = {
     get: vi.fn(),
     upsert: vi.fn(),
@@ -105,8 +114,8 @@ function createMockServices() {
   };
 
   return {
-    userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo, configRepo,
-    jwtService, bcryptService, config,
+    userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo,
+    tournamentPointsRepo, configRepo, jwtService, bcryptService, config,
   };
 }
 
@@ -128,6 +137,7 @@ describe('API Integration Tests', () => {
       services.auditLogRepo,
       services.config,
       services.configRepo,
+      services.tournamentPointsRepo,
     ));
     await app.ready();
   });
@@ -271,6 +281,9 @@ describe('API Integration Tests', () => {
     });
 
     function mockOpenDates(dates: typeof freeDate[]) {
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
       vi.mocked(services.tournamentRepo.findOpenMatchDates).mockResolvedValue(dates);
       vi.mocked(services.tournamentRepo.findMatchDateByIdForUpdate).mockImplementation(
         async (id) => dates.find((d) => d.id === id) ?? null,
@@ -603,6 +616,11 @@ describe('API Integration Tests', () => {
       // Winning ticket prize persisted
       const paidTicket = vi.mocked(services.ticketRepo.update).mock.calls[0][0];
       expect(paidTicket.prizeWon).toBe(6000);
+      // Points are persisted per ticket owner (ticket 1 = user-1, 2 correct)
+      expect(services.tournamentPointsRepo.savePoints).toHaveBeenCalledOnce();
+      expect(services.tournamentPointsRepo.savePoints).toHaveBeenCalledWith([
+        { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 2 },
+      ]);
     });
 
     it('rejects a re-submit with 409 DATE_NOT_CLOSED without credits', async () => {
@@ -923,6 +941,161 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('GET /api/matches/dates — active-tournament scoping (design D5)', () => {
+    const activeDate = MatchDate.create({
+      id: 1,
+      tournamentId: 1,
+      dateNumber: 2,
+      status: 'results',
+      pozo: 5000,
+      betAmount: 1500,
+      commission: 15,
+      createdAt: new Date(),
+    });
+    const otherDate = MatchDate.create({
+      id: 2,
+      tournamentId: 2,
+      dateNumber: 1,
+      status: 'open',
+      pozo: 0,
+      betAmount: 1500,
+      commission: 0,
+      createdAt: new Date(),
+    });
+
+    function mockUser() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    it('returns ONLY the active tournament dates — open dates of a non-active tournament are excluded', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 300 }),
+      );
+      // The scoped read returns the active tournament's dates; the mock for
+      // the other tournament's id is never invoked by the implementation.
+      vi.mocked(services.tournamentRepo.findMatchDatesByTournamentId).mockImplementation(
+        async (tournamentId) => (tournamentId === 1 ? [activeDate] : [otherDate]),
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.dates).toHaveLength(1);
+      expect(body.dates[0]).toMatchObject({ id: 1, tournamentId: 1, dateNumber: 2, carryover: 300 });
+      expect(body.dates[0].tournamentId).toBe(1);
+      // The query is scoped to the active tournament — no cross-tournament scan
+      expect(services.tournamentRepo.findActive).toHaveBeenCalledOnce();
+      expect(services.tournamentRepo.findMatchDatesByTournamentId).toHaveBeenCalledWith(1);
+      expect(services.tournamentRepo.findMatchDatesByTournamentId).not.toHaveBeenCalledWith(2);
+      expect(services.tournamentRepo.findAll).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty dates list when no tournament is active', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.dates).toEqual([]);
+      expect(services.tournamentRepo.findMatchDatesByTournamentId).not.toHaveBeenCalled();
+    });
+
+    it('returns 401 without a token', async () => {
+      vi.clearAllMocks();
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/dates',
+      });
+
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET /api/matches/current — active-tournament scoping (design D3)', () => {
+    function mockUser() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    it('returns the null shape when no tournament is active', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/current',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toEqual({
+        matchDate: null,
+        matches: [],
+        carryover: 0,
+        tournamentName: 'Torneo',
+      });
+      expect(services.tournamentRepo.findOpenMatchDates).not.toHaveBeenCalled();
+    });
+
+    it('scopes the open-date read to the active tournament', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      const openDate = MatchDate.create({
+        id: 10,
+        tournamentId: 1,
+        dateNumber: 1,
+        status: 'open',
+        pozo: 0,
+        betAmount: 1500,
+        commission: 0,
+        createdAt: new Date(),
+      });
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 500 }),
+      );
+      vi.mocked(services.tournamentRepo.findOpenMatchDates).mockResolvedValue([openDate]);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test', carryover: 500 }),
+      );
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/matches/current',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.matchDate).toMatchObject({ id: 10, tournamentId: 1, carryover: 500 });
+      expect(body.tournamentName).toBe('Test');
+      expect(services.tournamentRepo.findOpenMatchDates).toHaveBeenCalledWith(1);
+    });
+  });
+
   describe('POST /api/admin/dates', () => {
     const closedDate = MatchDate.create({
       id: 1,
@@ -1038,6 +1211,34 @@ describe('API Integration Tests', () => {
       expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
     });
 
+    it('rejects with 422 TOURNAMENT_NOT_ACTIVE for a finished tournament — no date created', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.create({
+          id: 1,
+          name: 'Test',
+          commission: 15,
+          status: 'finished',
+          finishedAt: new Date(),
+          carryover: 0,
+          createdAt: new Date(),
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/dates',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { tournamentId: 1 },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_ACTIVE');
+      expect(services.tournamentRepo.saveMatchDate).not.toHaveBeenCalled();
+    });
+
     it('rejects with 400 VALIDATION_ERROR when tournamentId is missing', async () => {
       vi.clearAllMocks();
       mockAdmin();
@@ -1086,6 +1287,9 @@ describe('API Integration Tests', () => {
       vi.clearAllMocks();
       mockAdmin();
       vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
       vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
         Match.create({ ...m.toSnapshot(), id: 1 }),
       );
@@ -1153,6 +1357,35 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('MATCH_DATE_NOT_FOUND');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 422 TOURNAMENT_NOT_ACTIVE when the tournament is finished — no match created', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.create({
+          id: 1,
+          name: 'Test',
+          commission: 15,
+          status: 'finished',
+          finishedAt: new Date(),
+          carryover: 0,
+          createdAt: new Date(),
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, localTeam: 'A', visitorTeam: 'B' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NOT_ACTIVE');
       expect(services.matchRepo.save).not.toHaveBeenCalled();
     });
 

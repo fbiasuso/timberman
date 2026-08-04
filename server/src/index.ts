@@ -13,6 +13,7 @@ import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
 import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
+import { ensureInitialTournament } from './infrastructure/bootstrap.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
 import { errorHandler } from './infrastructure/http/middlewares/error-handler.js';
 import { DEFAULT_SYSTEM_CONFIG } from './domain/entities/system-config.js';
@@ -83,6 +84,18 @@ await app.register(createRouter(
   tournamentPointsRepo,
   uow,
 ));
+
+// ── Boot: ensure an active tournament exists ─────────────────────
+// A fresh database has no tournament; every active flow (ranking,
+// matches, propagation) depends on one. Auto-create "Torneo 1" when the
+// table is empty — never when a tournament already exists (idempotent).
+// The app cannot operate without a tournament, so fail fast on error.
+try {
+  await ensureInitialTournament(tournamentRepo, config.commission);
+} catch (err) {
+  app.log.error({ err }, 'Failed to ensure initial tournament at boot');
+  process.exit(1);
+}
 
 // ── Health check ────────────────────────────────────────────────
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

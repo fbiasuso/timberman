@@ -1,7 +1,11 @@
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { SystemConfig } from '../../domain/entities/system-config.js';
 import { MatchDate } from '../../domain/entities/match-date.js';
-import { TournamentNotFoundError, OpenDateExistsError } from '../../domain/errors/index.js';
+import {
+  TournamentNotFoundError,
+  TournamentNotActiveError,
+  OpenDateExistsError,
+} from '../../domain/errors/index.js';
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
@@ -35,6 +39,8 @@ export interface MatchDateDTO {
  *    date.
  * 4. `betAmount` defaults to the system-config value; the optional input
  *    override is preserved for callers that need it.
+ * 5. Only ACTIVE tournaments accept new dates — 'finished' and 'archived'
+ *    tournaments are frozen (spec tournament-management).
  */
 export class CreateDateUseCase {
   constructor(
@@ -47,6 +53,11 @@ export class CreateDateUseCase {
     const tournament = await this.tournamentRepo.findById(input.tournamentId);
     if (!tournament) {
       throw new TournamentNotFoundError(input.tournamentId);
+    }
+
+    // Lifecycle guard: finished/archived tournaments accept no new dates
+    if (tournament.status !== 'active') {
+      throw new TournamentNotActiveError(tournament.id, tournament.status);
     }
 
     // Load existing dates: guard the one-open-round rule and compute the

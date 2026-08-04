@@ -32,6 +32,7 @@ const db = drizzle(queryClient);
 
 const userRepo = new DrizzleUserRepo(db);
 const tournamentRepo = new DrizzleTournamentRepo(db);
+const tournamentPointsRepo = new DrizzleTournamentPointsRepo(db);
 const matchRepo = new DrizzleMatchRepo(db);
 const ticketRepo = new DrizzleTicketRepo(db);
 const auditLogRepo = new DrizzleAuditLogRepo(db);
@@ -79,6 +80,7 @@ await app.register(createRouter(
   auditLogRepo,
   config,
   systemConfigRepo,
+  tournamentPointsRepo,
   uow,
 ));
 

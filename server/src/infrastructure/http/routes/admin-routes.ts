@@ -5,6 +5,7 @@ import type { TournamentRepo } from '../../../domain/ports/tournament-repo.js';
 import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
+import type { TournamentPointsRepo } from '../../../domain/ports/tournament-points-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
@@ -163,6 +164,7 @@ export function createAdminRoutes(
   matchRepo: MatchRepo,
   ticketRepo: TicketRepo,
   auditLogRepo: AuditLogRepo,
+  tournamentPointsRepo: TournamentPointsRepo,
   jwtService: JwtServiceImpl,
   bcryptService: BcryptServiceImpl,
   config: SystemConfig,
@@ -205,6 +207,7 @@ export function createAdminRoutes(
       ticketRepo,
       pointsCalculator,
       userRepo,
+      tournamentPointsRepo,
       uow,
     );
     const createDateUseCase = new CreateDateUseCase(tournamentRepo, config);

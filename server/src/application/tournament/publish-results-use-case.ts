@@ -1,4 +1,5 @@
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
+import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
@@ -41,10 +42,10 @@ export interface PublishResultsResult {
  * - With no correct predictions, the pozo is NOT paid and rolls into the
  *   tournament carryover for the next date.
  *
- * Every write (status transition, winner credits, ticket prizes, or
- * carryover roll) happens inside ONE database transaction: a failure
- * anywhere rolls everything back, so a mid-flow error can never leave a
- * partially-paid state. The transition is persisted first inside the
+ * Every write (status transition, winner credits, ticket prizes, carryover
+ * roll, or points persistence) happens inside ONE database transaction: a
+ * failure anywhere rolls everything back, so a mid-flow error can never
+ * leave a partially-paid state. The transition is persisted first inside the
  * transaction as the idempotency lock — a re-submit hits
  * `publishResults()` on an already-published date and is rejected with
  * DateNotClosedError before any credit is written.
@@ -56,6 +57,7 @@ export class PublishResultsUseCase {
     private readonly ticketRepo: TicketRepo,
     private readonly pointsCalculator: PointsCalculator,
     private readonly userRepo: UserRepo,
+    private readonly tournamentPointsRepo: TournamentPointsRepo,
     private readonly uow?: UnitOfWork,
   ) {}
 
@@ -67,6 +69,7 @@ export class PublishResultsUseCase {
     }
     return this.publish(matchDateId, {
       tournamentRepo: this.tournamentRepo,
+      tournamentPointsRepo: this.tournamentPointsRepo,
       matchRepo: this.matchRepo,
       ticketRepo: this.ticketRepo,
       userRepo: this.userRepo,
@@ -75,9 +78,16 @@ export class PublishResultsUseCase {
 
   private async publish(
     matchDateId: number,
-    repos: Pick<TransactionRepos, 'tournamentRepo' | 'matchRepo' | 'ticketRepo' | 'userRepo'>,
+    repos: Pick<
+      TransactionRepos,
+      | 'tournamentRepo'
+      | 'tournamentPointsRepo'
+      | 'matchRepo'
+      | 'ticketRepo'
+      | 'userRepo'
+    >,
   ): Promise<PublishResultsResult> {
-    const { tournamentRepo, matchRepo, ticketRepo, userRepo } = repos;
+    const { tournamentRepo, tournamentPointsRepo, matchRepo, ticketRepo, userRepo } = repos;
 
     // 1. Load match date — row locked FOR UPDATE so a concurrent publish of
     //    the SAME date blocks here, then sees the committed status and is
@@ -155,6 +165,20 @@ export class PublishResultsUseCase {
         tournament.withCarryover(tournament.carryover + pozo),
       );
     }
+
+    // 8. Persist one tournament_points row per ticket owner — INCLUDING
+    //    owners with 0 correct predictions (spec prize-payouts: points are
+    //    awarded only when a date transitions to 'results'). One ticket per
+    //    user per date in this domain, so the calculator's per-ticket
+    //    entries map 1:1 to owner rows.
+    await tournamentPointsRepo.savePoints(
+      points.map((p) => ({
+        userId: p.userId,
+        tournamentId: matchDate.tournamentId,
+        matchDateId,
+        points: p.correct,
+      })),
+    );
 
     return {
       id: saved.id,

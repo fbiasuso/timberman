@@ -475,14 +475,144 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('GET /api/ranking', () => {
+    function mockUser() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    function mockUsers() {
+      vi.mocked(services.userRepo.findAll).mockResolvedValue([
+        User.create({
+          id: 'user-1', username: 'ana', passwordHash: 'hash', role: 'user',
+          balance: 5000, createdAt: new Date(),
+        }),
+        User.create({
+          id: 'user-2', username: 'leo', passwordHash: 'hash', role: 'user',
+          balance: 5000, createdAt: new Date(),
+        }),
+      ]);
+    }
+
+    it('defaults to the active tournament and returns persisted points sorted desc', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      mockUsers();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+      vi.mocked(services.tournamentPointsRepo.findByTournamentId).mockResolvedValue([
+        { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 3 },
+        { userId: 'user-2', tournamentId: 1, matchDateId: 10, points: 1 },
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.ranking).toEqual([
+        { userId: 'user-1', username: 'ana', totalPoints: 3, position: 1 },
+        { userId: 'user-2', username: 'leo', totalPoints: 1, position: 2 },
+      ]);
+      expect(services.tournamentRepo.findActive).toHaveBeenCalledOnce();
+      expect(services.tournamentPointsRepo.findByTournamentId).toHaveBeenCalledWith(1);
+    });
+
+    it('scopes to the requested tournamentId without resolving the active one', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      mockUsers();
+      vi.mocked(services.tournamentPointsRepo.findByTournamentId).mockResolvedValue([
+        { userId: 'user-1', tournamentId: 2, matchDateId: 20, points: 5 },
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking?tournamentId=2',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.ranking).toEqual([
+        { userId: 'user-1', username: 'ana', totalPoints: 5, position: 1 },
+      ]);
+      expect(services.tournamentRepo.findActive).not.toHaveBeenCalled();
+      expect(services.tournamentPointsRepo.findByTournamentId).toHaveBeenCalledWith(2);
+    });
+
+    it('returns an empty ranking when no tournament is active', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.ranking).toEqual([]);
+      expect(services.tournamentPointsRepo.findByTournamentId).not.toHaveBeenCalled();
+    });
+
+    it('keeps users with 0 persisted points in the ranking', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      mockUsers();
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+      vi.mocked(services.tournamentPointsRepo.findByTournamentId).mockResolvedValue([
+        { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 0 },
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.ranking).toEqual([
+        { userId: 'user-1', username: 'ana', totalPoints: 0, position: 1 },
+      ]);
+    });
+
+    it('returns 401 without a token', async () => {
+      vi.clearAllMocks();
+      const res = await app.inject({ method: 'GET', url: '/api/ranking' });
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
   describe('GET /api/ranking/users/:userId', () => {
-    it('returns user detail for a non-admin authenticated user', async () => {
+    it('returns user detail from persisted points for a non-admin authenticated user', async () => {
+      vi.clearAllMocks();
       vi.mocked(services.jwtService.verify).mockReturnValue({
         sub: 'user-1',
         role: 'user',
         username: 'testuser',
       });
       vi.mocked(services.userRepo.findById).mockResolvedValue({ id: 'user-1' } as any);
+      vi.mocked(services.tournamentRepo.findActive).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Torneo 1' }),
+      );
+
+      // Persisted row for the paid date — points come from here (2)
+      vi.mocked(services.tournamentPointsRepo.findByUserAndTournament).mockResolvedValue([
+        { userId: 'user-1', tournamentId: 1, matchDateId: 10, points: 2 },
+      ]);
 
       const ticket = Ticket.new({
         id: 1,
@@ -494,7 +624,7 @@ describe('API Integration Tests', () => {
           TicketPrediction.new({ matchId: 2, prediction: 'V' }),
         ],
       });
-      vi.mocked(services.ticketRepo.findByUserId).mockResolvedValue([ticket]);
+      vi.mocked(services.ticketRepo.findByUserAndDate).mockResolvedValue(ticket);
 
       vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
         MatchDate.create({
@@ -522,12 +652,37 @@ describe('API Integration Tests', () => {
 
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
+      // points come from the persisted row (2); details recomputed (1 correct of 2)
       expect(body.userDetail).toEqual([
-        { dateNumber: 3, points: 1, totalMatches: 2, correctPredictions: 1 },
+        { dateNumber: 3, points: 2, totalMatches: 2, correctPredictions: 1 },
       ]);
+      expect(services.tournamentPointsRepo.findByUserAndTournament).toHaveBeenCalledWith('user-1', 1);
+    });
+
+    it('supports explicit tournamentId scoping', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+      vi.mocked(services.userRepo.findById).mockResolvedValue({ id: 'user-1' } as any);
+      vi.mocked(services.tournamentPointsRepo.findByUserAndTournament).mockResolvedValue([]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/ranking/users/user-1?tournamentId=7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).userDetail).toEqual([]);
+      expect(services.tournamentRepo.findActive).not.toHaveBeenCalled();
+      expect(services.tournamentPointsRepo.findByUserAndTournament).toHaveBeenCalledWith('user-1', 7);
     });
 
     it('returns 404 for an unknown userId', async () => {
+      vi.clearAllMocks();
       vi.mocked(services.jwtService.verify).mockReturnValue({
         sub: 'user-1',
         role: 'user',
@@ -544,6 +699,56 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('USER_NOT_FOUND');
+    });
+  });
+
+  describe('GET /api/tournaments', () => {
+    function mockUser() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    it('lists tournaments (active first) for any authenticated user', async () => {
+      vi.clearAllMocks();
+      mockUser();
+      vi.mocked(services.tournamentRepo.findAll).mockResolvedValue([
+        Tournament.new({ id: 2, name: 'Torneo 2' }),
+        Tournament.create({
+          id: 1,
+          name: 'Torneo 1',
+          commission: 15,
+          status: 'archived',
+          finishedAt: new Date('2026-01-01'),
+          carryover: 0,
+          createdAt: new Date('2025-12-01'),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/tournaments',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.tournaments).toHaveLength(2);
+      // Active tournament (id 2) first, archived after
+      expect(body.tournaments[0]).toMatchObject({ id: 2, name: 'Torneo 2', status: 'active' });
+      expect(body.tournaments[0].finishedAt).toBeNull();
+      expect(body.tournaments[0].createdAt).toEqual(expect.any(String));
+      expect(body.tournaments[1]).toMatchObject({ id: 1, name: 'Torneo 1', status: 'archived' });
+      expect(body.tournaments[1].finishedAt).toEqual(expect.any(String));
+    });
+
+    it('returns 401 without a token', async () => {
+      vi.clearAllMocks();
+      const res = await app.inject({ method: 'GET', url: '/api/tournaments' });
+      expect(res.statusCode).toBe(401);
+      expect(services.tournamentRepo.findAll).not.toHaveBeenCalled();
     });
   });
 

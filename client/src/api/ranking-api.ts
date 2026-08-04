@@ -8,9 +8,11 @@ export const rankingApi = {
       .then((r) => r.data.ranking);
   },
 
-  getUserDetail(userId: string): Promise<UserDateBreakdown[]> {
+  getUserDetail(userId: string, tournamentId?: number): Promise<UserDateBreakdown[]> {
     return client
-      .get<{ userDetail: UserDateBreakdown[] }>(`/ranking/users/${userId}`)
+      .get<{ userDetail: UserDateBreakdown[] }>(`/ranking/users/${userId}`, {
+        params: { tournamentId },
+      })
       .then((r) => r.data.userDetail);
   },
 };

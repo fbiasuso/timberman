@@ -144,6 +144,8 @@ export function usePublishResults() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'tournaments'] });
       qc.invalidateQueries({ queryKey: ['matches'] });
+      // Persisted tournament points changed — refresh the ranking reads
+      qc.invalidateQueries({ queryKey: ['ranking'] });
       // Prize payouts / carryover changes what bettors see on their tickets
       qc.invalidateQueries({ queryKey: ['bets'] });
       qc.invalidateQueries({ queryKey: ['me'] });

@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import { useRanking, useUserDetail } from '../../hooks/use-ranking';
+import { useTournaments } from '../../hooks/use-tournaments';
 import type { RankingEntry } from '../../types';
 import theme from '../../styles/theme';
 
@@ -42,6 +43,38 @@ const styles = {
     margin: '0 0 24px',
     fontSize: 13,
     color: theme.textoSecundario,
+  } as React.CSSProperties,
+
+  /* Tournament selector */
+  selectorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+    flexWrap: 'wrap' as const,
+  } as React.CSSProperties,
+
+  select: {
+    background: theme.searchBg,
+    color: theme.blanco,
+    border: `1px solid ${theme.border}`,
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 14,
+    minWidth: 180,
+    cursor: 'pointer',
+  } as React.CSSProperties,
+
+  activeBadge: {
+    background: theme.top3Bg,
+    color: theme.amarilloBet,
+    border: `1px solid ${theme.amarilloBet}`,
+    borderRadius: 999,
+    padding: '3px 10px',
+    fontSize: 12,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
   } as React.CSSProperties,
 
   /* Table header */
@@ -166,11 +199,18 @@ const styles = {
 /* ─── Component ───────────────────────────────────────── */
 
 export default function RankingPage() {
-  const { data: ranking, isLoading, error } = useRanking();
+  const { data: tournaments } = useTournaments();
+  const activeTournament = tournaments?.find((t) => t.status === 'active');
+  const [selectedTournamentId, setSelectedTournamentId] = useState<number | undefined>(undefined);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [hoveredUserId, setHoveredUserId] = useState<string | null>(null);
 
-  const userDetail = useUserDetail(expandedUserId ?? '');
+  // undefined ⇒ server resolves the active tournament (default view)
+  const currentTournamentId = selectedTournamentId ?? activeTournament?.id;
+  const currentTournament = tournaments?.find((t) => t.id === currentTournamentId);
+
+  const { data: ranking, isLoading, error } = useRanking(currentTournamentId);
+  const userDetail = useUserDetail(expandedUserId ?? '', currentTournamentId);
 
   // Only show the detail section for the currently expanded user
   const detailData =
@@ -178,12 +218,39 @@ export default function RankingPage() {
       ? userDetail.data
       : null;
 
+  /* ── Tournament selector ────────────────────────────── */
+  const renderSelector = () => {
+    if (!tournaments || tournaments.length === 0) return null;
+    return (
+      <div style={styles.selectorRow}>
+        <select
+          value={currentTournamentId ?? ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSelectedTournamentId(value ? Number(value) : undefined);
+          }}
+          aria-label="Torneo"
+        >
+          {tournaments.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        {currentTournament?.status === 'active' && (
+          <span style={styles.activeBadge}>activo</span>
+        )}
+      </div>
+    );
+  };
+
   /* ── Loading ──────────────────────────────────────── */
   if (isLoading) {
     return (
       <div style={styles.container}>
         <h2 style={styles.title}>Ranking</h2>
         <p style={styles.subtitle}>Clasificación del torneo</p>
+        {renderSelector()}
         <div style={styles.stateMsg}>Cargando ranking...</div>
       </div>
     );
@@ -195,6 +262,7 @@ export default function RankingPage() {
       <div style={styles.container}>
         <h2 style={styles.title}>Ranking</h2>
         <p style={styles.subtitle}>Clasificación del torneo</p>
+        {renderSelector()}
         <div style={styles.stateError}>
           Error al cargar el ranking. Intenta de nuevo.
         </div>
@@ -208,6 +276,7 @@ export default function RankingPage() {
       <div style={styles.container}>
         <h2 style={styles.title}>Ranking</h2>
         <p style={styles.subtitle}>Clasificación del torneo</p>
+        {renderSelector()}
         <div style={styles.stateMsg}>
           <p style={{ margin: 0, fontSize: 16 }}>No hay datos de ranking todavía.</p>
           <p style={{ margin: '8px 0 0', fontSize: 14 }}>
@@ -228,6 +297,8 @@ export default function RankingPage() {
     <div style={styles.container}>
       <h2 style={styles.title}>Ranking</h2>
       <p style={styles.subtitle}>Clasificación del torneo</p>
+
+      {renderSelector()}
 
       {/* Header */}
       <div style={styles.headerRow}>

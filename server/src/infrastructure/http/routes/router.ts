@@ -15,6 +15,7 @@ import { createMatchRoutes } from './match-routes.js';
 import { createBetRoutes } from './bet-routes.js';
 import { createAdminRoutes } from './admin-routes.js';
 import { createRankingRoutes } from './ranking-routes.js';
+import { createTournamentRoutes } from './tournament-routes.js';
 
 /**
  * Combines all domain route plugins into one Fastify plugin.
@@ -75,6 +76,12 @@ export function createRouter(
       tournamentRepo,
       matchRepo,
       ticketRepo,
+      tournamentPointsRepo,
+      jwtService,
+    ));
+
+    await fastify.register(createTournamentRoutes(
+      tournamentRepo,
       jwtService,
     ));
   };

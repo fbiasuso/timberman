@@ -45,10 +45,10 @@ Chain strategy: pending
 
 ## Phase 3: Read Path (S3)
 
-- [ ] **T12** (S3) `application/ranking/get-ranking-use-case.ts` — deps (userRepo, tournamentRepo, tournamentPointsRepo); active default, [] if none; aggregate persisted rows. AC: no ticket calls; ties; empty tests. Deps: T5
-- [ ] **T13** (S3) `application/ranking/get-user-detail-use-case.ts` — execute(userId, tournamentId?); findByUserAndTournament; paid-date totals. AC: per-tournament test. Deps: T5
-- [ ] **T14** (S3) `http/routes/ranking-routes.ts` + new `tournament-routes.ts` + `router.ts` — pass query.tournamentId to UCs; GET /api/tournaments (auth). AC: api.test 200/401. Deps: T12,T13
-- [ ] **T15** (S3) client — new `hooks/use-tournaments.ts`; `api/ranking-api.ts` getUserDetail(tournamentId?); RankingPage selector + "activo" badge + useRanking/useUserDetail. AC: RankingPage.test. Deps: T14
+- [x] **T12** (S3) `application/ranking/get-ranking-use-case.ts` — deps (userRepo, tournamentRepo, tournamentPointsRepo); active default, [] if none; aggregate persisted rows. AC: no ticket calls; ties; empty tests. Deps: T5
+- [x] **T13** (S3) `application/ranking/get-user-detail-use-case.ts` — execute(userId, tournamentId?); findByUserAndTournament; paid-date totals. AC: per-tournament test. Deps: T5
+- [x] **T14** (S3) `http/routes/ranking-routes.ts` + new `tournament-routes.ts` + `router.ts` — pass query.tournamentId to UCs; GET /api/tournaments (auth). AC: api.test 200/401. Deps: T12,T13
+- [x] **T15** (S3) client — new `hooks/use-tournaments.ts`; `api/ranking-api.ts` getUserDetail(tournamentId?); RankingPage selector + "activo" badge + useRanking/useUserDetail. AC: RankingPage.test. Deps: T14
 
 ## Phase 4: Lifecycle (S4)
 

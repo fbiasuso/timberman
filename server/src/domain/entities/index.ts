@@ -2,7 +2,7 @@ export { User } from './user.js';
 export type { UserRole, UserSnapshot } from './user.js';
 
 export { Tournament } from './tournament.js';
-export type { TournamentSnapshot } from './tournament.js';
+export type { TournamentStatus, TournamentSnapshot } from './tournament.js';
 
 export { MatchDate } from './match-date.js';
 export type { MatchDateStatus, MatchDateSnapshot } from './match-date.js';

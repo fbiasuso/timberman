@@ -384,6 +384,7 @@ describe('AdjustBalanceUseCase', () => {
       userRepo,
       auditLogRepo,
       tournamentRepo: undefined as never,
+      tournamentPointsRepo: undefined as never,
       matchRepo: undefined as never,
       ticketRepo: undefined as never,
     });

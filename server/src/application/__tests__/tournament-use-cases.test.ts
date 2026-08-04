@@ -482,6 +482,7 @@ describe('CloseDateUseCase', () => {
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
+      tournamentPointsRepo: undefined as never,
       ticketRepo,
       userRepo,
       auditLogRepo,
@@ -522,6 +523,7 @@ describe('CloseDateUseCase', () => {
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
+      tournamentPointsRepo: undefined as never,
       ticketRepo,
       userRepo,
       auditLogRepo,
@@ -880,6 +882,7 @@ describe('PublishResultsUseCase', () => {
 
     const { uow, withTransaction } = createFakeUow({
       tournamentRepo,
+      tournamentPointsRepo: undefined as never,
       matchRepo,
       ticketRepo,
       userRepo,

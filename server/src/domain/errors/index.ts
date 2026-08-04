@@ -126,6 +126,35 @@ export class BetModificationNotAllowedError extends DomainError {
   get statusCode(): number { return 405; }
 }
 
+// ── Tournament Lifecycle Errors ─────────────────────────────────
+
+export class TournamentOpenDateError extends DomainError {
+  constructor(tournamentId: number) {
+    super(`Tournament ${tournamentId} still has an open match date. Close or publish it before terminating.`);
+  }
+
+  get code(): string { return 'TOURNAMENT_OPEN_DATE'; }
+  get statusCode(): number { return 409; }
+}
+
+export class TournamentNotActiveError extends DomainError {
+  constructor(tournamentId: number, status: string) {
+    super(`Tournament ${tournamentId} is not active. Current status: "${status}"`);
+  }
+
+  get code(): string { return 'TOURNAMENT_NOT_ACTIVE'; }
+  get statusCode(): number { return 422; }
+}
+
+export class TournamentNotFinishedError extends DomainError {
+  constructor(tournamentId: number, status: string) {
+    super(`Tournament ${tournamentId} is not finished. Current status: "${status}"`);
+  }
+
+  get code(): string { return 'TOURNAMENT_NOT_FINISHED'; }
+  get statusCode(): number { return 422; }
+}
+
 export class RegistrationDisabledError extends DomainError {
   constructor() {
     super('Self-registration is disabled. Contact an administrator.');

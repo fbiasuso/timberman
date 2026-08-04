@@ -25,7 +25,8 @@ export interface AdminTournamentDTO {
   id: number;
   name: string;
   commission: number;
-  isActive: boolean;
+  status: string;
+  finishedAt: Date | null;
   carryover: number; // cents — unpaid pozo rolled to the next date
   createdAt: Date;
   dates: TournamentDateDTO[];
@@ -85,7 +86,8 @@ export class ListTournamentsUseCase {
         id: snap.id,
         name: snap.name,
         commission: snap.commission,
-        isActive: snap.isActive,
+        status: snap.status,
+        finishedAt: snap.finishedAt,
         carryover: snap.carryover,
         createdAt: snap.createdAt,
         dates: dateDTOs,

@@ -1,4 +1,5 @@
 import type { TournamentRepo } from './tournament-repo.js';
+import type { TournamentPointsRepo } from './tournament-points-repo.js';
 import type { MatchRepo } from './match-repo.js';
 import type { TicketRepo } from './ticket-repo.js';
 import type { UserRepo } from './user-repo.js';
@@ -13,6 +14,7 @@ import type { AuditLogRepo } from './audit-log-repo.js';
  */
 export interface TransactionRepos {
   tournamentRepo: TournamentRepo;
+  tournamentPointsRepo: TournamentPointsRepo;
   matchRepo: MatchRepo;
   ticketRepo: TicketRepo;
   userRepo: UserRepo;

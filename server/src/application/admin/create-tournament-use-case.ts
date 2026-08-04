@@ -13,7 +13,7 @@ export interface TournamentDTO {
   id: number;
   name: string;
   commission: number;
-  isActive: boolean;
+  status: string;
   createdAt: Date;
 }
 
@@ -46,7 +46,7 @@ export class CreateTournamentUseCase {
       id: snap.id,
       name: snap.name,
       commission: snap.commission,
-      isActive: snap.isActive,
+      status: snap.status,
       createdAt: snap.createdAt,
     };
   }

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../db/schema.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
@@ -16,20 +16,25 @@ export class DrizzleTournamentRepo implements TournamentRepo {
 
   // ── Tournament ─────────────────────────────────────────────────
 
+  private toTournament(row: any): Tournament {
+    return Tournament.create({
+      id: row.id,
+      name: row.name,
+      commission: Number(row.commission),
+      status: row.status,
+      finishedAt: row.finishedAt,
+      carryover: row.carryover,
+      createdAt: row.createdAt,
+    } as TournamentSnapshot);
+  }
+
   async findById(id: number): Promise<Tournament | null> {
     const [row] = await this.db
       .select()
       .from(schema.tournaments)
       .where(eq(schema.tournaments.id, id));
     if (!row) return null;
-    return Tournament.create({
-      id: row.id,
-      name: row.name,
-      commission: Number(row.commission),
-      isActive: row.isActive,
-      carryover: row.carryover,
-      createdAt: row.createdAt,
-    } as TournamentSnapshot);
+    return this.toTournament(row);
   }
 
   async findByIdForUpdate(id: number): Promise<Tournament | null> {
@@ -41,44 +46,21 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .where(eq(schema.tournaments.id, id))
       .for('update');
     if (!row) return null;
-    return Tournament.create({
-      id: row.id,
-      name: row.name,
-      commission: Number(row.commission),
-      isActive: row.isActive,
-      carryover: row.carryover,
-      createdAt: row.createdAt,
-    } as TournamentSnapshot);
+    return this.toTournament(row);
   }
 
   async findActive(): Promise<Tournament | null> {
     const [row] = await this.db
       .select()
       .from(schema.tournaments)
-      .where(eq(schema.tournaments.isActive, true));
+      .where(eq(schema.tournaments.status, 'active'));
     if (!row) return null;
-    return Tournament.create({
-      id: row.id,
-      name: row.name,
-      commission: Number(row.commission),
-      isActive: row.isActive,
-      carryover: row.carryover,
-      createdAt: row.createdAt,
-    } as TournamentSnapshot);
+    return this.toTournament(row);
   }
 
   async findAll(): Promise<Tournament[]> {
     const rows = await this.db.select().from(schema.tournaments);
-    return rows.map((row) =>
-      Tournament.create({
-        id: row.id,
-        name: row.name,
-        commission: Number(row.commission),
-        isActive: row.isActive,
-        carryover: row.carryover,
-        createdAt: row.createdAt,
-      } as TournamentSnapshot),
-    );
+    return rows.map((row) => this.toTournament(row));
   }
 
   async save(tournament: Tournament): Promise<Tournament> {
@@ -90,14 +72,7 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .insert(schema.tournaments)
       .values(values as any)
       .returning();
-    return Tournament.create({
-      id: row.id,
-      name: row.name,
-      commission: Number(row.commission),
-      isActive: row.isActive,
-      carryover: row.carryover,
-      createdAt: row.createdAt,
-    } as TournamentSnapshot);
+    return this.toTournament(row);
   }
 
   async update(tournament: Tournament): Promise<Tournament> {
@@ -107,20 +82,14 @@ export class DrizzleTournamentRepo implements TournamentRepo {
       .set({
         name: snap.name,
         commission: String(snap.commission),
-        isActive: snap.isActive,
+        status: snap.status,
+        finishedAt: snap.finishedAt,
         carryover: snap.carryover,
       })
       .where(eq(schema.tournaments.id, snap.id))
       .returning();
     if (!row) throw new TournamentNotFoundError(snap.id);
-    return Tournament.create({
-      id: row.id,
-      name: row.name,
-      commission: Number(row.commission),
-      isActive: row.isActive,
-      carryover: row.carryover,
-      createdAt: row.createdAt,
-    } as TournamentSnapshot);
+    return this.toTournament(row);
   }
 
   // ── MatchDate ──────────────────────────────────────────────────
@@ -162,11 +131,15 @@ export class DrizzleTournamentRepo implements TournamentRepo {
     return rows.map((row) => this.toMatchDate(row));
   }
 
-  async findOpenMatchDates(): Promise<MatchDate[]> {
+  async findOpenMatchDates(tournamentId?: number): Promise<MatchDate[]> {
+    const conditions = [eq(schema.matchDates.status, 'open')];
+    if (tournamentId !== undefined) {
+      conditions.push(eq(schema.matchDates.tournamentId, tournamentId));
+    }
     const rows = await this.db
       .select()
       .from(schema.matchDates)
-      .where(eq(schema.matchDates.status, 'open'));
+      .where(and(...conditions));
     return rows.map((row) => this.toMatchDate(row));
   }
 

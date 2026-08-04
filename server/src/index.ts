@@ -7,6 +7,7 @@ import { JwtServiceImpl } from './infrastructure/auth/jwt-service.js';
 import { BcryptServiceImpl } from './infrastructure/auth/bcrypt-service.js';
 import { DrizzleUserRepo } from './infrastructure/repositories/drizzle-user-repo.js';
 import { DrizzleTournamentRepo } from './infrastructure/repositories/drizzle-tournament-repo.js';
+import { DrizzleTournamentPointsRepo } from './infrastructure/repositories/drizzle-tournament-points-repo.js';
 import { DrizzleMatchRepo } from './infrastructure/repositories/drizzle-match-repo.js';
 import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-repo.js';
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
@@ -43,6 +44,7 @@ const bcryptService = new BcryptServiceImpl();
 // so every write in those flows is atomic and rolls back on failure.
 const uow = new DrizzleUnitOfWork(db, {
   tournamentRepo: (tx) => new DrizzleTournamentRepo(tx),
+  tournamentPointsRepo: (tx) => new DrizzleTournamentPointsRepo(tx),
   matchRepo: (tx) => new DrizzleMatchRepo(tx),
   ticketRepo: (tx) => new DrizzleTicketRepo(tx),
   userRepo: (tx) => new DrizzleUserRepo(tx),

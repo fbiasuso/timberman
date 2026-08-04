@@ -56,7 +56,7 @@ async function main() {
     .values({
       name: 'Torneo Timberman',
       commission: '15.00',
-      isActive: true,
+      status: 'active',
     })
     .returning({ id: schema.tournaments.id });
   console.log(`   id=${tournament.id}`);

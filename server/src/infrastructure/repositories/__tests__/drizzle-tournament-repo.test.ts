@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { SQL } from 'drizzle-orm';
 import { DrizzleTournamentRepo } from '../drizzle-tournament-repo.js';
 import { Tournament } from '../../../domain/entities/tournament.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
@@ -8,6 +9,25 @@ import {
 } from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Render a drizzle SQL condition to a readable signature: column names and
+ * literal values it references. Used to assert the repo builds the where
+ * clause with the right filters without executing SQL.
+ */
+function sqlSignature(cond: unknown): string {
+  if (typeof cond === 'string') return cond;
+  if (cond instanceof SQL) {
+    return cond.queryChunks.map((chunk) => sqlSignature(chunk)).join('');
+  }
+  if (cond && typeof cond === 'object' && 'name' in cond) {
+    return `col:${(cond as { name: string }).name}`;
+  }
+  if (cond && typeof cond === 'object' && 'value' in cond) {
+    return `val:${(cond as { value: unknown }).value}`;
+  }
+  return String(cond);
+}
 
 /** Build a fake PostgresJsDatabase with the query-chain shape the repo uses. */
 function createMockDb() {
@@ -44,7 +64,8 @@ describe('DrizzleTournamentRepo', () => {
       id: 1,
       name: 'Torneo',
       commission: '15.00',
-      isActive: true,
+      status: 'active',
+      finishedAt: null,
       carryover: 2500,
       createdAt: new Date(),
     };
@@ -68,7 +89,8 @@ describe('DrizzleTournamentRepo', () => {
         id: 1,
         name: 'Torneo',
         commission: '15.00',
-        isActive: true,
+        status: 'active',
+        finishedAt: null,
         carryover: 0,
         createdAt: new Date(),
       },
@@ -137,7 +159,8 @@ describe('DrizzleTournamentRepo', () => {
       id: 1,
       name: 'Torneo',
       commission: '15.00',
-      isActive: true,
+      status: 'active',
+      finishedAt: null,
       carryover: 2500,
       createdAt: new Date(),
     };
@@ -184,5 +207,141 @@ describe('DrizzleTournamentRepo', () => {
 
     expect(forSpy).toHaveBeenCalledWith('update');
     expect(date?.id).toBe(10);
+  });
+
+  it('findActive() filters on status = active and maps the row to an active Tournament', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.selectWhere.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Torneo',
+        commission: '15.00',
+        status: 'active',
+        finishedAt: null,
+        carryover: 0,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const tournament = await repo.findActive();
+
+    // The condition is built with eq(tournaments.status, 'active')
+    const signature = sqlSignature(mocks.selectWhere.mock.calls[0][0]);
+    expect(signature).toContain('col:status');
+    expect(signature).toContain('val:active');
+    expect(tournament?.status).toBe('active');
+    expect(tournament?.finishedAt).toBeNull();
+  });
+
+  it('findOpenMatchDates() filters on status = open only when no tournament is given', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.selectWhere.mockResolvedValue([]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    await repo.findOpenMatchDates();
+
+    const signature = sqlSignature(mocks.selectWhere.mock.calls[0][0]);
+    expect(signature).toContain('col:status');
+    expect(signature).toContain('val:open');
+    expect(signature).not.toContain('col:tournament_id');
+  });
+
+  it('findOpenMatchDates(tournamentId) also filters on tournament_id', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.selectWhere.mockResolvedValue([]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    await repo.findOpenMatchDates(7);
+
+    // and(eq(status, 'open'), eq(tournamentId, 7)) — both conditions in the SQL
+    const signature = sqlSignature(mocks.selectWhere.mock.calls[0][0]);
+    expect(signature).toContain('col:status');
+    expect(signature).toContain('val:open');
+    expect(signature).toContain('col:tournament_id');
+    expect(signature).toContain('val:7');
+  });
+
+  it('update() maps status and finishedAt into the SET clause', async () => {
+    const { db, mocks } = createMockDb();
+    const finishedAt = new Date('2025-06-01');
+    mocks.updateReturning.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Torneo',
+        commission: '15.00',
+        status: 'archived',
+        finishedAt,
+        carryover: 0,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const tournament = await repo.update(
+      Tournament.create({
+        id: 1,
+        name: 'Torneo',
+        commission: 15,
+        status: 'archived',
+        finishedAt,
+        carryover: 0,
+        createdAt: new Date(),
+      }),
+    );
+
+    expect(mocks.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'archived', finishedAt }),
+    );
+    expect(tournament.status).toBe('archived');
+    expect(tournament.finishedAt).toBe(finishedAt);
+  });
+
+  it('findById() maps status and finishedAt from the row to the entity', async () => {
+    const { db, mocks } = createMockDb();
+    const finishedAt = new Date('2025-06-01');
+    mocks.selectWhere.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Torneo',
+        commission: '15.00',
+        status: 'archived',
+        finishedAt,
+        carryover: 0,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const tournament = await repo.findById(1);
+
+    expect(tournament?.status).toBe('archived');
+    expect(tournament?.finishedAt).toBe(finishedAt);
+  });
+
+  it('findAll() maps status and finishedAt from rows to entities', async () => {
+    const finishedAt = new Date('2025-06-01');
+    const row = {
+      id: 1,
+      name: 'Torneo',
+      commission: '15.00',
+      status: 'finished',
+      finishedAt,
+      carryover: 0,
+      createdAt: new Date(),
+    };
+    // findAll uses select().from(...) with no where clause
+    const db = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockResolvedValue([row]),
+      }),
+    };
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const tournaments = await repo.findAll();
+
+    expect(tournaments).toHaveLength(1);
+    expect(tournaments[0].status).toBe('finished');
+    expect(tournaments[0].finishedAt).toBe(finishedAt);
   });
 });

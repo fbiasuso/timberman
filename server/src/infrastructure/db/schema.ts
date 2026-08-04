@@ -8,6 +8,7 @@ import {
   boolean,
   numeric,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 // ── System Config ────────────────────────────────────────────────
@@ -33,7 +34,8 @@ export const tournaments = pgTable('tournaments', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
   commission: numeric('commission', { precision: 5, scale: 2 }).default('15.00').notNull(),
-  isActive: boolean('is_active').default(true).notNull(),
+  status: text('status', { enum: ['active', 'finished', 'archived'] }).default('active').notNull(),
+  finishedAt: timestamp('finished_at'),
   carryover: integer('carryover').default(0).notNull(), // cents — unpaid pozo rolled to next date
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -101,4 +103,33 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('idx_audit_admin').on(table.adminId),
+]);
+
+// ── Tournament Points ──────────────────────────────────────────
+// One row per user+tournament+date, written only when a date is
+// published (status 'results'). Ranking reads these rows instead of
+// recomputing from tickets on the fly.
+export const tournamentPoints = pgTable('tournament_points', {
+  id: serial('id').primaryKey(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  tournamentId: integer('tournament_id').references(() => tournaments.id).notNull(),
+  matchDateId: integer('match_date_id').references(() => matchDates.id).notNull(),
+  points: integer('points').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('idx_tournament_points_tournament_date_user')
+    .on(table.tournamentId, table.matchDateId, table.userId),
+  index('idx_tournament_points_tournament_user').on(table.tournamentId, table.userId),
+]);
+
+// ── Tournament Winners ─────────────────────────────────────────
+// All users tied at the maximum tournament points at terminate.
+// Multi-winner (tie) by construction — see design D1.
+export const tournamentWinners = pgTable('tournament_winners', {
+  id: serial('id').primaryKey(),
+  tournamentId: integer('tournament_id').references(() => tournaments.id).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+}, (table) => [
+  uniqueIndex('idx_tournament_winners_tournament_user')
+    .on(table.tournamentId, table.userId),
 ]);

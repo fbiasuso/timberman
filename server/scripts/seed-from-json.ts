@@ -126,7 +126,7 @@ async function main() {
     .values({
       name: 'Torneo Importado',
       commission: '15.00',
-      isActive: true,
+      status: 'active',
     })
     .returning({ id: schema.tournaments.id });
 

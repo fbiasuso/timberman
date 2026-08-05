@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import ResultsEntry from '../admin/ResultsEntry';
 import type { TournamentDateDTO } from '../../api/admin-api';
 
@@ -15,12 +15,28 @@ vi.mock('../../hooks/use-matches', () => ({
   })),
 }));
 
-const { publishMutate } = vi.hoisted(() => ({ publishMutate: vi.fn() }));
+const { publishMutate, setResultMutate, setResultHandlers } = vi.hoisted(() => {
+  const publishMutate = vi.fn();
+  const setResultMutate = vi.fn();
+  const setResultHandlers: {
+    onSuccess?: () => void;
+    onError?: (error: unknown) => void;
+  } = {};
+  // Capture the react-query mutate callbacks so tests can simulate success/error
+  // (a plain vi.fn() would swallow the handlers and the UI could never progress).
+  setResultMutate.mockImplementation(
+    (_payload: unknown, handlers?: { onSuccess?: () => void; onError?: (error: unknown) => void }) => {
+      setResultHandlers.onSuccess = handlers?.onSuccess;
+      setResultHandlers.onError = handlers?.onError;
+    },
+  );
+  return { publishMutate, setResultMutate, setResultHandlers };
+});
 
 vi.mock('../../hooks/use-admin', () => ({
   useAdminTournaments: vi.fn(),
   useSetMatchResult: () => ({
-    mutate: vi.fn(),
+    mutate: setResultMutate,
     isSuccess: false,
     isError: false,
     variables: null,
@@ -45,6 +61,9 @@ import { useAdminTournaments, usePublishResults } from '../../hooks/use-admin';
 afterEach(() => {
   cleanup();
   publishMutate.mockClear();
+  setResultMutate.mockClear();
+  setResultHandlers.onSuccess = undefined;
+  setResultHandlers.onError = undefined;
   vi.mocked(useMatchesByDate).mockClear();
 });
 
@@ -85,6 +104,14 @@ const openMatches = [
   { id: 11, matchDateId: 1, localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: null, score: null },
   { id: 12, matchDateId: 1, localTeam: 'Racing', visitorTeam: 'Independiente', result: null, score: null },
 ];
+
+// Single-match closed-date fixtures for the two-score entry interactions
+const savedMatch = {
+  id: 21, matchDateId: 2, localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: 'L', score: '2-1',
+};
+const noResultMatch = {
+  id: 22, matchDateId: 2, localTeam: 'Racing', visitorTeam: 'Independiente', result: null, score: null,
+};
 
 function mockTournaments(dates: TournamentDateDTO[]) {
   vi.mocked(useAdminTournaments).mockReturnValue({
@@ -351,5 +378,234 @@ describe('ResultsEntry', () => {
 
     // Manual selection survives — it is NOT reset to the new open date
     expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe(String(closedDate.id));
+  });
+
+  describe('two-score entry (PR 4)', () => {
+    it('renders local and visitor score inputs for every match', () => {
+      mockTournaments([openDate]);
+      mockCurrent(openDate, openMatches);
+
+      render(<ResultsEntry />);
+
+      // Local inputs carry placeholder "2", Visita inputs placeholder "1"
+      expect(screen.getAllByPlaceholderText('2')).toHaveLength(2);
+      expect(screen.getAllByPlaceholderText('1')).toHaveLength(2);
+    });
+
+    it('prefills both inputs from a persisted score', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([savedMatch]);
+
+      render(<ResultsEntry />);
+
+      expect((screen.getByPlaceholderText('2') as HTMLInputElement).value).toBe('2');
+      expect((screen.getByPlaceholderText('1') as HTMLInputElement).value).toBe('1');
+    });
+
+    it("prefills 'x' when a winner was saved without a score", () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([{ ...savedMatch, result: 'L', score: null }]);
+
+      render(<ResultsEntry />);
+
+      expect((screen.getByPlaceholderText('2') as HTMLInputElement).value).toBe('x');
+      expect((screen.getByPlaceholderText('1') as HTMLInputElement).value).toBe('');
+    });
+
+    it('keeps Guardar hidden until the inputs are dirty AND valid', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      // Untouched (both empty) → no Guardar
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+
+      const local = screen.getByPlaceholderText('2');
+
+      // One side empty without 'x' → invalid → hidden
+      fireEvent.change(local, { target: { value: '3' } });
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+
+      // Out-of-range → invalid → hidden
+      fireEvent.change(local, { target: { value: '21' } });
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+
+      // Back to a valid local, fill the visitor → Guardar appears
+      fireEvent.change(local, { target: { value: '3' } });
+      fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '2' } });
+      expect(screen.getByRole('button', { name: 'Guardar' })).toBeDefined();
+    });
+
+    it('shows the exact Spanish message for invalid input on interaction', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '21' } });
+      fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '2' } });
+
+      expect(screen.getByText('Ingresá un marcador válido (0 a 20)')).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+    });
+
+    it('shows the one-empty hint when only one side is filled', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '3' } });
+
+      expect(screen.getByText("Usá números o 'x' para ganador sin marcador")).toBeDefined();
+    });
+
+    it('calls setResult with the raw score inputs when Guardar is clicked', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '2' } });
+      fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '1' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(setResultMutate).toHaveBeenCalledWith(
+        { matchId: noResultMatch.id, localScore: '2', visitorScore: '1' },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+    });
+
+    it('replaces Guardar with a green checkmark after a successful save', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '2' } });
+      fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '1' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(setResultHandlers.onSuccess).toBeDefined();
+      act(() => {
+        setResultHandlers.onSuccess?.();
+      });
+
+      expect(screen.getByText('✓')).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+    });
+
+    it('restores Guardar when the admin edits a saved entry', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([savedMatch]);
+
+      render(<ResultsEntry />);
+
+      // Saved result → checkmark shown, Guardar hidden
+      expect(screen.getByText('✓')).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Guardar' })).toBeNull();
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '3' } });
+
+      expect(screen.queryByText('✓')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Guardar' })).toBeDefined();
+    });
+
+    it('shows Limpiar only for saved results and clears via an empty payload', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([savedMatch, noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      // Only the match with a persisted result gets a Limpiar button
+      const limpiar = screen.getAllByRole('button', { name: 'Limpiar' });
+      expect(limpiar).toHaveLength(1);
+
+      fireEvent.click(limpiar[0]);
+
+      expect(setResultMutate).toHaveBeenCalledWith(
+        { matchId: savedMatch.id, localScore: '', visitorScore: '' },
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
+    });
+
+    it('removes the checkmark and empties the inputs after Limpiar succeeds', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([savedMatch]);
+
+      render(<ResultsEntry />);
+
+      expect(screen.getByText('✓')).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpiar' }));
+      act(() => {
+        setResultHandlers.onSuccess?.();
+      });
+
+      expect(screen.queryByText('✓')).toBeNull();
+      expect((screen.getByPlaceholderText('2') as HTMLInputElement).value).toBe('');
+      expect((screen.getByPlaceholderText('1') as HTMLInputElement).value).toBe('');
+    });
+
+    it('surfaces the server error message and keeps Guardar for retry', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([noResultMatch]);
+
+      render(<ResultsEntry />);
+
+      fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '2' } });
+      fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '1' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      act(() => {
+        setResultHandlers.onError?.({
+          response: { data: { message: 'Ingresá un marcador válido (0 a 20)' } },
+        });
+      });
+
+      expect(screen.getByText('Ingresá un marcador válido (0 a 20)')).toBeDefined();
+      // Button returns for retry
+      expect(screen.getByRole('button', { name: 'Guardar' })).toBeDefined();
+    });
+
+    it('resyncs non-dirty entries after a refetch but preserves in-flight edits', () => {
+      mockTournaments([closedDate]);
+      mockCurrent(null);
+      mockMatchesByDate([savedMatch, noResultMatch]);
+
+      const { rerender } = render(<ResultsEntry />);
+
+      // Admin edits the second match (no result yet) — becomes dirty
+      const localInputs = screen.getAllByPlaceholderText('2');
+      fireEvent.change(localInputs[1], { target: { value: '3' } });
+
+      // Refetch lands: the first match keeps its saved result, the second is now persisted
+      mockMatchesByDate([savedMatch, { ...noResultMatch, result: 'L', score: '3-1' }]);
+      rerender(<ResultsEntry />);
+
+      const localInputsAfter = screen.getAllByPlaceholderText('2');
+      // Dirty entry keeps the in-flight edit (not clobbered by the resync)
+      expect((localInputsAfter[1] as HTMLInputElement).value).toBe('3');
+      // Non-dirty entry resets to the persisted baseline
+      expect((localInputsAfter[0] as HTMLInputElement).value).toBe('2');
+    });
   });
 });

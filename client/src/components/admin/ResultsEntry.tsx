@@ -449,6 +449,7 @@ export default function ResultsEntry() {
                     placeholder="2"
                     value={entry.local}
                     onChange={(e) => handleInputChange(match, 'local', e.target.value)}
+                    disabled={entry.status === 'saving'}
                   />
                 </div>
 
@@ -459,6 +460,7 @@ export default function ResultsEntry() {
                     placeholder="1"
                     value={entry.visitor}
                     onChange={(e) => handleInputChange(match, 'visitor', e.target.value)}
+                    disabled={entry.status === 'saving'}
                   />
                 </div>
 

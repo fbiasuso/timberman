@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMatchDates, useMatchHistory } from '../../hooks/use-matches';
-import { useBets } from '../../hooks/use-bets';
 import { formatDate } from '../../utils/format';
-import type { MatchDTO, Prediction } from '../../types';
+import type { MatchDTO } from '../../types';
 import theme from '../../styles/theme';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -95,8 +94,8 @@ const scoreText: React.CSSProperties = {
   fontWeight: 700,
 };
 
-/** The user's own bet badge (L/E/V), far right of the match row */
-const betBadge: React.CSSProperties = {
+/** The actual match result badge (L/E/V), far right of the match row */
+const resultBadge: React.CSSProperties = {
   fontWeight: 700,
   fontSize: 14,
   color: theme.blanco,
@@ -136,11 +135,9 @@ function hideBrokenImg(e: React.SyntheticEvent<HTMLImageElement>) {
 
 interface HistoryMatchRowProps {
   match: MatchDTO;
-  /** The user's prediction for this match, when they have a bet on this date */
-  bet?: Prediction | null;
 }
 
-function HistoryMatchRow({ match, bet }: HistoryMatchRowProps) {
+function HistoryMatchRow({ match }: HistoryMatchRowProps) {
   const score = formatScore(match.score);
 
   return (
@@ -184,13 +181,14 @@ function HistoryMatchRow({ match, bet }: HistoryMatchRowProps) {
         </div>
       </div>
 
-      {/* Far right: the user's own bet for this match (L/E/V), if any */}
-      {bet && (
+      {/* Far right: the actual match result (L/E/V), neutral-styled. Only
+          'results' dates expose a result — the server nulls it otherwise. */}
+      {match.result && (
         <div
-          style={betBadge}
-          title={bet === 'L' ? 'Local' : bet === 'E' ? 'Empate' : 'Visitante'}
+          style={resultBadge}
+          title={match.result === 'L' ? 'Local' : match.result === 'E' ? 'Empate' : 'Visitante'}
         >
-          {bet}
+          {match.result}
         </div>
       )}
     </div>
@@ -205,9 +203,8 @@ function HistoryMatchRow({ match, bet }: HistoryMatchRowProps) {
  * Lists every non-open date (the open date is the current betting round
  * rendered above). Expanding a row fetches that date's sanitized history via
  * useMatchHistory and renders read-only match rows: teams only for 'closed'
- * dates (server nulls results), teams + score for 'results' dates. When the
- * user has a ticket for the expanded date, each match shows their own bet
- * (L/E/V) on the right.
+ * dates (server nulls results), teams + score + actual result badge (L/E/V)
+ * for 'results' dates.
  */
 export default function HistorySection() {
   const { data, isLoading, error } = useMatchDates();
@@ -218,21 +215,6 @@ export default function HistorySection() {
   const { data: historyData, isLoading: historyLoading, error: historyError } = useMatchHistory(
     expandedDateId ?? undefined,
   );
-
-  // The user's ticket for the expanded date (reused ticket data). The history
-  // endpoint does not include bets, so the ticket predictions are joined by
-  // matchId to show the user's L/E/V per match.
-  const { data: betsData } = useBets(expandedDateId ?? undefined);
-
-  const betByMatchId = useMemo(() => {
-    const map = new Map<number, Prediction>();
-    for (const ticket of betsData?.tickets ?? []) {
-      for (const tp of ticket.predictions) {
-        map.set(tp.matchId, tp.prediction);
-      }
-    }
-    return map;
-  }, [betsData]);
 
   // "Fechas anteriores": every non-open date, sorted chronologically.
   const dates = (data?.dates ?? [])
@@ -315,7 +297,6 @@ export default function HistorySection() {
                     <HistoryMatchRow
                       key={match.id}
                       match={match}
-                      bet={betByMatchId.get(match.id)}
                     />
                   ))}
                 </div>

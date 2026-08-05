@@ -2,19 +2,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import TicketCard from '../bets/TicketCard';
 
-// Mock the matches hooks for team name lookup + date status lookup
+// Mock the match-dates hook for the ticket's date status lookup
 vi.mock('../../hooks/use-matches', () => ({
-  useCurrentMatches: () => ({
-    data: {
-      matchDate: { id: 10, dateNumber: 1, status: 'results', pozo: 5000, betAmount: 1500 },
-      matches: [
-        { id: 1, localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: 'L' },
-        { id: 2, localTeam: 'Racing', visitorTeam: 'Independiente', result: null },
-      ],
-    },
-    isLoading: false,
-    error: null,
-  }),
   useMatchDates: () => ({
     data: {
       dates: [
@@ -37,8 +26,16 @@ const baseTicket = {
   prizeWon: null,
   createdAt: '2026-07-28T12:00:00.000Z',
   predictions: [
-    { matchId: 1, prediction: 'L' as const },
-    { matchId: 2, prediction: 'V' as const },
+    {
+      matchId: 1,
+      prediction: 'L' as const,
+      match: { localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: null },
+    },
+    {
+      matchId: 2,
+      prediction: 'V' as const,
+      match: { localTeam: 'Racing', visitorTeam: 'Independiente', result: null },
+    },
   ],
 };
 
@@ -48,7 +45,7 @@ describe('TicketCard', () => {
     expect(screen.getByText(/Ticket #42/)).toBeDefined();
   });
 
-  it('renders predictions with team names when matches are available', () => {
+  it('renders predictions with team names from the embedded match', () => {
     render(<TicketCard ticket={baseTicket} onSelect={vi.fn()} />);
     expect(screen.getByText(/River Plate vs Boca Juniors/)).toBeDefined();
     expect(screen.getByText(/Racing vs Independiente/)).toBeDefined();
@@ -62,8 +59,9 @@ describe('TicketCard', () => {
     expect(screen.getByText('V')).toBeDefined();
   });
 
-  it('shows status badge', () => {
+  it('shows an "Estado:" field with the derived status', () => {
     render(<TicketCard ticket={baseTicket} onSelect={vi.fn()} />);
+    expect(screen.getByText('Estado:')).toBeDefined();
     expect(screen.getByText('Pendiente')).toBeDefined();
   });
 
@@ -80,12 +78,12 @@ describe('TicketCard', () => {
     expect(onSelect).toHaveBeenCalledWith(baseTicket);
   });
 
-  it('shows the prize badge when the ticket has a prize', () => {
+  it('shows "Pagado" plus the prize badge when the ticket has a prize', () => {
     const winningTicket = { ...baseTicket, prizeWon: 334 };
     render(<TicketCard ticket={winningTicket} onSelect={vi.fn()} />);
-    expect(screen.getByText(/Premio ganado/)).toBeDefined();
+    expect(screen.getByText('Pagado')).toBeDefined();
     expect(screen.getByText('Premio ganado: $3.34')).toBeDefined();
-    // Pending badge is replaced by the prize badge
+    // Pending badge is replaced by the paid status
     expect(screen.queryByText('Pendiente')).toBeNull();
   });
 

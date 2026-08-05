@@ -704,6 +704,222 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('GET /api/bets — enriched predictions (design T4)', () => {
+    function mockAuth() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    function mockResultsDate() {
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+        MatchDate.create({
+          id: 10,
+          tournamentId: 1,
+          dateNumber: 3,
+          status: 'results' as const,
+          pozo: 5000,
+          betAmount: 1500,
+          commission: 0,
+          createdAt: new Date(),
+        }),
+      );
+    }
+
+    function mockResultsMatches() {
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
+        Match.new({ id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' })
+          .setResult('L', '2-1'),
+        Match.new({ id: 2, matchDateId: 10, localTeam: 'Racing', visitorTeam: 'Independiente' })
+          .setResult('E', '1-1'),
+      ]);
+    }
+
+    function mockTicket() {
+      return Ticket.new({
+        id: 1,
+        userId: 'user-1',
+        matchDateId: 10,
+        betAmount: 1500,
+        predictions: [
+          TicketPrediction.new({ matchId: 1, prediction: 'L' }),
+          TicketPrediction.new({ matchId: 2, prediction: 'V' }),
+        ],
+      });
+    }
+
+    it('embeds team names and results for a ticket on a results date', async () => {
+      vi.clearAllMocks();
+      mockAuth();
+      vi.mocked(services.ticketRepo.findByUserId).mockResolvedValue([mockTicket()]);
+      mockResultsDate();
+      mockResultsMatches();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/bets',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.tickets).toHaveLength(1);
+      expect(body.tickets[0].predictions).toEqual([
+        {
+          matchId: 1,
+          prediction: 'L',
+          match: { localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: 'L' },
+        },
+        {
+          matchId: 2,
+          prediction: 'V',
+          match: { localTeam: 'Racing', visitorTeam: 'Independiente', result: 'E' },
+        },
+      ]);
+    });
+
+    it('nulls results for a ticket on a closed date, keeping team names', async () => {
+      vi.clearAllMocks();
+      mockAuth();
+      vi.mocked(services.ticketRepo.findByUserId).mockResolvedValue([mockTicket()]);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+        MatchDate.create({
+          id: 10,
+          tournamentId: 1,
+          dateNumber: 3,
+          status: 'closed' as const,
+          pozo: 5000,
+          betAmount: 1500,
+          commission: 0,
+          createdAt: new Date(),
+        }),
+      );
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
+        Match.new({ id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' })
+          .setResult('L', '2-1'),
+        Match.new({ id: 2, matchDateId: 10, localTeam: 'Racing', visitorTeam: 'Independiente' })
+          .setResult('E', '1-1'),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/bets',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.tickets[0].predictions).toEqual([
+        {
+          matchId: 1,
+          prediction: 'L',
+          match: { localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: null },
+        },
+        {
+          matchId: 2,
+          prediction: 'V',
+          match: { localTeam: 'Racing', visitorTeam: 'Independiente', result: null },
+        },
+      ]);
+    });
+
+    it('supports the matchDateId filter and still enriches the response', async () => {
+      vi.clearAllMocks();
+      mockAuth();
+      vi.mocked(services.ticketRepo.findByUserAndDate).mockResolvedValue(mockTicket());
+      mockResultsDate();
+      mockResultsMatches();
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/bets?matchDateId=10',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(services.ticketRepo.findByUserAndDate).toHaveBeenCalledWith('user-1', 10);
+      const body = JSON.parse(res.body);
+      expect(body.tickets).toHaveLength(1);
+      expect(body.tickets[0].predictions[0].match).toEqual({
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+        result: 'L',
+      });
+    });
+
+    it('returns an empty list when the user has no tickets', async () => {
+      vi.clearAllMocks();
+      mockAuth();
+      vi.mocked(services.ticketRepo.findByUserId).mockResolvedValue([]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/bets',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).tickets).toEqual([]);
+    });
+  });
+
+  describe('POST /api/bets — enriched response (design T4)', () => {
+    function mockAuth() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'testuser',
+      });
+    }
+
+    it('returns the created ticket with embedded team names (results null on an open date)', async () => {
+      vi.clearAllMocks();
+      mockAuth();
+      // Open date — place-bet flow (date + match lookups happen inside the use case)
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(
+        MatchDate.new({ id: 10, tournamentId: 1, dateNumber: 1 }),
+      );
+      vi.mocked(services.userRepo.findByIdForUpdate).mockResolvedValue({
+        id: 'user-1',
+        deductBalance: vi.fn((_amount: number) => ({ id: 'user-1', balance: 0 })),
+      } as any);
+      vi.mocked(services.ticketRepo.findByUserAndDate).mockResolvedValue(null);
+      vi.mocked(services.matchRepo.findByMatchDateId).mockResolvedValue([
+        Match.new({ id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' }),
+      ]);
+      vi.mocked(services.ticketRepo.save).mockResolvedValue(
+        Ticket.new({
+          id: 42,
+          userId: 'user-1',
+          matchDateId: 10,
+          betAmount: 1500,
+          predictions: [TicketPrediction.new({ matchId: 1, prediction: 'L' })],
+        }),
+      );
+      vi.mocked(services.userRepo.update).mockResolvedValue({ id: 'user-1', balance: 0 } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/bets',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, predictions: { '1': 'L' } },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.ticket.id).toBe(42);
+      expect(body.ticket.predictions).toEqual([
+        {
+          matchId: 1,
+          prediction: 'L',
+          match: { localTeam: 'River Plate', visitorTeam: 'Boca Juniors', result: null },
+        },
+      ]);
+    });
+  });
+
   describe('GET /api/tournaments', () => {
     function mockUser() {
       vi.mocked(services.jwtService.verify).mockReturnValue({

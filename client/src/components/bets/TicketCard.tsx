@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
 import type { TicketDTO } from '../../types';
 import { formatDate, formatMoney } from '../../utils/format';
-import { useCurrentMatches, useMatchDates } from '../../hooks/use-matches';
+import { deriveTicketStatus } from '../../utils/ticket-status';
+import { useMatchDates } from '../../hooks/use-matches';
 import theme from '../../styles/theme';
 
 interface TicketCardProps {
@@ -13,34 +13,17 @@ interface TicketCardProps {
 /**
  * TicketCard — preview card for a single ticket.
  *
- * Shows ticket number, date, bet amount, status badge, and a
- * summary list of predictions. Clicking opens the full ticket modal.
+ * Shows ticket number, date, bet amount, "Estado:" field, and a summary
+ * list of predictions (team names come from the server-embedded match).
+ * Clicking opens the full ticket modal.
  */
 export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
-  // Load current match data to enrich predictions with team names
-  const { data: currentData } = useCurrentMatches();
   // Load all match dates to know whether the ticket's date already has
   // published results (a date with status 'results' and no prize = loser)
   const { data: datesData } = useMatchDates();
 
-  // Build a lookup map of matchId → match info (team names + results)
-  const matchMap = useMemo(() => {
-    const map = new Map<number, { local: string; visitor: string; result: string | null }>();
-    if (currentData?.matches) {
-      for (const m of currentData.matches) {
-        map.set(m.id, { local: m.localTeam, visitor: m.visitorTeam, result: m.result });
-      }
-    }
-    return map;
-  }, [currentData]);
-
-  // The ticket's date is published when its date reached the 'results'
-  // status — a prizeWon === null ticket on such a date lost, it is not
-  // pending anymore.
-  const datePublished = useMemo(
-    () => datesData?.dates.some((d) => d.id === ticket.matchDateId && d.status === 'results') ?? false,
-    [datesData, ticket.matchDateId],
-  );
+  const dateStatus = datesData?.dates.find((d) => d.id === ticket.matchDateId)?.status;
+  const status = deriveTicketStatus(ticket, dateStatus);
 
   return (
     <div
@@ -78,10 +61,31 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
         </span>
       </div>
 
-      {/* Status badge — winning ticket shows the prize; a loser on a
-          published date shows "Sin premio"; otherwise still pending */}
-      <div style={{ marginBottom: 12 }}>
-        {ticket.prizeWon != null ? (
+      {/* Estado — derived from prize + date status; winners also show the amount */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, color: theme.textoSecundario }}>
+          Estado:
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '2px 8px',
+            borderRadius: 4,
+            background: theme.searchBg,
+            color: status === 'Pagado' ? theme.verdeBet : theme.textoSecundario,
+          }}
+        >
+          {status}
+        </span>
+        {ticket.prizeWon != null && (
           <span
             style={{
               fontSize: 11,
@@ -94,42 +98,14 @@ export default function TicketCard({ ticket, onSelect }: TicketCardProps) {
           >
             Premio ganado: {formatMoney(ticket.prizeWon)}
           </span>
-        ) : datePublished ? (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: theme.searchBg,
-              color: theme.textoSecundario,
-            }}
-          >
-            Sin premio
-          </span>
-        ) : (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: theme.searchBg,
-              color: theme.textoSecundario,
-            }}
-          >
-            Pendiente
-          </span>
         )}
       </div>
 
       {/* Predictions summary */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {ticket.predictions.map((tp) => {
-          const match = matchMap.get(tp.matchId);
-          const label = match
-            ? `${match.local} vs ${match.visitor}`
-            : `Partido #${tp.matchId}`;
+          const match = tp.match;
+          const label = match ? `${match.localTeam} vs ${match.visitorTeam}` : '';
 
           const color = getPredictionColor(tp.prediction, match?.result ?? null);
 

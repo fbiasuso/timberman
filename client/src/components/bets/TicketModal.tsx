@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
 import type { TicketDTO } from '../../types';
 import { formatDate, formatMoney } from '../../utils/format';
-import { useCurrentMatches } from '../../hooks/use-matches';
+import { deriveTicketStatus } from '../../utils/ticket-status';
+import { useMatchDates } from '../../hooks/use-matches';
 import theme from '../../styles/theme';
 
 interface TicketModalProps {
@@ -13,21 +13,17 @@ interface TicketModalProps {
  * TicketModal — full ticket detail in receipt style with PDF download placeholder.
  */
 export default function TicketModal({ ticket, onClose }: TicketModalProps) {
-  const { data: currentData } = useCurrentMatches();
+  const { data: datesData } = useMatchDates();
 
-  const matchMap = useMemo(() => {
-    const map = new Map<number, { local: string; visitor: string; result: string | null }>();
-    if (currentData?.matches) {
-      for (const m of currentData.matches) {
-        map.set(m.id, { local: m.localTeam, visitor: m.visitorTeam, result: m.result });
-      }
-    }
-    return map;
-  }, [currentData]);
+  // The ticket's date status drives what the summary shows: "Aciertos xx/xx"
+  // only exists once results are published ('results' status).
+  const dateStatus = datesData?.dates.find((d) => d.id === ticket.matchDateId)?.status;
+  const status = deriveTicketStatus(ticket, dateStatus);
 
+  // Accuracy comes from the server-embedded match result (sanitized: null
+  // unless the date is in 'results' status), so past tickets count correctly.
   const correctCount = ticket.predictions.filter((tp) => {
-    const match = matchMap.get(tp.matchId);
-    return match?.result != null && tp.prediction === match.result;
+    return tp.match?.result != null && tp.prediction === tp.match.result;
   }).length;
 
   // Backdrop click to close
@@ -107,10 +103,7 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {ticket.predictions.map((tp) => {
-              const match = matchMap.get(tp.matchId);
-              const label = match
-                ? `${match.local} vs ${match.visitor}`
-                : `Partido #${tp.matchId}`;
+              const match = tp.match;
               const color = match?.result
                 ? tp.prediction === match.result
                   ? theme.verdeBet
@@ -129,7 +122,9 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
                     borderRadius: 8,
                   }}
                 >
-                  <span style={{ fontSize: 14, color: theme.blanco }}>{label}</span>
+                  <span style={{ fontSize: 14, color: theme.blanco }}>
+                    {match ? `${match.localTeam} vs ${match.visitorTeam}` : ''}
+                  </span>
                   <span
                     style={{
                       fontWeight: 700,
@@ -161,9 +156,14 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               marginBottom: 4,
             }}
           >
-            <span>Monto apostado</span>
-            <span style={{ fontWeight: 600, color: theme.blanco }}>
-              {formatMoney(ticket.betAmount)}
+            <span>Estado:</span>
+            <span
+              style={{
+                fontWeight: 600,
+                color: status === 'Pagado' ? theme.verdeBet : theme.blanco,
+              }}
+            >
+              {status}
             </span>
           </div>
           <div
@@ -175,16 +175,44 @@ export default function TicketModal({ ticket, onClose }: TicketModalProps) {
               marginBottom: 4,
             }}
           >
-            <span>Aciertos</span>
-            <span
-              style={{
-                fontWeight: 600,
-                color: correctCount > 0 ? theme.verdeBet : theme.textoSecundario,
-              }}
-            >
-              {correctCount}/{ticket.predictions.length}
+            <span>Monto apostado</span>
+            <span style={{ fontWeight: 600, color: theme.blanco }}>
+              {formatMoney(ticket.betAmount)}
             </span>
           </div>
+          {dateStatus === 'results' ? (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 14,
+                color: theme.textoSecundario,
+                marginBottom: 4,
+              }}
+            >
+              <span>Aciertos</span>
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: correctCount > 0 ? theme.verdeBet : theme.textoSecundario,
+                }}
+              >
+                {correctCount}/{ticket.predictions.length}
+              </span>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 14,
+                color: theme.textoSecundario,
+                marginBottom: 4,
+              }}
+            >
+              <span>Pendiente de resultados</span>
+            </div>
+          )}
           {ticket.prizeWon != null && (
             <div
               style={{

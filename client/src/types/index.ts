@@ -52,10 +52,20 @@ export interface UpdateMatchDetailsPayload {
   scheduledAt?: string | null;
 }
 
+/** Embedded match snapshot on a ticket prediction (team names + sanitized result) */
+export interface TicketMatchDTO {
+  localTeam: string;
+  visitorTeam: string;
+  /** Actual result — null unless the ticket's date is in 'results' status */
+  result: string | null;
+}
+
 /** Ticket prediction DTO */
 export interface TicketPredictionDTO {
   matchId: number;
   prediction: Prediction;
+  /** Embedded match — filled by the server for GET/POST /api/bets */
+  match?: TicketMatchDTO | null;
 }
 
 /** Ticket DTO (from GET /api/bets / POST /api/bets) */

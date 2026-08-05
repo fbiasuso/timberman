@@ -18,16 +18,7 @@ vi.mock('../../hooks/use-matches', () => ({
   })),
 }));
 
-vi.mock('../../hooks/use-bets', () => ({
-  useBets: vi.fn(() => ({
-    data: { tickets: [] },
-    isLoading: false,
-    error: null,
-  })),
-}));
-
 import { useMatchDates, useMatchHistory } from '../../hooks/use-matches';
-import { useBets } from '../../hooks/use-bets';
 
 afterEach(() => {
   cleanup();
@@ -40,12 +31,6 @@ afterEach(() => {
   vi.mocked(useMatchHistory).mockReset();
   vi.mocked(useMatchHistory).mockReturnValue({
     data: null,
-    isLoading: false,
-    error: null,
-  } as any);
-  vi.mocked(useBets).mockReset();
-  vi.mocked(useBets).mockReturnValue({
-    data: { tickets: [] },
     isLoading: false,
     error: null,
   } as any);
@@ -108,14 +93,6 @@ function mockDates(dates: MatchDateDTO[]) {
 function mockHistory(matchDate: MatchDateDTO, matches: unknown[]) {
   vi.mocked(useMatchHistory).mockReturnValue({
     data: { matchDate, matches },
-    isLoading: false,
-    error: null,
-  } as any);
-}
-
-function mockTickets(tickets: unknown[]) {
-  vi.mocked(useBets).mockReturnValue({
-    data: { tickets },
     isLoading: false,
     error: null,
   } as any);
@@ -214,38 +191,30 @@ describe('HistorySection', () => {
     expect(screen.getAllByTitle('expandir').length).toBe(2);
   });
 
-  it('shows the user bet (L/E/V) on the far right when they have a ticket', () => {
+  it('shows the actual match result (L/E/V) on the far right for results dates', () => {
     mockDates([resultsDate]);
     mockHistory(resultsDate, resultsMatches);
-    mockTickets([
-      {
-        id: 1,
-        userId: 'u1',
-        matchDateId: resultsDate.id,
-        betAmount: 1500,
-        prizeWon: null,
-        predictions: [{ matchId: 31, prediction: 'V' }],
-        createdAt: '2026-07-27T00:00:00.000Z',
-      },
-    ]);
 
     render(<HistorySection />);
     fireEvent.click(screen.getByRole('button', { name: /Fecha 2/ }));
 
-    // The user's own bet appears for the match they bet on
-    expect(screen.getByText('V')).toBeDefined();
-    expect(screen.getByTitle('Visitante')).toBeDefined();
+    // The badge shows match.result — the ACTUAL result ('L' for River Plate),
+    // not the user's prediction, and it is neutral-styled (no accuracy colors).
+    expect(screen.getByText('L')).toBeDefined();
+    expect(screen.getByTitle('Local')).toBeDefined();
   });
 
-  it('does not show a bet when the user has no ticket for the date', () => {
-    mockDates([resultsDate]);
-    mockHistory(resultsDate, resultsMatches);
+  it('does not show a result badge on closed dates (result is null)', () => {
+    mockDates([closedDate]);
+    mockHistory(closedDate, closedMatches);
 
     render(<HistorySection />);
-    fireEvent.click(screen.getByRole('button', { name: /Fecha 2/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fecha 1/ }));
 
-    expect(screen.queryByText('V')).toBeNull();
+    // Closed dates come back with result/score null (server sanitization) →
+    // no result badge and no result text at all
     expect(screen.queryByText('L')).toBeNull();
+    expect(screen.queryByText('V')).toBeNull();
   });
 
   it('collapses an expanded row when clicked again', () => {

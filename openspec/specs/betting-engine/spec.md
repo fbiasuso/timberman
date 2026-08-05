@@ -91,3 +91,68 @@ The system MUST use the system-config commission rate (not `tournament.commissio
 - WHEN a NEW date is closed after the change
 - THEN the new date uses 20%
 - AND previously closed dates retain their snapshots
+
+### Requirement: Enriched Ticket DTO
+
+The system MUST embed a match snapshot `{ localTeam, visitorTeam, result }` in every prediction of the ticket responses for `GET /api/bets` and `POST /api/bets`. The embedded `result` MUST be sanitized per the ticket's date status using the same rule as the history endpoint (`sanitizeMatches`): the result MUST be `null` unless the date status is 'results'; team names MUST always be embedded. When no match is found for a prediction's `matchId`, the embedded `match` MUST be `null`. The client MUST read team names and past-ticket accuracy from these embedded matches, not from current-date lookups.
+
+#### Scenario: GET /api/bets enriches predictions
+
+- GIVEN an authenticated user with tickets across one or more dates
+- WHEN the user requests GET /api/bets
+- THEN each prediction in every ticket includes an embedded match with the team names
+
+#### Scenario: Result hidden on non-results dates
+
+- GIVEN a ticket whose date status is 'open' or 'closed' with stored match results behind it
+- WHEN the user requests GET /api/bets
+- THEN each embedded match has `result` null and the team names present
+- AND no stored result leaks through the ticket response
+
+#### Scenario: Result present on results dates
+
+- GIVEN a ticket on a date with status 'results'
+- WHEN the user requests GET /api/bets
+- THEN each embedded match includes the actual result
+
+#### Scenario: POST /api/bets enriches the response
+
+- GIVEN an authenticated user placing a bet on an open date
+- WHEN the bet is submitted
+- THEN the returned ticket embeds each prediction's match with team names
+- AND the embedded results are null because the date is 'open'
+
+### Requirement: Ticket Display State
+
+The client ticket views (TicketCard and TicketModal) MUST show "Aciertos xx/xx" ONLY when the ticket's date status is 'results'; otherwise they MUST show "Pendiente de resultados" instead of the count. Both views MUST show an "Estado:" field derived client-side without a DB column: `prizeWon != null` → "Pagado", date status 'results' → "Sin premio", otherwise → "Pendiente". There is no "Cancelado" state.
+
+#### Scenario: Aciertos shown on results date
+
+- GIVEN a ticket on a date with status 'results'
+- WHEN the user opens the ticket modal
+- THEN the view shows "Aciertos xx/xx" computed from the embedded match results
+
+#### Scenario: Pendiente de resultados on open or closed date
+
+- GIVEN a ticket on a date with status 'open' or 'closed'
+- WHEN the user opens the ticket modal
+- THEN the view shows "Pendiente de resultados"
+- AND no "Aciertos" count is shown
+
+#### Scenario: Estado Pagado
+
+- GIVEN a ticket on a 'results' date with `prizeWon != null`
+- WHEN the ticket card or modal renders
+- THEN "Estado:" shows "Pagado"
+
+#### Scenario: Estado Sin premio
+
+- GIVEN a ticket on a 'results' date with `prizeWon == null`
+- WHEN the ticket card or modal renders
+- THEN "Estado:" shows "Sin premio"
+
+#### Scenario: Estado Pendiente
+
+- GIVEN a ticket on an 'open' date
+- WHEN the ticket card or modal renders
+- THEN "Estado:" shows "Pendiente"

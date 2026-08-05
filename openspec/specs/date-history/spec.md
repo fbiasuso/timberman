@@ -46,7 +46,7 @@ For the history endpoint the system MUST return matches with `result` and `score
 
 ### Requirement: Cartelera Fechas Anteriores Section
 
-The user Cartelera MUST render a "Fechas anteriores" section below the active date content, or below the "No hay cartelera disponible" message when no active date exists. The section MUST list ONLY dates of the ACTIVE tournament; dates of 'finished' or 'archived' tournaments MUST NOT appear. Each row MUST show "Fecha N" with a lock icon for 'closed' dates and a "$" / "Resultados" marker for 'results' dates. Expanding a row MUST fetch the history endpoint and render read-only match rows; results MUST be hidden for 'closed' dates per sanitization.
+The user Cartelera MUST render a "Fechas anteriores" section below the active date content, or below the "No hay cartelera disponible" message when no active date exists. The section MUST list ONLY dates of the ACTIVE tournament; dates of 'finished' or 'archived' tournaments MUST NOT appear. Each row MUST show "Fecha N" with a lock icon for 'closed' dates and a "$" / "Resultados" marker for 'results' dates. Expanding a row MUST fetch the history endpoint and render read-only match rows; results MUST be hidden for 'closed' dates per sanitization. For 'results' dates, each expanded match row MUST show the ACTUAL match result (`match.result`) in a neutral-styled badge (same style as the user's prediction badge, not colored by user accuracy); the user's prediction MUST NOT be displayed in place of the actual result.
 
 #### Scenario: Section below active date content
 
@@ -82,3 +82,11 @@ The user Cartelera MUST render a "Fechas anteriores" section below the active da
 - WHEN the user expands it
 - THEN the system fetches the history endpoint
 - AND read-only match rows render with teams and results
+
+#### Scenario: Actual result badge, not prediction
+
+- GIVEN a 'results' date row in Fechas anteriores with stored match results
+- WHEN the user expands it
+- THEN each match row shows the actual result badge (`match.result`) with neutral styling
+- AND the user's prediction is not shown in place of the actual result
+- AND no green/red accuracy coloring is applied

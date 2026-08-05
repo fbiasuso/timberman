@@ -16,6 +16,7 @@ import { Match } from '../../../domain/entities/match.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
 import { Tournament } from '../../../domain/entities/tournament.js';
 import { User } from '../../../domain/entities/user.js';
+import { TournamentNameAlreadyExistsError } from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -2135,6 +2136,58 @@ describe('API Integration Tests', () => {
 
       expect(res.statusCode).toBe(403);
       expect(services.tournamentRepo.findByIdForUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/admin/tournaments — unique name (spec)', () => {
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('creates a tournament with a unique name (201)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.save).mockImplementation(async (t) =>
+        Tournament.create({ ...t.toSnapshot(), id: 7 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Torneo 2' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.tournament.name).toBe('Torneo 2');
+      expect(body.tournament.id).toBe(7);
+    });
+
+    it('returns 409 TOURNAMENT_NAME_TAKEN with the fixed Spanish message on a name collision', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      // Repo maps the PG 23505 to the typed error; the generic DomainError
+      // handler renders the 409 shape (verified here end-to-end at the route).
+      vi.mocked(services.tournamentRepo.save).mockRejectedValue(
+        new TournamentNameAlreadyExistsError('torneo 1'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/tournaments',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'torneo 1' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('TOURNAMENT_NAME_TAKEN');
+      expect(body.message).toBe('Ya existe un torneo con ese nombre');
     });
   });
 });

@@ -55,6 +55,12 @@ Admins MUST be able to add or subtract balance from any user's account, with an 
 
 Admins MUST be able to enter or update match results for a closed tournament date of the ACTIVE tournament only. Entering results stores the scores; the date remains "closed" until the publish-results action transitions it to "results-published" and distributes points and payouts. Dates of 'finished' or 'archived' tournaments MUST NOT be selectable for results entry.
 
+The result-entry payload MUST be `{ localScore, visitorScore }` (both strings). The server MUST derive the match result (L/E/V) and compose the score string `"l-v"` from the two raw inputs and MUST NOT accept a client-computed result or score — the server is the source of truth.
+
+Derivation rules: `'x'`/`'X'` on both sides MUST derive result E with score null; `'x'` on the local side MUST derive L (visitor value ignored); `'x'` on the visitor side MUST derive V (local value ignored). Non-`'x'` inputs MUST match `^(0|[1-9]\d{0,1})$` and be within 0..20 after whitespace trimming; equal numbers MUST derive E; one side empty without `'x'` MUST be rejected. Both inputs empty/whitespace MUST clear the result and score to null via PATCH.
+
+Semantic payload violations MUST return HTTP 422 via `InvalidMatchResultError` (Spanish message); missing or wrong-typed fields MUST return HTTP 400 (zod).
+
 #### Scenario: Enter match results
 
 - GIVEN a tournament date in "closed" status in the active tournament
@@ -73,6 +79,67 @@ Admins MUST be able to enter or update match results for a closed tournament dat
 - GIVEN a closed date in a 'finished' tournament
 - WHEN the admin opens the results entry view
 - THEN that date is not offered for selection
+
+#### Scenario: Derives local win and composes score
+
+- GIVEN a closed date match without a result
+- WHEN an admin PATCHes `{ localScore: "3", visitorScore: "2" }`
+- THEN the match stores result "L" and score "3-2"
+
+#### Scenario: Equal numbers derive draw
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "2", visitorScore: "2" }`
+- THEN the match stores result "E" and score "2-2"
+
+#### Scenario: 'x' on both sides derives draw without score
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "x", visitorScore: "X" }`
+- THEN the match stores result "E" and score null
+
+#### Scenario: 'x' on one side derives winner without score
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "x", visitorScore: "4" }`
+- THEN the match stores result "L" and score null, ignoring "4"
+
+#### Scenario: 'x' on visitor side derives visitor win
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "4", visitorScore: "x" }`
+- THEN the match stores result "V" and score null, ignoring "4"
+
+#### Scenario: Invalid score rejected
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "a", visitorScore: "2" }` (also "03", "-1", "2.5")
+- THEN the system returns 422 and no value is stored
+
+#### Scenario: Out-of-range score rejected
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "21", visitorScore: "2" }`
+- THEN the system returns 422 and no value is stored
+- AND `{ localScore: "0", visitorScore: "20" }` is accepted (result "V", score "0-20")
+
+#### Scenario: One side empty without 'x' rejected
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes `{ localScore: "", visitorScore: "2" }` or `{ localScore: "  ", visitorScore: "2" }`
+- THEN the system returns 422 and no value is stored
+
+#### Scenario: Both inputs empty clears the result
+
+- GIVEN a match with a stored result and score
+- WHEN an admin PATCHes `{ localScore: "", visitorScore: "" }` (or whitespace only)
+- THEN the match stores result null and score null
+
+#### Scenario: Wrong payload shape rejected with 400
+
+- GIVEN a match being entered
+- WHEN an admin PATCHes the old `{ result: "L", score: "2-1" }` payload or a wrong-typed field (e.g. `localScore: 3`)
+- THEN the system returns 400 and no value is stored
 
 ### Requirement: System Configuration
 
@@ -319,3 +386,57 @@ The admin tournaments view MUST show each tournament's status (active/finished/a
 - WHEN the admin archives it
 - THEN the tournaments query is invalidated
 - AND the new tournament appears in the list
+
+### Requirement: Results Entry Input Controls
+
+The results entry view MUST render per-match local and visitor score inputs prefilled from the persisted result/score (score `"3-2"` → `"3"`/`"2"`; result "L" with null score → local `"x"`; result "E" with null score → both `"x"`). The view MUST validate in real time mirroring the server derivation and MUST hide the Guardar button unless the inputs are both dirty (differ from persisted) and valid. A successful save MUST replace Guardar with a green checkmark; editing the inputs afterwards MUST restore it. A Limpiar button MUST appear only when a result is saved and MUST revert the match to Pendiente (both inputs empty). Inline validation messages MUST appear on interaction and MUST use the exact Spanish copy `"Ingresá un marcador válido (0 a 20)"` and `"Usá números o 'x' para ganador sin marcador"`. Server errors MUST surface in the existing error box.
+
+#### Scenario: Inputs prefilled from persisted result
+
+- GIVEN a match with result "L" and score "3-2"
+- WHEN the results entry view renders
+- THEN the local input shows "3" and the visitor input shows "2"
+
+#### Scenario: Prefill for winner without score
+
+- GIVEN a match with result "L" and score null
+- WHEN the results entry view renders
+- THEN the local input shows "x" and the visitor input is empty
+
+#### Scenario: Guardar hidden until dirty and valid
+
+- GIVEN a match without a result
+- WHEN the admin types "3" in local and "2" in visitor
+- THEN Guardar appears
+- AND while any input is invalid or empty the button stays hidden
+
+#### Scenario: Invalid input shows Spanish message
+
+- GIVEN the admin types "21" in the local input
+- WHEN the input loses focus
+- THEN Guardar is hidden and "Ingresá un marcador válido (0 a 20)" is shown
+
+#### Scenario: Partial input shows 'x' hint
+
+- GIVEN the admin types "3" in local and leaves visitor empty
+- WHEN the inputs are interacted with
+- THEN Guardar is hidden and "Usá números o 'x' para ganador sin marcador" is shown
+
+#### Scenario: Checkmark replaces Guardar after save
+
+- GIVEN a dirty and valid result
+- WHEN the admin saves and the PATCH succeeds
+- THEN a green checkmark replaces Guardar
+- AND editing an input brings Guardar back
+
+#### Scenario: Limpiar reverts to Pendiente
+
+- GIVEN a match with a saved result and score
+- WHEN the admin clicks Limpiar
+- THEN the PATCH clears the result and the inputs show Pendiente state
+
+#### Scenario: Server error surfaces in error box
+
+- GIVEN a match whose PATCH returns 422
+- WHEN the save fails
+- THEN the server message appears in the error box and the match stays editable

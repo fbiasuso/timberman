@@ -59,7 +59,7 @@ Tournament dates MUST follow the lifecycle: `open → closed → results-publish
 
 ### Requirement: Set Match Results
 
-An admin MUST be able to set the final score or outcome for each match on a date. Setting results MUST NOT calculate, award, or accumulate points; points are computed and persisted only when the date is published (see Date Lifecycle).
+An admin MUST be able to set the final score or outcome for each match on a date by submitting the two raw scores (`localScore`, `visitorScore`); the server MUST derive the match result (L/E/V) and compose the score string from them and MUST persist the derived values (see admin-operations for the derivation and validation rules). No client-computed result or score MAY reach the database. Setting results MUST NOT calculate, award, or accumulate points; points are computed and persisted only when the date is published (see Date Lifecycle).
 
 #### Scenario: Results update does not award points
 
@@ -67,6 +67,13 @@ An admin MUST be able to set the final score or outcome for each match on a date
 - WHEN an admin sets the final scores for each match
 - THEN the scores are stored
 - AND no user points change until the date is published
+
+#### Scenario: Server derives result from raw scores
+
+- GIVEN a closed date match
+- WHEN an admin submits `{ localScore: "3", visitorScore: "2" }`
+- THEN the match stores the derived result "L" and score "3-2"
+- AND the composed score format is `"l-v"`
 
 ### Requirement: Start New Tournament
 

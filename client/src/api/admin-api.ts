@@ -118,9 +118,10 @@ export interface CreateDatePayload {
   tournamentId: number;
 }
 
+/** Body for PATCH /api/admin/matches/:matchId/result — raw scores; the server derives L/E/V + composes "l-v" */
 export interface SetMatchResultPayload {
-  result: string;
-  score?: string;
+  localScore: string;
+  visitorScore: string;
 }
 
 export interface UpdateConfigPayload {

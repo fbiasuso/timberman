@@ -6,6 +6,7 @@ import { MatchDate } from '../../../domain/entities/match-date.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
+  TournamentNameAlreadyExistsError,
 } from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -436,5 +437,107 @@ describe('createInitialTournament (boot singleton)', () => {
     expect(mocks.txInsertValues).not.toHaveBeenCalled();
     expect(mocks.txInsertReturning).not.toHaveBeenCalled();
     expect(db.transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Name unique-violation mapping (T4) ─────────────────────────────
+
+describe('DrizzleTournamentRepo name violation mapping', () => {
+  const nameViolation = {
+    code: '23505',
+    constraint: 'idx_tournaments_name_normalized_unique',
+  };
+  const createdRow = {
+    id: 1,
+    name: 'Torneo 1',
+    commission: '15.00',
+    status: 'active',
+    finishedAt: null,
+    carryover: 0,
+    createdAt: new Date(),
+  };
+
+  it('maps a save() unique violation on the name index to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.insertReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'torneo 1' }));
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'torneo 1',
+    });
+  });
+
+  it('rethrows a save() unique violation on a NON-name constraint untouched', async () => {
+    const { db, mocks } = createMockDb();
+    const otherViolation = { code: '23505', constraint: 'tournaments_pkey' };
+    mocks.insertReturning.mockRejectedValue(otherViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'Torneo 1' }));
+
+    await expect(promise).rejects.toBe(otherViolation);
+    await expect(promise).rejects.not.toBeInstanceOf(TournamentNameAlreadyExistsError);
+  });
+
+  it('rethrows non-23505 save() errors untouched', async () => {
+    const { db, mocks } = createMockDb();
+    const connError = new Error('connection refused');
+    mocks.insertReturning.mockRejectedValue(connError);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'Torneo 1' }));
+
+    await expect(promise).rejects.toBe(connError);
+  });
+
+  it('maps a createInitialTournament() tx insert violation to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDbWithTransaction();
+    mocks.txSelectLimit.mockResolvedValue([]); // empty table
+    mocks.txInsertReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.createInitialTournament(
+      Tournament.new({ id: 0, name: 'Torneo 1', commission: 15 }),
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'Torneo 1',
+    });
+  });
+
+  it('maps an update() unique violation on the name index to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.updateReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.update(
+      Tournament.create({
+        id: 2,
+        name: 'Torneo 1',
+        commission: 15,
+        status: 'archived',
+        finishedAt: new Date(),
+        carryover: 0,
+        createdAt: new Date(),
+      }),
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'Torneo 1',
+    });
   });
 });

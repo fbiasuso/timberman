@@ -50,6 +50,7 @@ export {
   InsufficientBalanceError,
   InvalidCommissionError,
   InvalidPredictionError,
+  InvalidMatchResultError,
   DuplicateBetError,
   DateNotOpenError,
   DateNotClosedError,

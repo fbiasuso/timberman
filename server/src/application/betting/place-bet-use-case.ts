@@ -17,9 +17,21 @@ import {
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
+export interface TicketMatchDTO {
+  localTeam: string;
+  visitorTeam: string;
+  /** Sanitized actual result — null unless the ticket's date is in 'results' status */
+  result: string | null;
+}
+
 export interface TicketPredictionDTO {
   matchId: number;
   prediction: Prediction;
+  /**
+   * Embedded match snapshot (team names + sanitized result). Filled by the
+   * route layer (it has the repos); the use case itself leaves it unset.
+   */
+  match?: TicketMatchDTO | null;
 }
 
 export interface TicketDTO {

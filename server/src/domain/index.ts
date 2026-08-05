@@ -60,6 +60,7 @@ export {
   TournamentOpenDateError,
   TournamentNotActiveError,
   TournamentNotFinishedError,
+  TournamentNameAlreadyExistsError,
   RegistrationDisabledError,
   UserNotFoundError,
   TournamentNotFoundError,

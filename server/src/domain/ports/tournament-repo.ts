@@ -23,6 +23,15 @@ export interface TournamentRepo {
    */
   findActive(): Promise<Tournament | null>;
   findAll(): Promise<Tournament[]>;
+  /**
+   * Atomically create the initial tournament when the table is empty.
+   *
+   * Uses a Postgres advisory lock to serialize concurrent cold-starts:
+   * the second instance waits for the first's transaction, then sees the
+   * existing row and does nothing. Returns the created tournament, or null
+   * when a tournament already existed (no-op).
+   */
+  createInitialTournament(tournament: Tournament): Promise<Tournament | null>;
   save(tournament: Tournament): Promise<Tournament>;
   update(tournament: Tournament): Promise<Tournament>;
 

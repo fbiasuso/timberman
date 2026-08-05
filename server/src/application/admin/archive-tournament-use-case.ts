@@ -4,6 +4,7 @@ import type { UnitOfWork, TransactionRepos } from '../../domain/ports/unit-of-wo
 import {
   TournamentNotFoundError,
   TournamentNotFinishedError,
+  TournamentNameAlreadyExistsError,
 } from '../../domain/errors/index.js';
 import { Tournament } from '../../domain/entities/tournament.js';
 import type { Tournament as TournamentEntity } from '../../domain/entities/tournament.js';
@@ -24,17 +25,29 @@ export interface ArchiveTournamentResult {
   nextTournament: NextTournamentDTO;
 }
 
+/**
+ * Bounded retries for the auto-generated next-tournament name. Each retry
+ * re-runs the whole 2-stage archive in a FRESH transaction; after this many
+ * consecutive collisions the archive fails terminally (409 TOURNAMENT_NAME_TAKEN).
+ */
+export const MAX_ARCHIVE_NAME_RETRIES = 25;
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 /**
- * Derive the next tournament's name from the archived one's name.
- * "Torneo 1" → "Torneo 2"; names without a parseable number (e.g.
- * "Torneo Timberman") fall back to `id + 1` (design D-Archive).
+ * Derive the next tournament's name for a given retry attempt.
+ *
+ * attempt 0 reproduces the historical behavior exactly: base + 1 ("Torneo
+ * N+1"). On a name collision the next attempt bumps the candidate ("Torneo
+ * N+2", "Torneo N+3", ...) so the archive can retry safely.
+ *
+ * base = first `(\d+)` match in the archived name, else `tournament.id`
+ * (non-numeric names fall back to "Torneo {id+1+k}").
  */
-function nextTournamentName(tournament: TournamentEntity): string {
+function candidateName(tournament: TournamentEntity, attempt: number): string {
   const match = tournament.name.match(/(\d+)/);
-  const num = match ? Number(match[1]) : tournament.id;
-  return `Torneo ${num + 1}`;
+  const base = match ? Number(match[1]) : tournament.id;
+  return `Torneo ${base + 1 + attempt}`;
 }
 
 // ── Use Case ──────────────────────────────────────────────────────
@@ -64,20 +77,40 @@ export class ArchiveTournamentUseCase {
   ) {}
 
   async execute(adminId: string, tournamentId: number): Promise<ArchiveTournamentResult> {
-    if (this.uow) {
-      return this.uow.withTransaction((repos) =>
-        this.archive(adminId, tournamentId, repos),
-      );
+    let attempt = 0;
+    while (true) {
+      try {
+        if (this.uow) {
+          return await this.uow.withTransaction((repos) =>
+            this.archive(adminId, tournamentId, attempt, repos),
+          );
+        }
+        return await this.archive(adminId, tournamentId, attempt, {
+          tournamentRepo: this.tournamentRepo,
+          auditLogRepo: this.auditLogRepo,
+        });
+      } catch (err) {
+        if (
+          err instanceof TournamentNameAlreadyExistsError &&
+          attempt < MAX_ARCHIVE_NAME_RETRIES
+        ) {
+          // PostgreSQL aborts the failed transaction after 23505, so nothing
+          // persisted — the tournament row is still 'finished'. Re-running the
+          // full 2-stage op in a FRESH transaction with the next candidate
+          // name is state-consistent and safe.
+          attempt += 1;
+          continue;
+        }
+        // Non-collision error, or every candidate exhausted — fail loudly.
+        throw err;
+      }
     }
-    return this.archive(adminId, tournamentId, {
-      tournamentRepo: this.tournamentRepo,
-      auditLogRepo: this.auditLogRepo,
-    });
   }
 
   private async archive(
     adminId: string,
     tournamentId: number,
+    attempt: number,
     repos: Pick<TransactionRepos, 'tournamentRepo' | 'auditLogRepo'>,
   ): Promise<ArchiveTournamentResult> {
     const { tournamentRepo, auditLogRepo } = repos;
@@ -105,7 +138,7 @@ export class ArchiveTournamentUseCase {
     //    CreateTournamentUseCase).
     const next = Tournament.new({
       id: 0,
-      name: nextTournamentName(tournament),
+      name: candidateName(tournament, attempt),
       commission: this.config.commission,
     });
     const savedNext = await tournamentRepo.save(next);

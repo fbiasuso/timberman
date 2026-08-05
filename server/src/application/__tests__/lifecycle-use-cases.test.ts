@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TerminateTournamentUseCase } from '../admin/terminate-tournament-use-case.js';
-import { ArchiveTournamentUseCase } from '../admin/archive-tournament-use-case.js';
+import {
+  ArchiveTournamentUseCase,
+  MAX_ARCHIVE_NAME_RETRIES,
+} from '../admin/archive-tournament-use-case.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
@@ -13,6 +16,7 @@ import {
   TournamentOpenDateError,
   TournamentNotActiveError,
   TournamentNotFinishedError,
+  TournamentNameAlreadyExistsError,
 } from '../../domain/errors/index.js';
 import { DEFAULT_SYSTEM_CONFIG } from '../../domain/entities/system-config.js';
 
@@ -24,6 +28,7 @@ function createTournamentRepoMocks() {
     findByIdForUpdate: vi.fn(),
     findActive: vi.fn(),
     findAll: vi.fn(),
+    createInitialTournament: vi.fn(),
     save: vi.fn((t: Tournament) => Promise.resolve(t)),
     update: vi.fn((t: Tournament) => Promise.resolve(t)),
     findMatchDateById: vi.fn(),
@@ -477,5 +482,97 @@ describe('ArchiveTournamentUseCase', () => {
     expect(withTransaction).toHaveBeenCalledOnce();
     expect(result.status).toBe('archived');
     expect(result.nextTournament.name).toBe('Torneo 2');
+  });
+
+  it('retries with the next candidate name in a FRESH transaction when the auto-name collides', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const auditRepo = createAuditLogRepoMocks();
+
+    // "Torneo 2" archived; "Torneo 3" already taken → retry with "Torneo 4".
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(
+      finishedTournament(2), // name "Torneo 2"
+    );
+    let saveCalls = 0;
+    vi.mocked(tournamentRepo.save).mockImplementation(async (t: Tournament) => {
+      saveCalls += 1;
+      if (saveCalls === 1) {
+        throw new TournamentNameAlreadyExistsError(t.name);
+      }
+      return Tournament.create({ ...t.toSnapshot(), id: 4 });
+    });
+
+    const { uow, withTransaction } = createFakeUow({
+      tournamentRepo,
+      tournamentPointsRepo: undefined as never,
+      matchRepo: undefined as never,
+      ticketRepo: undefined as never,
+      userRepo: undefined as never,
+      auditLogRepo: auditRepo,
+    });
+
+    const uc = new ArchiveTournamentUseCase(
+      tournamentRepo,
+      auditRepo,
+      DEFAULT_SYSTEM_CONFIG,
+      uow,
+    );
+    const result = await uc.execute('admin-1', 2);
+
+    // Two fresh transactions: the first aborts on the collision, the second
+    // re-runs the full 2-stage op with the next candidate.
+    expect(withTransaction).toHaveBeenCalledTimes(2);
+
+    // The first attempt tried "Torneo 3" and collided; the retry used "Torneo 4".
+    const saveNames = vi.mocked(tournamentRepo.save).mock.calls.map((c) => c[0].name);
+    expect(saveNames).toEqual(['Torneo 3', 'Torneo 4']);
+
+    // The tournament was re-archived in the retry transaction, and the audit
+    // is written exactly once (the failed transaction persisted nothing).
+    expect(tournamentRepo.update).toHaveBeenCalledTimes(2);
+    const archived = vi.mocked(tournamentRepo.update).mock.calls[1][0];
+    expect(archived.status).toBe('archived');
+    expect(auditRepo.save).toHaveBeenCalledOnce();
+    const log = vi.mocked(auditRepo.save).mock.calls[0][0];
+    expect(log.action).toBe('tournament_archived');
+
+    expect(result).toEqual({
+      id: 2,
+      status: 'archived',
+      nextTournament: { id: 4, name: 'Torneo 4', status: 'active' },
+    });
+  });
+
+  it('fails terminally after MAX_ARCHIVE_NAME_RETRIES + 1 attempts when every candidate name collides', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const auditRepo = createAuditLogRepoMocks();
+
+    vi.mocked(tournamentRepo.findByIdForUpdate).mockResolvedValue(
+      finishedTournament(2), // name "Torneo 2"
+    );
+    vi.mocked(tournamentRepo.save).mockImplementation(async (t: Tournament) => {
+      throw new TournamentNameAlreadyExistsError(t.name);
+    });
+
+    const uc = new ArchiveTournamentUseCase(
+      tournamentRepo,
+      auditRepo,
+      DEFAULT_SYSTEM_CONFIG,
+    );
+
+    const promise = uc.execute('admin-1', 2);
+
+    // Terminal error reuses the typed collision error (409 TOURNAMENT_NAME_TAKEN).
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+    });
+
+    // Attempts 0..MAX_ARCHIVE_NAME_RETRIES = MAX + 1 transactions, each
+    // re-running the 2-stage op; the audit is never written.
+    expect(tournamentRepo.save).toHaveBeenCalledTimes(MAX_ARCHIVE_NAME_RETRIES + 1);
+    expect(tournamentRepo.update).toHaveBeenCalledTimes(MAX_ARCHIVE_NAME_RETRIES + 1);
+    expect(auditRepo.save).not.toHaveBeenCalled();
   });
 });

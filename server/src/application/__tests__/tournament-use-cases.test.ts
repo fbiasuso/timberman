@@ -41,6 +41,7 @@ function createTournamentRepoMocks() {
     findByIdForUpdate: vi.fn(),
     findActive: vi.fn(),
     findAll: vi.fn(),
+    createInitialTournament: vi.fn(),
     save: vi.fn(),
     update: vi.fn(),
     findMatchDateById: vi.fn(),

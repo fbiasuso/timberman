@@ -6,6 +6,7 @@ import { MatchDate } from '../../../domain/entities/match-date.js';
 import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
+  TournamentNameAlreadyExistsError,
 } from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -51,6 +52,34 @@ function createMockDb() {
         where: mocks.updateWhere.mockReturnValue({ returning: mocks.updateReturning }),
       }),
     }),
+  };
+  return { db, mocks };
+}
+
+/**
+ * Fake db whose `transaction` runs the callback against a tx client and
+ * returns the callback's value — matching drizzle's postgres-js behavior
+ * (`db.transaction(fn)` resolves with `fn(tx)`'s result, the same contract
+ * `DrizzleUnitOfWork` relies on).
+ */
+function createMockDbWithTransaction() {
+  const mocks = {
+    txExecute: vi.fn(),
+    txSelectLimit: vi.fn(),
+    txInsertValues: vi.fn(),
+    txInsertReturning: vi.fn(),
+  };
+  const tx = {
+    execute: mocks.txExecute,
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({ limit: mocks.txSelectLimit }),
+    }),
+    insert: vi.fn().mockReturnValue({
+      values: mocks.txInsertValues.mockReturnValue({ returning: mocks.txInsertReturning }),
+    }),
+  };
+  const db = {
+    transaction: vi.fn(async (fn: (t: any) => Promise<unknown>) => fn(tx)),
   };
   return { db, mocks };
 }
@@ -343,5 +372,172 @@ describe('DrizzleTournamentRepo', () => {
     expect(tournaments).toHaveLength(1);
     expect(tournaments[0].status).toBe('finished');
     expect(tournaments[0].finishedAt).toBe(finishedAt);
+  });
+});
+
+// ── createInitialTournament (boot singleton) ───────────────────────
+
+describe('createInitialTournament (boot singleton)', () => {
+  const createdRow = {
+    id: 1,
+    name: 'Torneo 1',
+    commission: '15.00',
+    status: 'active',
+    finishedAt: null,
+    carryover: 0,
+    createdAt: new Date(),
+  };
+
+  it('acquires the boot advisory lock, then inserts the tournament on an empty table', async () => {
+    const { db, mocks } = createMockDbWithTransaction();
+    mocks.txSelectLimit.mockResolvedValue([]); // no existing tournament
+    mocks.txInsertReturning.mockResolvedValue([createdRow]);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const created = await repo.createInitialTournament(
+      Tournament.new({ id: 0, name: 'Torneo 1', commission: 15 }),
+    );
+
+    // The lock is acquired INSIDE the transaction, BEFORE the emptiness
+    // check — this ordering is what closes the cold-start race.
+    expect(mocks.txExecute).toHaveBeenCalledTimes(1);
+    const lockSignature = sqlSignature(mocks.txExecute.mock.calls[0][0]);
+    expect(lockSignature).toContain('pg_advisory_xact_lock');
+    expect(lockSignature).toContain('727001'); // matches BOOT_LOCK_KEY in the repo
+    expect(mocks.txExecute.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.txSelectLimit.mock.invocationCallOrder[0],
+    );
+
+    // The id: 0 sentinel is stripped and the insert mirrors save()'s fields.
+    expect(mocks.txInsertValues).toHaveBeenCalledWith({
+      name: 'Torneo 1',
+      commission: '15',
+      status: 'active',
+      finishedAt: null,
+      carryover: 0,
+    });
+    expect(created?.id).toBe(1);
+    expect(created?.name).toBe('Torneo 1');
+    expect(created?.carryover).toBe(0);
+    expect(created?.status).toBe('active');
+  });
+
+  it('returns null without inserting when a tournament already exists', async () => {
+    const { db, mocks } = createMockDbWithTransaction();
+    mocks.txSelectLimit.mockResolvedValue([createdRow]); // tournament exists
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const result = await repo.createInitialTournament(
+      Tournament.new({ id: 0, name: 'Torneo 1', commission: 15 }),
+    );
+
+    // The transaction callback returns null and the fake db propagates the
+    // callback's value (same contract as drizzle's real transaction()).
+    expect(result).toBeNull();
+    expect(mocks.txInsertValues).not.toHaveBeenCalled();
+    expect(mocks.txInsertReturning).not.toHaveBeenCalled();
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Name unique-violation mapping (T4) ─────────────────────────────
+
+describe('DrizzleTournamentRepo name violation mapping', () => {
+  const nameViolation = {
+    code: '23505',
+    constraint: 'idx_tournaments_name_normalized_unique',
+  };
+  const createdRow = {
+    id: 1,
+    name: 'Torneo 1',
+    commission: '15.00',
+    status: 'active',
+    finishedAt: null,
+    carryover: 0,
+    createdAt: new Date(),
+  };
+
+  it('maps a save() unique violation on the name index to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.insertReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'torneo 1' }));
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'torneo 1',
+    });
+  });
+
+  it('rethrows a save() unique violation on a NON-name constraint untouched', async () => {
+    const { db, mocks } = createMockDb();
+    const otherViolation = { code: '23505', constraint: 'tournaments_pkey' };
+    mocks.insertReturning.mockRejectedValue(otherViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'Torneo 1' }));
+
+    await expect(promise).rejects.toBe(otherViolation);
+    await expect(promise).rejects.not.toBeInstanceOf(TournamentNameAlreadyExistsError);
+  });
+
+  it('rethrows non-23505 save() errors untouched', async () => {
+    const { db, mocks } = createMockDb();
+    const connError = new Error('connection refused');
+    mocks.insertReturning.mockRejectedValue(connError);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.save(Tournament.new({ id: 0, name: 'Torneo 1' }));
+
+    await expect(promise).rejects.toBe(connError);
+  });
+
+  it('maps a createInitialTournament() tx insert violation to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDbWithTransaction();
+    mocks.txSelectLimit.mockResolvedValue([]); // empty table
+    mocks.txInsertReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.createInitialTournament(
+      Tournament.new({ id: 0, name: 'Torneo 1', commission: 15 }),
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'Torneo 1',
+    });
+  });
+
+  it('maps an update() unique violation on the name index to TournamentNameAlreadyExistsError', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.updateReturning.mockRejectedValue(nameViolation);
+
+    const repo = new DrizzleTournamentRepo(db as any);
+    const promise = repo.update(
+      Tournament.create({
+        id: 2,
+        name: 'Torneo 1',
+        commission: 15,
+        status: 'archived',
+        finishedAt: new Date(),
+        carryover: 0,
+        createdAt: new Date(),
+      }),
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(TournamentNameAlreadyExistsError);
+    await expect(promise).rejects.toMatchObject({
+      code: 'TOURNAMENT_NAME_TAKEN',
+      statusCode: 409,
+      message: 'Ya existe un torneo con ese nombre',
+      tournamentName: 'Torneo 1',
+    });
   });
 });

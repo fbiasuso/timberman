@@ -11,22 +11,22 @@ import { Tournament } from '../domain/entities/tournament.js';
  * on an empty table we auto-create "Torneo 1" (status 'active', carryover
  * 0, commission from the live system config).
  *
- * Idempotent by design: when at least one tournament exists, nothing is
- * written — boot never duplicates an existing tournament (spec
- * tournament-management: "Boot keeps existing tournaments").
+ * Idempotent and race-safe by design: the repo's `createInitialTournament`
+ * runs the whole check-then-act inside one transaction guarded by a
+ * Postgres advisory lock, so concurrent cold-starts of multiple instances
+ * never double-insert — the second instance waits, sees the existing row,
+ * and no-ops (spec tournament-management: "Boot keeps existing
+ * tournaments"). No-op when at least one tournament exists.
  *
  * @param repo        tournament repository (unit-testable — no DB here)
  * @param commission  commission percent from the boot-loaded system config
+ * @returns the created tournament, or null when one already existed (no-op)
  */
 export async function ensureInitialTournament(
   repo: TournamentRepo,
   commission: number,
-): Promise<void> {
-  const existing = await repo.findAll();
-  if (existing.length > 0) {
-    return;
-  }
-  await repo.save(
+): Promise<Tournament | null> {
+  return repo.createInitialTournament(
     Tournament.new({ id: 0, name: 'Torneo 1', commission }),
   );
 }

@@ -164,6 +164,19 @@ export class RegistrationDisabledError extends DomainError {
   get statusCode(): number { return 403; }
 }
 
+export class TournamentNameAlreadyExistsError extends DomainError {
+  /** Colliding tournament name (diagnostics only — the API message is fixed). */
+  readonly tournamentName: string;
+
+  constructor(tournamentName: string) {
+    super('Ya existe un torneo con ese nombre');
+    this.tournamentName = tournamentName;
+  }
+
+  get code(): string { return 'TOURNAMENT_NAME_TAKEN'; }
+  get statusCode(): number { return 409; }
+}
+
 // ── Not Found Errors ──────────────────────────────────────────────
 
 export class UserNotFoundError extends DomainError {

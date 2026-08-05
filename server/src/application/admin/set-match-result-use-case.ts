@@ -1,14 +1,13 @@
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
 import { MatchNotFoundError } from '../../domain/errors/index.js';
-import { assertPrediction } from '../../domain/value-objects/prediction.js';
-import type { Prediction } from '../../domain/value-objects/prediction.js';
+import { deriveMatchResult } from './derive-match-result.js';
 
 // ── DTOs ──────────────────────────────────────────────────────────
 
 export interface SetMatchResultInput {
   matchId: number;
-  result: Prediction;
-  score?: string | null;
+  localScore: string;
+  visitorScore: string;
 }
 
 export interface MatchResultDTO {
@@ -23,7 +22,10 @@ export interface MatchResultDTO {
 // ── Use Case ──────────────────────────────────────────────────────
 
 /**
- * Admin sets the result and optional score for a single match.
+ * Admin sets the result for a single match by submitting the two raw
+ * scores. The server derives the result (L/E/V) and composes the score
+ * string — the client never sends a computed result or score. Both empty
+ * inputs clear the match back to "Pendiente".
  */
 export class SetMatchResultUseCase {
   constructor(private readonly matchRepo: MatchRepo) {}
@@ -34,8 +36,11 @@ export class SetMatchResultUseCase {
       throw new MatchNotFoundError(input.matchId);
     }
 
-    assertPrediction(input.result);
-    const updated = match.setResult(input.result, input.score ?? null);
+    const derived = deriveMatchResult(input.localScore, input.visitorScore);
+    const updated =
+      derived.kind === 'clear'
+        ? match.clearResult()
+        : match.setResult(derived.result, derived.score);
     const saved = await this.matchRepo.update(updated);
     const snap = saved.toSnapshot();
 

@@ -23,7 +23,7 @@ import { Tournament } from '../../domain/entities/tournament.js';
 import { MatchDate } from '../../domain/entities/match-date.js';
 import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
-import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError, InvalidCommissionError, InvalidConfigValueError } from '../../domain/errors/index.js';
+import { DuplicateUsernameError, UserNotFoundError, MatchNotFoundError, InvalidMatchResultError, InvalidCommissionError, InvalidConfigValueError } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -556,29 +556,62 @@ describe('UpdateConfigUseCase', () => {
 // ── SetMatchResultUseCase ─────────────────────────────────────────
 
 describe('SetMatchResultUseCase', () => {
-  it('sets result on a match', async () => {
+  it('derives and persists a result from raw scores', async () => {
     const matchRepo = createMatchRepoMocks();
     const match = Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' });
     vi.mocked(matchRepo.findById).mockResolvedValue(match);
 
     const uc = new SetMatchResultUseCase(matchRepo);
-    const result = await uc.execute({ matchId: 1, result: 'L', score: '2-1' });
+    const result = await uc.execute({ matchId: 1, localScore: '2', visitorScore: '1' });
 
     expect(result.result).toBe('L');
     expect(result.score).toBe('2-1');
     expect(matchRepo.update).toHaveBeenCalledOnce();
+    const saved = vi.mocked(matchRepo.update).mock.calls[0][0];
+    expect(saved.result).toBe('L');
+    expect(saved.score).toBe('2-1');
   });
 
-  it('sets result without score', async () => {
+  it("derives a local win with null score when local is 'x'", async () => {
     const matchRepo = createMatchRepoMocks();
     const match = Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' });
     vi.mocked(matchRepo.findById).mockResolvedValue(match);
 
     const uc = new SetMatchResultUseCase(matchRepo);
-    const result = await uc.execute({ matchId: 1, result: 'V' });
+    const result = await uc.execute({ matchId: 1, localScore: 'x', visitorScore: '4' });
 
-    expect(result.result).toBe('V');
+    expect(result.result).toBe('L');
     expect(result.score).toBeNull();
+    expect(matchRepo.update).toHaveBeenCalledOnce();
+  });
+
+  it('clears result and score when both inputs are empty', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const match = Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' })
+      .setResult('L', '2-1');
+    vi.mocked(matchRepo.findById).mockResolvedValue(match);
+
+    const uc = new SetMatchResultUseCase(matchRepo);
+    const result = await uc.execute({ matchId: 1, localScore: '', visitorScore: '  ' });
+
+    expect(result.result).toBeNull();
+    expect(result.score).toBeNull();
+    expect(matchRepo.update).toHaveBeenCalledOnce();
+    const saved = vi.mocked(matchRepo.update).mock.calls[0][0];
+    expect(saved.result).toBeNull();
+    expect(saved.score).toBeNull();
+  });
+
+  it('throws InvalidMatchResultError without persisting on invalid input', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const match = Match.new({ id: 1, matchDateId: 10, localTeam: 'A', visitorTeam: 'B' });
+    vi.mocked(matchRepo.findById).mockResolvedValue(match);
+
+    const uc = new SetMatchResultUseCase(matchRepo);
+    await expect(
+      uc.execute({ matchId: 1, localScore: '21', visitorScore: '2' }),
+    ).rejects.toThrow(InvalidMatchResultError);
+    expect(matchRepo.update).not.toHaveBeenCalled();
   });
 
   it('throws MatchNotFoundError when match does not exist', async () => {
@@ -586,7 +619,9 @@ describe('SetMatchResultUseCase', () => {
     vi.mocked(matchRepo.findById).mockResolvedValue(null);
 
     const uc = new SetMatchResultUseCase(matchRepo);
-    await expect(uc.execute({ matchId: 999, result: 'L' })).rejects.toThrow(MatchNotFoundError);
+    await expect(
+      uc.execute({ matchId: 999, localScore: '2', visitorScore: '1' }),
+    ).rejects.toThrow(MatchNotFoundError);
     expect(matchRepo.update).not.toHaveBeenCalled();
   });
 });

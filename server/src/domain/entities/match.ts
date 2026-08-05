@@ -57,6 +57,22 @@ export class Match {
     );
   }
 
+  /** Clear result and score — returns a NEW Match instance (immutable) */
+  clearResult(): Match {
+    return new Match(
+      this.id,
+      this.matchDateId,
+      this.localTeam,
+      this.visitorTeam,
+      this.localImg,
+      this.visitorImg,
+      this.scheduledAt,
+      null,
+      null,
+      this.createdAt,
+    );
+  }
+
   /**
    * Update editable match details — returns a NEW Match instance (immutable).
    *

@@ -61,6 +61,15 @@ export class InvalidPredictionError extends DomainError {
   get statusCode(): number { return 400; }
 }
 
+export class InvalidMatchResultError extends DomainError {
+  constructor(message = 'Ingresá un marcador válido (0 a 20)') {
+    super(message);
+  }
+
+  get code(): string { return 'INVALID_MATCH_RESULT'; }
+  get statusCode(): number { return 422; }
+}
+
 // ── Business Rule Errors ──────────────────────────────────────────
 
 export class DuplicateBetError extends DomainError {

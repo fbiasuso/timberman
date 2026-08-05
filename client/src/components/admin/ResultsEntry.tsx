@@ -7,6 +7,7 @@ import {
   usePublishResults,
 } from '../../hooks/use-admin';
 import { formatMoney } from '../../utils/format';
+import { isValidInput, parseScoreToInputs, validationMessage } from '../../utils/match-result';
 import type { MatchDTO, MatchDateStatus } from '../../types';
 import type { TournamentDateDTO } from '../../api/admin-api';
 import theme from '../../styles/theme';
@@ -112,12 +113,73 @@ const successBox: React.CSSProperties = {
   fontSize: 14,
 };
 
-const resultOptions = [
-  { value: '', label: 'PENDIENTE' },
-  { value: 'L', label: 'L — Local' },
-  { value: 'E', label: 'E — Empate' },
-  { value: 'V', label: 'V — Visita' },
-];
+/** Green checkmark that replaces Guardar after a successful save */
+const checkmark: React.CSSProperties = {
+  color: theme.verdeBet,
+  fontSize: 20,
+  fontWeight: 700,
+  lineHeight: 1,
+};
+
+/** Secondary "Limpiar" action — only for matches that already have a saved result */
+const clearBtn: React.CSSProperties = {
+  padding: '8px 16px',
+  border: `1px solid ${theme.border}`,
+  borderRadius: 8,
+  background: 'transparent',
+  color: theme.textoSecundario,
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+/** Inline real-time validation message (exact Spanish copy from the util) */
+const validationMsg: React.CSSProperties = {
+  color: theme.rojo,
+  fontSize: 12,
+  marginTop: 6,
+  marginLeft: 16,
+};
+
+/** Per-match server error — reuses the errorBox pattern under the match row */
+const inlineError: React.CSSProperties = {
+  ...errorBox,
+  marginBottom: 0,
+  marginTop: 8,
+  fontSize: 12,
+  padding: '6px 10px',
+};
+
+/**
+ * Per-match result entry state (design D6) — one record keyed by match.id in a
+ * single useState. Validity is derived from the mirror util (D5), never stored.
+ */
+interface MatchEntryState {
+  local: string;
+  visitor: string;
+  /** True once the admin edits an input — Guardar only renders while dirty */
+  dirty: boolean;
+  status: 'idle' | 'saving' | 'saved' | 'error';
+  /** Server error message to surface inline (status === 'error') */
+  error?: string;
+}
+
+/** Baseline entry prefilled from the persisted result/score (spec R7) */
+function defaultEntry(match: MatchDTO): MatchEntryState {
+  const inputs = parseScoreToInputs(match);
+  return {
+    local: inputs.local,
+    visitor: inputs.visitor,
+    dirty: false,
+    status: match.result != null ? 'saved' : 'idle',
+  };
+}
+
+/** Extract the server's Spanish message — same shape the existing errorBox reads */
+function serverErrorMessage(error: unknown): string {
+  return ((error as any)?.response?.data?.message as string) ?? 'Error al guardar el resultado.';
+}
 
 const statusLabels: Record<MatchDateStatus, string> = {
   open: 'Abierta',
@@ -154,8 +216,9 @@ export default function ResultsEntry() {
   const closeDate = useCloseDate();
   const publishResults = usePublishResults();
 
-  // Track per-match pending saves
-  const [saving, setSaving] = useState<Record<number, boolean>>({});
+  // Per-match result entry state (design D6) — initialized from parseScoreToInputs
+  // when the date's matches load, resynced on refetch for non-dirty entries.
+  const [entryState, setEntryState] = useState<Record<number, MatchEntryState>>({});
   // Manual date selection (null = follow the current date)
   const [selectedDateId, setSelectedDateId] = useState<number | null>(null);
   // Auto-follow the open date until the admin makes a manual selection.
@@ -200,13 +263,99 @@ export default function ResultsEntry() {
     }
   }, [openDateId, userSelected]);
 
-  const handleSaveResult = (match: MatchDTO, result: string, score: string) => {
-    setSaving((prev) => ({ ...prev, [match.id]: true }));
+  // Hoisted before the early returns so the resync effect below can key on the
+  // incoming match data (matches may be undefined while a date is loading).
+  const status = activeDate?.status;
+  const matches: MatchDTO[] =
+    status === 'closed'
+      ? (closedMatchesData?.matches ?? [])
+      : (currentData?.matches ?? []);
+
+  // Resync (design D6): after react-query invalidation refetches the date's
+  // matches, reset the persisted baseline for entries that are NOT dirty — a
+  // dirty entry holds an in-flight edit and must never be clobbered. Marking
+  // resynced entries 'saved' when match.result != null keeps the checkmark.
+  useEffect(() => {
+    setEntryState((prev) => {
+      let changed = false;
+      const next: Record<number, MatchEntryState> = { ...prev };
+      for (const match of matches) {
+        const current = prev[match.id];
+        if (current?.dirty) continue;
+        const inputs = parseScoreToInputs(match);
+        const target: MatchEntryState = {
+          local: inputs.local,
+          visitor: inputs.visitor,
+          dirty: false,
+          status: match.result != null ? 'saved' : 'idle',
+        };
+        if (
+          !current ||
+          current.local !== target.local ||
+          current.visitor !== target.visitor ||
+          current.status !== target.status
+        ) {
+          next[match.id] = target;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [matches]);
+
+  const handleInputChange = (match: MatchDTO, field: 'local' | 'visitor', value: string) => {
+    setEntryState((prev) => {
+      const current = prev[match.id] ?? defaultEntry(match);
+      return {
+        ...prev,
+        [match.id]: { ...current, [field]: value, dirty: true, status: 'idle', error: undefined },
+      };
+    });
+  };
+
+  const handleSave = (match: MatchDTO, entry: MatchEntryState) => {
+    setEntryState((prev) => ({
+      ...prev,
+      [match.id]: { ...(prev[match.id] ?? entry), status: 'saving', error: undefined },
+    }));
     setResult.mutate(
-      { matchId: match.id, result, score: score || undefined },
+      { matchId: match.id, localScore: entry.local, visitorScore: entry.visitor },
       {
-        onSettled: () => {
-          setSaving((prev) => ({ ...prev, [match.id]: false }));
+        onSuccess: () => {
+          setEntryState((prev) => ({
+            ...prev,
+            [match.id]: { ...(prev[match.id] ?? entry), dirty: false, status: 'saved', error: undefined },
+          }));
+        },
+        onError: (error) => {
+          setEntryState((prev) => ({
+            ...prev,
+            [match.id]: { ...(prev[match.id] ?? entry), status: 'error', error: serverErrorMessage(error) },
+          }));
+        },
+      },
+    );
+  };
+
+  const handleClear = (match: MatchDTO) => {
+    setEntryState((prev) => ({
+      ...prev,
+      [match.id]: { local: '', visitor: '', dirty: false, status: 'saving', error: undefined },
+    }));
+    setResult.mutate(
+      { matchId: match.id, localScore: '', visitorScore: '' },
+      {
+        onSuccess: () => {
+          setEntryState((prev) => ({
+            ...prev,
+            [match.id]: { local: '', visitor: '', dirty: false, status: 'idle', error: undefined },
+          }));
+        },
+        onError: (error) => {
+          setEntryState((prev) => ({
+            ...prev,
+            [match.id]: { local: '', visitor: '', dirty: false, status: 'error', error: serverErrorMessage(error) },
+          }));
         },
       },
     );
@@ -257,16 +406,13 @@ export default function ResultsEntry() {
     );
   }
 
-  const status = activeDate.status;
   const matchesLoading = status === 'closed' ? closedMatchesLoading : currentMatchesLoading;
   const matchesError = status === 'closed' ? closedMatchesError : currentMatchesError;
-  const matches = status === 'closed'
-    ? (closedMatchesData?.matches ?? [])
-    : (currentData?.matches ?? []);
 
-  // Match cards with result selectors — shared by the OPEN date (matches from
-  // /matches/current) and CLOSED dates (matches from /matches/dates/:dateId),
-  // so an admin can correct a closed date's results before publishing.
+  // Match cards with two score inputs + Guardar/Limpiar — shared by the OPEN
+  // date (matches from /matches/current) and CLOSED dates (matches from
+  // /matches/dates/:dateId), so an admin can correct a closed date's results
+  // before publishing.
   const matchesSection = (
     <>
       {matchesLoading && (
@@ -281,76 +427,82 @@ export default function ResultsEntry() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-        {matches.map((match) => (
-          <div key={match.id} style={matchCard}>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-                {match.localTeam}
-                <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
-                {match.visitorTeam}
+        {matches.map((match) => {
+          const entry = entryState[match.id] ?? defaultEntry(match);
+          const valid = isValidInput(entry.local, entry.visitor);
+          const hasSavedResult = match.result != null || entry.status === 'saved';
+          return (
+            <div key={match.id}>
+              <div style={matchCard}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
+                    {match.localTeam}
+                    <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
+                    {match.visitorTeam}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={label}>Local</div>
+                  <input
+                    style={input}
+                    placeholder="2"
+                    value={entry.local}
+                    onChange={(e) => handleInputChange(match, 'local', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <div style={label}>Visita</div>
+                  <input
+                    style={input}
+                    placeholder="1"
+                    value={entry.visitor}
+                    onChange={(e) => handleInputChange(match, 'visitor', e.target.value)}
+                  />
+                </div>
+
+                {entry.dirty && valid && (
+                  <button
+                    onClick={() => handleSave(match, entry)}
+                    disabled={entry.status === 'saving'}
+                    style={{
+                      ...saveBtn,
+                      opacity: entry.status === 'saving' ? 0.6 : 1,
+                      cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {entry.status === 'saving' ? 'Guardando...' : 'Guardar'}
+                  </button>
+                )}
+
+                {entry.status === 'saved' && <span style={checkmark}>✓</span>}
+
+                {hasSavedResult && (
+                  <button
+                    onClick={() => handleClear(match)}
+                    disabled={entry.status === 'saving'}
+                    style={{
+                      ...clearBtn,
+                      opacity: entry.status === 'saving' ? 0.6 : 1,
+                      cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Limpiar
+                  </button>
+                )}
               </div>
+
+              {entry.dirty && !valid && (
+                <div style={validationMsg}>{validationMessage(entry.local, entry.visitor)}</div>
+              )}
+
+              {entry.status === 'error' && entry.error && (
+                <div style={inlineError}>{entry.error}</div>
+              )}
             </div>
-
-            <div>
-              <div style={label}>Resultado</div>
-              <select
-                style={select}
-                defaultValue={match.result ?? ''}
-                onChange={(e) => {
-                  handleSaveResult(match, e.target.value, match.score ?? '');
-                }}
-              >
-                {resultOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div style={label}>Marcador</div>
-              <input
-                style={input}
-                placeholder="2-1"
-                defaultValue={match.score ?? ''}
-                onBlur={(e) => {
-                  const score = e.target.value.trim();
-                  if (score !== (match.score ?? '')) {
-                    handleSaveResult(match, match.result ?? '', score);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const score = (e.target as HTMLInputElement).value.trim();
-                    if (score !== (match.score ?? '')) {
-                      handleSaveResult(match, match.result ?? '', score);
-                    }
-                  }
-                }}
-              />
-            </div>
-
-            <button
-              onClick={() => handleSaveResult(match, match.result ?? '', match.score ?? '')}
-              disabled={saving[match.id]}
-              style={{
-                ...saveBtn,
-                opacity: saving[match.id] ? 0.6 : 1,
-                cursor: saving[match.id] ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {saving[match.id] ? 'Guardando...' : 'Guardar'}
-            </button>
-
-            {setResult.isSuccess && setResult.variables?.matchId === match.id && (
-              <span style={{ color: theme.verdeBet, fontSize: 12 }}>✓</span>
-            )}
-            {setResult.isError && setResult.variables?.matchId === match.id && (
-              <span style={{ color: theme.rojo, fontSize: 12 }}>✗</span>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );
@@ -373,7 +525,7 @@ export default function ResultsEntry() {
             Resultados — Fecha {activeDate.dateNumber}
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
-            Estado: {statusLabels[status]}
+            Estado: {statusLabels[activeDate.status]}
           </p>
         </div>
 

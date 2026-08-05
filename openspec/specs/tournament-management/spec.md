@@ -261,7 +261,7 @@ An admin MUST be able to terminate an `active` tournament. Terminate MUST transi
 
 ### Requirement: Archive Tournament
 
-An admin MUST be able to archive a tournament with status `finished`. Archive MUST hide the tournament from all active flows (active-tournament resolution, ranking default, Cartelera, "Fechas anteriores", admin Partidos) and MUST auto-create the next tournament named "Torneo N+1" (N = archived tournament's number) with status `active`, carryover 0, and an admin-editable name. The archived tournament's carryover MUST stay frozen — it MUST NOT be transferred to the next tournament. Archive MUST be rejected when the tournament is not `finished`. Archived data MUST remain queryable per Historical Preservation.
+An admin MUST be able to archive a `finished` tournament. Archive MUST hide it from all active flows (active-tournament resolution, ranking default, Cartelera, "Fechas anteriores", admin Partidos) and MUST auto-create the next tournament "Torneo N+1" (N = archived number) with status `active`, carryover 0, and an admin-editable name. The archived tournament's carryover MUST stay frozen. Archive MUST be rejected when the tournament is not `finished`; archived data MUST remain queryable (Historical Preservation). The next name MUST be unique (Unique Tournament Name). On auto-name collision (23505), archive MUST retry the 2-stage operation with the next candidate ("Torneo N+2", "Torneo N+3", ...) in a fresh transaction until a name is available or the bounded loop exhausts — archive MUST fail and roll back (PostgreSQL aborts transactions after 23505; state consistency keeps retry safe). Auto-generated names MUST NOT 409; manually edited colliding names DO return 409.
 
 #### Scenario: Archive creates next tournament
 
@@ -273,7 +273,7 @@ An admin MUST be able to archive a tournament with status `finished`. Archive MU
 #### Scenario: Next tournament name is editable
 
 - GIVEN the auto-created next tournament
-- WHEN an admin renames it
+- WHEN an admin renames it to a unique name
 - THEN the new name persists
 
 #### Scenario: Carryover stays frozen
@@ -288,3 +288,43 @@ An admin MUST be able to archive a tournament with status `finished`. Archive MU
 - GIVEN a tournament with status 'active'
 - WHEN an admin archives it
 - THEN the request is rejected
+
+#### Scenario: Archive retries on collision
+
+- GIVEN a finished "Torneo 2" and existing "Torneo 3"
+- WHEN an admin archives "Torneo 2"
+- THEN archive retries with "Torneo 4" in a fresh transaction
+- AND "Torneo 2" becomes 'archived' and "Torneo 4" is created 'active', carryover 0
+
+### Requirement: Unique Tournament Name
+
+Tournament names MUST be unique under a normalized comparison key `lower(regexp_replace(name,'\s+','','g'))` — names differing only by case or whitespace are the same name. A DB functional unique index MUST enforce it for all rows. Names MUST be stored exactly as written (zod min(1).max(100)); normalization is comparison-only, never stored. Every name-persisting flow (manual create, boot, archive, rename) MUST respect it — advisory lock is the primary boot guard, index the backstop. A manually typed name collision MUST return HTTP 409, code `TOURNAMENT_NAME_TAKEN`, "Ya existe un torneo con ese nombre" — never silently changing it. Auto-generated names MUST NOT 409: boot no-ops, archive retries. The repository MUST map PG 23505 to typed `TournamentNameAlreadyExistsError` (DomainError, 409, `TOURNAMENT_NAME_TAKEN`).
+
+#### Scenario: Case-only collision
+
+- GIVEN a tournament named "Torneo 1"
+- WHEN an admin creates a tournament named "torneo 1"
+- THEN the system returns 409 with "Ya existe un torneo con ese nombre"
+- AND no tournament is created
+
+#### Scenario: Whitespace-only collision
+
+- GIVEN a tournament named "Torneo 1"
+- WHEN an admin creates a tournament named "Torneo  1" (double internal space)
+- THEN the system returns 409
+
+#### Scenario: Distinct names
+
+- GIVEN a tournament named "Torneo 1"
+- WHEN an admin creates a tournament named "Torneo 2"
+- THEN the tournament is created (201)
+
+### Requirement: Name Uniqueness Migration Safety
+
+The migration MUST first detect colliding rows under the normalized key; if any exist, it MUST abort with a duplicate report (dedupe first) — never creating the index over conflicting data.
+
+#### Scenario: Migration aborts on duplicates
+
+- GIVEN "Torneo 1" and " torneo 1 " exist
+- WHEN the migration runs
+- THEN it fails with a duplicate report, creating no index

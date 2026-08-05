@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../db/schema.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
@@ -10,6 +10,11 @@ import {
   TournamentNotFoundError,
   MatchDateNotFoundError,
 } from '../../domain/errors/index.js';
+
+// Boot-singleton advisory lock key: serializes concurrent cold-starts on an
+// empty tournaments table so exactly one instance inserts "Torneo 1". Fixed
+// module-level value — all instances must agree on the same key.
+const BOOT_LOCK_KEY = 727001;
 
 export class DrizzleTournamentRepo implements TournamentRepo {
   constructor(private readonly db: PostgresJsDatabase<any>) {}
@@ -61,6 +66,40 @@ export class DrizzleTournamentRepo implements TournamentRepo {
   async findAll(): Promise<Tournament[]> {
     const rows = await this.db.select().from(schema.tournaments);
     return rows.map((row) => this.toTournament(row));
+  }
+
+  async createInitialTournament(
+    tournament: Tournament,
+  ): Promise<Tournament | null> {
+    // The whole read+insert runs inside ONE transaction so the advisory
+    // xact lock is held for the entire check-then-act. Without the
+    // transaction wrapping, the lock would release between the statements
+    // and the cold-start race would remain.
+    return this.db.transaction(async (tx) => {
+      // Wait for any concurrent cold-start to finish before checking the
+      // table: the second instance blocks here, then sees the row inserted
+      // by the first and no-ops below.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${BOOT_LOCK_KEY})`);
+
+      const [existing] = await tx.select().from(schema.tournaments).limit(1);
+      if (existing) return null;
+
+      const snap = tournament.toSnapshot();
+      // New tournaments carry the id: 0 sentinel — omit it so the serial PK
+      // assigns the id. Inserting an explicit 0 would collide on the second
+      // row (mirrors save()).
+      const [row] = await tx
+        .insert(schema.tournaments)
+        .values({
+          name: snap.name,
+          commission: String(snap.commission),
+          status: snap.status,
+          finishedAt: snap.finishedAt,
+          carryover: snap.carryover,
+        })
+        .returning();
+      return this.toTournament(row);
+    });
   }
 
   async save(tournament: Tournament): Promise<Tournament> {

@@ -10,6 +10,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 // ── System Config ────────────────────────────────────────────────
 export const systemConfig = pgTable('system_config', {
@@ -38,7 +39,13 @@ export const tournaments = pgTable('tournaments', {
   finishedAt: timestamp('finished_at'),
   carryover: integer('carryover').default(0).notNull(), // cents — unpaid pozo rolled to next date
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // Names are unique under a normalized comparison key: case-folded, all
+  // whitespace stripped. Comparison-only — names are stored as written.
+  uniqueIndex('idx_tournaments_name_normalized_unique').on(
+    sql`lower(regexp_replace(${table.name}, '\\s+', '', 'g'))`,
+  ),
+]);
 
 // ── Match Dates ────────────────────────────────────────────────
 export const matchDates = pgTable('match_dates', {

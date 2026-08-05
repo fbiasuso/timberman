@@ -1980,6 +1980,229 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('PATCH /api/admin/matches/:matchId/result', () => {
+    const match = Match.new({ id: 1, matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' });
+    const matchWithResult = match.setResult('L', '2-1');
+
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    function mockMatchAndUpdate(found: typeof match) {
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(found);
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+    }
+
+    it('derives a local win and composes the score (200)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: '2', visitorScore: '1' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({ id: 1, result: 'L', score: '2-1' });
+      expect(services.matchRepo.update).toHaveBeenCalledOnce();
+      const saved = vi.mocked(services.matchRepo.update).mock.calls[0][0];
+      expect(saved.result).toBe('L');
+      expect(saved.score).toBe('2-1');
+    });
+
+    it("derives E with null score when both sides are 'x'", async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: 'x', visitorScore: 'X' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({ id: 1, result: 'E', score: null });
+    });
+
+    it("derives L with null score when the local side is 'x' (visitor ignored)", async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: 'x', visitorScore: '4' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({ id: 1, result: 'L', score: null });
+    });
+
+    it("derives V with null score when the visitor side is 'x' (local ignored)", async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: '4', visitorScore: 'x' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({ id: 1, result: 'V', score: null });
+    });
+
+    it('clears result and score when both inputs are empty', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(matchWithResult);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: '', visitorScore: ' ' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({ id: 1, result: null, score: null });
+      const saved = vi.mocked(services.matchRepo.update).mock.calls[0][0];
+      expect(saved.result).toBeNull();
+      expect(saved.score).toBeNull();
+    });
+
+    it('rejects an invalid score with 422 INVALID_MATCH_RESULT and no update', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      for (const payload of [
+        { localScore: '21', visitorScore: '2' },
+        { localScore: 'abc', visitorScore: '2' },
+      ]) {
+        const res = await app.inject({
+          method: 'PATCH',
+          url: '/api/admin/matches/1/result',
+          headers: { authorization: 'Bearer fake-jwt-token' },
+          payload,
+        });
+
+        expect(res.statusCode).toBe(422);
+        const body = JSON.parse(res.body);
+        expect(body.error).toBe('INVALID_MATCH_RESULT');
+        expect(body.message).toBe('Ingresá un marcador válido (0 a 20)');
+      }
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects one empty side without 'x' with 422 and the 'x' hint message", async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      mockMatchAndUpdate(match);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: '', visitorScore: '2' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('INVALID_MATCH_RESULT');
+      expect(body.message).toBe("Usá números o 'x' para ganador sin marcador");
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects the old result/score payload with 400 VALIDATION_ERROR', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { result: 'L', score: '2-1' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(services.matchRepo.findById).not.toHaveBeenCalled();
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a wrong-typed score field with 400 VALIDATION_ERROR', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: 3, visitorScore: '2' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing payload with 400 VALIDATION_ERROR', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown match with 404 MATCH_NOT_FOUND', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/999/result',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localScore: '2', visitorScore: '1' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('MATCH_NOT_FOUND');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GET /api/matches/dates/:dateId/history', () => {
     const closedDate = MatchDate.create({
       id: 10,

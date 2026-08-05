@@ -54,9 +54,11 @@ const createTournamentSchema = z.object({
   commission: z.number().min(0).max(100).optional(),
 });
 
+// Shape-only validation: raw score strings (empty allowed so a clear request
+// reaches the use case). Semantic rules live in deriveMatchResult → 422.
 const setMatchResultSchema = z.object({
-  result: z.enum(['L', 'E', 'V']),
-  score: z.string().nullable().optional(),
+  localScore: z.string(),
+  visitorScore: z.string(),
 });
 
 const updateConfigSchema = z.object({
@@ -337,8 +339,8 @@ export function createAdminRoutes(
 
       const result = await setMatchResultUseCase.execute({
         matchId: Number(matchId),
-        result: body.result,
-        score: body.score ?? null,
+        localScore: body.localScore,
+        visitorScore: body.visitorScore,
       });
       return reply.send({ match: result });
     });

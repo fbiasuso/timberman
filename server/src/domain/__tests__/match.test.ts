@@ -49,6 +49,43 @@ describe('Match', () => {
     });
   });
 
+  describe('clearResult', () => {
+    it('clears result and score on a new match instance', () => {
+      const match = Match.new(baseProps).setResult('L', '2-1');
+      const cleared = match.clearResult();
+      expect(cleared.result).toBeNull();
+      expect(cleared.score).toBeNull();
+      expect(cleared.hasResult()).toBe(false);
+    });
+
+    it('keeps the other fields intact', () => {
+      const match = Match.new({
+        ...baseProps,
+        localTeam: 'Racing',
+        localImg: 'racing.png',
+        scheduledAt: new Date('2026-08-02T20:00:00Z'),
+      }).setResult('E', '1-1');
+
+      const cleared = match.clearResult();
+
+      expect(cleared.id).toBe(1);
+      expect(cleared.matchDateId).toBe(10);
+      expect(cleared.localTeam).toBe('Racing');
+      expect(cleared.visitorTeam).toBe('Boca Juniors');
+      expect(cleared.localImg).toBe('racing.png');
+      expect(cleared.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z'));
+    });
+
+    it('is immutable — the original match is unchanged', () => {
+      const match = Match.new(baseProps).setResult('V', '0-3');
+      const cleared = match.clearResult();
+      expect(cleared).not.toBe(match);
+      expect(match.result).toBe('V');
+      expect(match.score).toBe('0-3');
+      expect(match.hasResult()).toBe(true);
+    });
+  });
+
   describe('withDetails', () => {
     it('merges provided fields and keeps the rest unchanged', () => {
       const match = Match.new({

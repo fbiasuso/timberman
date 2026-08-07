@@ -171,7 +171,9 @@ export default function CarteleraPage() {
     <div>
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ margin: 0, fontSize: 22, color: theme.blanco }}>
-          Torneo {data.tournamentName} — Fecha {matchDate.dateNumber}
+          {data.tournamentName.toLowerCase().startsWith('torneo')
+            ? data.tournamentName
+            : `Torneo ${data.tournamentName}`} — Fecha {matchDate.dateNumber}
         </h2>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: theme.textoSecundario }}>
           {matchDate.status === 'open'
@@ -181,28 +183,31 @@ export default function CarteleraPage() {
       </div>
 
       {/* Accumulated pozo — carryover from previous dates without winners.
-          The open date's wagers are not included: pozo is snapshotted at close. */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '12px 16px',
-          background: theme.tarjeta,
-          borderRadius: 12,
-          border: `1px solid ${theme.border}`,
-          marginBottom: 20,
-        }}
-      >
-        <span style={{ fontSize: 13, color: theme.textoSecundario }}>
-          Pozo acumulado de fechas anteriores
-        </span>
-        <span style={{ fontWeight: 700, fontSize: 16, color: theme.amarilloBet }}>
-          {formatMoney(carryover)}
-        </span>
-      </div>
+          The open date's wagers are not included: pozo is snapshotted at close.
+          Hidden entirely when there is no carryover. */}
+      {carryover > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 16px',
+            background: theme.tarjeta,
+            borderRadius: 12,
+            border: `1px solid ${theme.border}`,
+            marginBottom: 20,
+          }}
+        >
+          <span style={{ fontSize: 13, color: theme.textoSecundario }}>
+            Pozo acumulado de fechas anteriores
+          </span>
+          <span style={{ fontWeight: 700, fontSize: 16, color: theme.amarilloBet }}>
+            {formatMoney(carryover)}
+          </span>
+        </div>
+      )}
 
-      {!isExpired && (
+      {!isExpired && carryover > 0 && (
         <p
           style={{
             margin: '-12px 0 20px',
@@ -210,7 +215,7 @@ export default function CarteleraPage() {
             color: theme.textoSecundario,
           }}
         >
-          No incluye las jugadas de esta fecha: el pozo se calcula al cerrar los puntos.
+          El pozo se calcula al cerrar la fecha.
         </p>
       )}
 

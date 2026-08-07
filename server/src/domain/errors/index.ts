@@ -24,8 +24,12 @@ export abstract class DomainError extends Error {
 // ── Balance Errors ────────────────────────────────────────────────
 
 export class InsufficientBalanceError extends DomainError {
-  constructor(userId: string, balance: number, required: number) {
-    super(`User "${userId}" has insufficient balance. Required: ${required}, Available: ${balance}`);
+  /** User id (diagnostics only — the API message uses the username). */
+  readonly userId: string;
+
+  constructor(userId: string, username: string, balance: number, required: number) {
+    super(`El usuario "${username}" no tiene saldo suficiente. Requerido: ${required}, Disponible: ${balance}`);
+    this.userId = userId;
   }
 
   get code(): string { return 'INSUFFICIENT_BALANCE'; }

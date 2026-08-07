@@ -6,6 +6,7 @@ import {
   useCloseDate,
   usePublishResults,
 } from '../../hooks/use-admin';
+import { useIsMobile } from '../../hooks/use-is-mobile';
 import { formatMoney } from '../../utils/format';
 import { isValidInput, parseScoreToInputs, validationMessage } from '../../utils/match-result';
 import type { MatchDTO, MatchDateStatus } from '../../types';
@@ -151,6 +152,46 @@ const inlineError: React.CSSProperties = {
   padding: '6px 10px',
 };
 
+// ─── Mobile layout (mirrors the cartelera two-column pattern) ──────────────
+
+/** Mobile match card: content column left, actions column right */
+const matchCardMobile: React.CSSProperties = {
+  ...matchCard,
+  flexWrap: 'nowrap',
+  alignItems: 'stretch',
+};
+
+/** Mobile left column: teams line on top, score inputs below it */
+const mobileLeftCol: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  minWidth: 0,
+};
+
+/** Mobile score inputs — same 3-column template as the cartelera teams grid */
+const mobileInputsGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 60px 1fr',
+  gap: 8,
+};
+
+/** Mobile inputs fill their grid cell under each team name */
+const mobileInput: React.CSSProperties = {
+  ...input,
+  width: '100%',
+};
+
+/** Mobile right column: Guardar / ✓ + Limpiar stacked and centered */
+const mobileActionsCol: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+};
+
 /**
  * Per-match result entry state (design D6) — one record keyed by match.id in a
  * single useState. Validity is derived from the mirror util (D5), never stored.
@@ -215,6 +256,9 @@ export default function ResultsEntry() {
   const setResult = useSetMatchResult();
   const closeDate = useCloseDate();
   const publishResults = usePublishResults();
+  // Mobile viewport — switches each match card to the two-column layout
+  // (content left, actions right) mirroring the cartelera pattern.
+  const isMobile = useIsMobile();
 
   // Per-match result entry state (design D6) — initialized from parseScoreToInputs
   // when the date's matches load, resynced on refetch for non-dirty entries.
@@ -431,69 +475,104 @@ export default function ResultsEntry() {
           const entry = entryState[match.id] ?? defaultEntry(match);
           const valid = isValidInput(entry.local, entry.visitor);
           const hasSavedResult = match.result != null || entry.status === 'saved';
+
+          // Shared per-match pieces — the desktop row and the mobile
+          // two-column layout render the SAME content, only the placement
+          // differs (no logic or behavior change).
+          const teamsLine = (
+            <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
+              {match.localTeam}
+              <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
+              {match.visitorTeam}
+            </div>
+          );
+
+          const inputStyle = isMobile ? mobileInput : input;
+
+          const localField = (
+            <div>
+              <div style={label}>Local</div>
+              <input
+                style={inputStyle}
+                placeholder="2"
+                value={entry.local}
+                onChange={(e) => handleInputChange(match, 'local', e.target.value)}
+                disabled={entry.status === 'saving'}
+              />
+            </div>
+          );
+
+          const visitorField = (
+            <div>
+              <div style={label}>Visita</div>
+              <input
+                style={inputStyle}
+                placeholder="1"
+                value={entry.visitor}
+                onChange={(e) => handleInputChange(match, 'visitor', e.target.value)}
+                disabled={entry.status === 'saving'}
+              />
+            </div>
+          );
+
+          const actions = (
+            <>
+              {entry.dirty && valid && (
+                <button
+                  onClick={() => handleSave(match, entry)}
+                  disabled={entry.status === 'saving'}
+                  style={{
+                    ...saveBtn,
+                    opacity: entry.status === 'saving' ? 0.6 : 1,
+                    cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {entry.status === 'saving' ? 'Guardando...' : 'Guardar'}
+                </button>
+              )}
+
+              {entry.status === 'saved' && <span style={checkmark}>✓</span>}
+
+              {hasSavedResult && (
+                <button
+                  onClick={() => handleClear(match)}
+                  disabled={entry.status === 'saving'}
+                  style={{
+                    ...clearBtn,
+                    opacity: entry.status === 'saving' ? 0.6 : 1,
+                    cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </>
+          );
+
           return (
             <div key={match.id}>
-              <div style={matchCard}>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-                    {match.localTeam}
-                    <span style={{ color: theme.textoSecundario, margin: '0 8px' }}>vs</span>
-                    {match.visitorTeam}
+              {isMobile ? (
+                <div style={matchCardMobile}>
+                  <div style={mobileLeftCol} data-testid="results-left-col">
+                    <div data-testid="results-teams-row">{teamsLine}</div>
+                    <div style={mobileInputsGrid} data-testid="results-inputs-grid">
+                      {localField}
+                      <div />
+                      {visitorField}
+                    </div>
+                  </div>
+                  <div style={mobileActionsCol} data-testid="results-actions">
+                    {actions}
                   </div>
                 </div>
-
-                <div>
-                  <div style={label}>Local</div>
-                  <input
-                    style={input}
-                    placeholder="2"
-                    value={entry.local}
-                    onChange={(e) => handleInputChange(match, 'local', e.target.value)}
-                    disabled={entry.status === 'saving'}
-                  />
+              ) : (
+                <div style={matchCard}>
+                  <div style={{ flex: 1, minWidth: 180 }}>{teamsLine}</div>
+                  {localField}
+                  {visitorField}
+                  {actions}
                 </div>
-
-                <div>
-                  <div style={label}>Visita</div>
-                  <input
-                    style={input}
-                    placeholder="1"
-                    value={entry.visitor}
-                    onChange={(e) => handleInputChange(match, 'visitor', e.target.value)}
-                    disabled={entry.status === 'saving'}
-                  />
-                </div>
-
-                {entry.dirty && valid && (
-                  <button
-                    onClick={() => handleSave(match, entry)}
-                    disabled={entry.status === 'saving'}
-                    style={{
-                      ...saveBtn,
-                      opacity: entry.status === 'saving' ? 0.6 : 1,
-                      cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {entry.status === 'saving' ? 'Guardando...' : 'Guardar'}
-                  </button>
-                )}
-
-                {entry.status === 'saved' && <span style={checkmark}>✓</span>}
-
-                {hasSavedResult && (
-                  <button
-                    onClick={() => handleClear(match)}
-                    disabled={entry.status === 'saving'}
-                    style={{
-                      ...clearBtn,
-                      opacity: entry.status === 'saving' ? 0.6 : 1,
-                      cursor: entry.status === 'saving' ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
+              )}
 
               {entry.dirty && !valid && (
                 <div style={validationMsg}>{validationMessage(entry.local, entry.visitor)}</div>

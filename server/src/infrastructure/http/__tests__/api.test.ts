@@ -174,6 +174,37 @@ describe('API Integration Tests', () => {
       expect(body.error).toBe('DUPLICATE_USERNAME');
     });
 
+    it('returns 409 with spanish message when the username exists under another case', async () => {
+      // 'test' is stored — registering 'Test' must collide through the
+      // case-insensitive lookup, and the message echoes the attempted username.
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue({ id: 'existing' } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { username: 'Test', password: 'pass123' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('DUPLICATE_USERNAME');
+      expect(body.message).toBe('El nombre de usuario "Test" ya está en uso');
+    });
+
+    it('stores the username exactly as written (201)', async () => {
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { username: 'Test', password: 'secret123' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.user.username).toBe('Test');
+    });
+
     it('returns 400 for invalid input (short username)', async () => {
       const res = await app.inject({
         method: 'POST',
@@ -393,7 +424,7 @@ describe('API Integration Tests', () => {
   });
 
   describe('POST /api/auth/login', () => {
-    it('returns 200 with token for valid credentials', async () => {
+    function makeUser() {
       const user = {
         id: 'user-1',
         username: 'testuser',
@@ -414,6 +445,11 @@ describe('API Integration Tests', () => {
         deductBalance: () => user,
         addBalance: () => user,
       };
+      return user;
+    }
+
+    it('returns 200 with token for valid credentials', async () => {
+      const user = makeUser();
       vi.mocked(services.userRepo.findByUsername).mockResolvedValue(user as any);
       vi.mocked(services.bcryptService.compare).mockResolvedValue(true);
 
@@ -429,27 +465,42 @@ describe('API Integration Tests', () => {
       expect(body.user.username).toBe('testuser');
     });
 
+    it('matches the stored user when logging in with UPPERCASE username', async () => {
+      const user = makeUser();
+      // Case-insensitivity lives in the real repo (lower(username) lookup) — the
+      // mock returns the stored user regardless of the casing of the lookup.
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue(user as any);
+      vi.mocked(services.bcryptService.compare).mockResolvedValue(true);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'TESTUSER', password: 'correct-password' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.user.username).toBe('testuser');
+    });
+
+    it('matches the stored user when logging in with mixed-case username', async () => {
+      const user = makeUser();
+      vi.mocked(services.userRepo.findByUsername).mockResolvedValue(user as any);
+      vi.mocked(services.bcryptService.compare).mockResolvedValue(true);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'TestUser', password: 'correct-password' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.user.username).toBe('testuser');
+    });
+
     it('returns 401 for wrong password', async () => {
-      const user = {
-        id: 'user-1',
-        username: 'testuser',
-        passwordHash: 'hashed-password',
-        role: 'user',
-        balance: 1000,
-        createdAt: new Date(),
-        toSnapshot: () => ({
-          id: 'user-1',
-          username: 'testuser',
-          passwordHash: 'hashed-password',
-          role: 'user',
-          balance: 1000,
-          createdAt: new Date(),
-        }),
-        isAdmin: () => false,
-        canDeduct: () => true,
-        deductBalance: () => user,
-        addBalance: () => user,
-      };
+      const user = makeUser();
       vi.mocked(services.userRepo.findByUsername).mockResolvedValue(user as any);
       vi.mocked(services.bcryptService.compare).mockResolvedValue(false);
 
@@ -462,6 +513,7 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(401);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('INVALID_CREDENTIALS');
+      expect(body.message).toBe('Usuario o contraseña incorrectos');
     });
 
     it('returns 401 for non-existent user', async () => {

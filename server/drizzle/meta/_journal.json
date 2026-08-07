@@ -29,6 +29,13 @@
       "when": 1785892617717,
       "tag": "0003_tournament_name_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786080247902,
+      "tag": "0004_huge_loki",
+      "breakpoints": true
     }
   ]
 }

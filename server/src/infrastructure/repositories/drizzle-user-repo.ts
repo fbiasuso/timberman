@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../db/schema.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
@@ -28,7 +28,13 @@ export class DrizzleUserRepo implements UserRepo {
   }
 
   async findByUsername(username: string): Promise<User | null> {
-    const [row] = await this.db.select().from(schema.users).where(eq(schema.users.username, username));
+    // Case-insensitive lookup on the normalized key — uses
+    // idx_users_username_normalized_unique (lower(username)). Usernames are
+    // stored and returned as written; only the comparison is case-folded.
+    const [row] = await this.db
+      .select()
+      .from(schema.users)
+      .where(sql`lower(${schema.users.username}) = lower(${username})`);
     if (!row) return null;
     return User.create(row as unknown as UserSnapshot);
   }

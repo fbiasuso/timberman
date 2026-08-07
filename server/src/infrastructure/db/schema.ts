@@ -23,12 +23,17 @@ export const systemConfig = pgTable('system_config', {
 // ── Users ──────────────────────────────────────────────────────
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
-  username: text('username').unique().notNull(),
+  username: text('username').notNull(),
   passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: ['user', 'admin'] }).default('user').notNull(),
   balance: integer('balance').default(0).notNull(), // cents
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // Usernames are unique under a normalized comparison key: case-folded only.
+  // Whitespace is NOT stripped (usernames are stored and compared as written
+  // beyond case). Comparison-only — usernames are stored as typed.
+  uniqueIndex('idx_users_username_normalized_unique').on(sql`lower(${table.username})`),
+]);
 
 // ── Tournaments ────────────────────────────────────────────────
 export const tournaments = pgTable('tournaments', {

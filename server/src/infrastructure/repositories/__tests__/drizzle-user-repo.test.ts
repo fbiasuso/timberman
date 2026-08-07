@@ -107,4 +107,31 @@ describe('DrizzleUserRepo', () => {
     expect(forSpy).toHaveBeenCalledWith('update');
     expect(user).toBeNull();
   });
+
+  it('matches usernames case-insensitively via the normalized key', async () => {
+    const { db, mocks } = createMockDb();
+    const row = makeRow({ username: 'testuser' });
+    mocks.selectWhere.mockResolvedValue([row]);
+
+    const repo = new DrizzleUserRepo(db as any);
+    const user = await repo.findByUsername('TestUser');
+
+    expect(user?.id).toBe('user-1');
+    expect(user?.username).toBe('testuser');
+    // The lookup goes through a SQL fragment (lower(...)) rather than a plain
+    // column equality, so it can use idx_users_username_normalized_unique.
+    const whereArg = mocks.selectWhere.mock.calls[0][0] as any;
+    expect(whereArg).toHaveProperty('queryChunks');
+    expect(whereArg).not.toBe('TestUser');
+  });
+
+  it('returns null when findByUsername finds no row', async () => {
+    const { db, mocks } = createMockDb();
+    mocks.selectWhere.mockResolvedValue([]);
+
+    const repo = new DrizzleUserRepo(db as any);
+    const user = await repo.findByUsername('nobody');
+
+    expect(user).toBeNull();
+  });
 });

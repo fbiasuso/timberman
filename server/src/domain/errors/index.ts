@@ -166,7 +166,7 @@ export class TournamentNotFinishedError extends DomainError {
 
 export class RegistrationDisabledError extends DomainError {
   constructor() {
-    super('Self-registration is disabled. Contact an administrator.');
+    super('El registro está deshabilitado. Contactá a un administrador.');
   }
 
   get code(): string { return 'REGISTRATION_DISABLED'; }
@@ -237,7 +237,7 @@ export class TicketNotFoundError extends DomainError {
 
 export class InvalidCredentialsError extends DomainError {
   constructor() {
-    super('Invalid username or password');
+    super('Usuario o contraseña incorrectos');
   }
 
   get code(): string { return 'INVALID_CREDENTIALS'; }
@@ -245,7 +245,7 @@ export class InvalidCredentialsError extends DomainError {
 }
 
 export class UnauthorizedError extends DomainError {
-  constructor(message = 'Authentication required') {
+  constructor(message = 'Autenticación requerida') {
     super(message);
   }
 
@@ -254,7 +254,7 @@ export class UnauthorizedError extends DomainError {
 }
 
 export class ForbiddenError extends DomainError {
-  constructor(message = 'Admin access required') {
+  constructor(message = 'Se requieren permisos de administrador') {
     super(message);
   }
 
@@ -264,7 +264,7 @@ export class ForbiddenError extends DomainError {
 
 export class DuplicateUsernameError extends DomainError {
   constructor(username: string) {
-    super(`Username "${username}" is already taken`);
+    super(`El nombre de usuario "${username}" ya está en uso`);
   }
 
   get code(): string { return 'DUPLICATE_USERNAME'; }

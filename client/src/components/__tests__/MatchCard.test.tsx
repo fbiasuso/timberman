@@ -1,12 +1,29 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import MatchCard from '../matches/MatchCard';
 import type { MatchDTO } from '../../types';
 
+// Deterministically control the mobile/desktop branch for both layouts
+const { mockUseIsMobile } = vi.hoisted(() => ({
+  mockUseIsMobile: vi.fn(() => false),
+}));
+
+vi.mock('../../hooks/use-is-mobile', () => ({
+  useIsMobile: () => mockUseIsMobile(),
+}));
+
 // Mock BetButtons child component to simplify testing
 vi.mock('../matches/BetButtons', () => ({
-  default: ({ matchId, disabled }: { matchId: string; disabled: boolean }) => (
-    <div data-testid="bet-buttons" data-matchid={matchId} data-disabled={disabled}>
+  default: ({
+    matchId,
+    disabled,
+    layout,
+  }: {
+    matchId: string;
+    disabled: boolean;
+    layout?: string;
+  }) => (
+    <div data-testid="bet-buttons" data-matchid={matchId} data-disabled={disabled} data-layout={layout}>
       BetButtons
     </div>
   ),
@@ -19,6 +36,10 @@ vi.mock('../../stores/bet-slip-store', () => ({
     return selector(state);
   }),
 }));
+
+beforeEach(() => {
+  mockUseIsMobile.mockReturnValue(false);
+});
 
 afterEach(() => cleanup());
 
@@ -67,5 +88,29 @@ describe('MatchCard', () => {
     // But the bet buttons are disabled (user already bet this date)
     const betButtons = screen.getAllByTestId('bet-buttons');
     expect(betButtons[betButtons.length - 1].getAttribute('data-disabled')).toBe('true');
+  });
+
+  it('renders the desktop row layout by default', () => {
+    render(<MatchCard match={baseMatch} isExpired={false} />);
+    const card = screen.getByTestId('match-card');
+    expect(card.style.flexDirection).toBe('row');
+    // No stacked grid wrapper on desktop
+    expect(screen.queryByTestId('teams-grid')).toBeNull();
+    expect(screen.getByTestId('bet-buttons').getAttribute('data-layout')).toBe('row');
+  });
+
+  it('stacks teams and bet buttons on mobile with a grid layout', () => {
+    mockUseIsMobile.mockReturnValue(true);
+    render(<MatchCard match={baseMatch} isExpired={false} />);
+    const card = screen.getByTestId('match-card');
+    expect(card.style.flexDirection).toBe('column');
+
+    // Teams in a 3-column grid: local | center | visitor
+    const teamsGrid = screen.getByTestId('teams-grid');
+    expect(teamsGrid.style.display).toBe('grid');
+    expect(teamsGrid.style.gridTemplateColumns).toBe('1fr 60px 1fr');
+
+    // Buttons use the matching grid layout so L/E/V center under their column
+    expect(screen.getByTestId('bet-buttons').getAttribute('data-layout')).toBe('grid');
   });
 });

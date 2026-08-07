@@ -2,6 +2,7 @@ import type { MatchDTO } from '../../types';
 import { formatDate } from '../../utils/format';
 import BetButtons from './BetButtons';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
+import { useIsMobile } from '../../hooks/use-is-mobile';
 import theme from '../../styles/theme';
 
 interface MatchCardProps {
@@ -20,13 +21,60 @@ export default function MatchCard({ match, isExpired, lockBetting = false }: Mat
   const currentPrediction = useBetSlipStore(
     (s) => s.predictions[match.id.toString()] ?? null,
   );
+  const isMobile = useIsMobile();
+
+  const homeTeam = (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      {match.localImg && (
+        <img
+          src={match.localImg}
+          alt={match.localTeam}
+          style={{ width: 40, height: 40, objectFit: 'contain', marginBottom: 4 }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+      <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
+        {match.localTeam}
+      </div>
+    </div>
+  );
+
+  const center = (
+    <div style={{ minWidth: 60, textAlign: 'center' }}>
+      {match.score ? (
+        <div style={{ fontWeight: 700, fontSize: 20, color: theme.blanco }}>
+          {match.score}
+        </div>
+      ) : (
+        <div style={{ fontWeight: 700, fontSize: 14, color: theme.vsText }}>VS</div>
+      )}
+    </div>
+  );
+
+  const awayTeam = (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      {match.visitorImg && (
+        <img
+          src={match.visitorImg}
+          alt={match.visitorTeam}
+          style={{ width: 40, height: 40, objectFit: 'contain', marginBottom: 4 }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      )}
+      <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
+        {match.visitorTeam}
+      </div>
+    </div>
+  );
 
   return (
     <div
+      data-testid="match-card"
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 16,
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        gap: isMobile ? 12 : 16,
         padding: '16px 20px',
         background: theme.tarjeta,
         borderRadius: 12,
@@ -74,52 +122,38 @@ export default function MatchCard({ match, isExpired, lockBetting = false }: Mat
         </div>
       )}
 
-      {/* Home team */}
-      <div style={{ flex: 1, textAlign: 'center' }}>
-        {match.localImg && (
-          <img
-            src={match.localImg}
-            alt={match.localTeam}
-            style={{ width: 40, height: 40, objectFit: 'contain', marginBottom: 4 }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-          {match.localTeam}
+      {/* On mobile the teams and the buttons live in separate full-width rows
+          that share the same 3-column template, so L/E/V center under their
+          team/VS column. On desktop the current single flex row is preserved. */}
+      {isMobile ? (
+        <div
+          data-testid="teams-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 60px 1fr',
+            alignItems: 'center',
+            gap: 16,
+            width: '100%',
+          }}
+        >
+          {homeTeam}
+          {center}
+          {awayTeam}
         </div>
-      </div>
-
-      {/* Score or VS */}
-      <div style={{ minWidth: 60, textAlign: 'center' }}>
-        {match.score ? (
-          <div style={{ fontWeight: 700, fontSize: 20, color: theme.blanco }}>
-            {match.score}
-          </div>
-        ) : (
-          <div style={{ fontWeight: 700, fontSize: 14, color: theme.vsText }}>VS</div>
-        )}
-      </div>
-
-      {/* Away team */}
-      <div style={{ flex: 1, textAlign: 'center' }}>
-        {match.visitorImg && (
-          <img
-            src={match.visitorImg}
-            alt={match.visitorTeam}
-            style={{ width: 40, height: 40, objectFit: 'contain', marginBottom: 4 }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
-          {match.visitorTeam}
-        </div>
-      </div>
+      ) : (
+        <>
+          {homeTeam}
+          {center}
+          {awayTeam}
+        </>
+      )}
 
       {/* Bet buttons */}
       <BetButtons
         matchId={match.id.toString()}
         disabled={isExpired || lockBetting}
         currentPrediction={currentPrediction}
+        layout={isMobile ? 'grid' : 'row'}
       />
     </div>
   );

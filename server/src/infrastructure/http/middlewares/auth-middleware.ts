@@ -23,7 +23,7 @@ export function createAuthMiddleware(jwtService: {
       const payload = jwtService.verify(token);
       request.user = payload;
     } catch {
-      throw new UnauthorizedError('Invalid or expired token');
+      throw new UnauthorizedError('Token inválido o expirado');
     }
   };
 }

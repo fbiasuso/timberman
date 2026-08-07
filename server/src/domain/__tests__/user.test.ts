@@ -59,7 +59,16 @@ describe('User', () => {
 
     it('throws InsufficientBalanceError when balance is too low', () => {
       const user = User.create(baseSnapshot);
-      expect(() => user.deductBalance(Money.fromCents(5000))).toThrow(InsufficientBalanceError);
+      let error: unknown;
+      try {
+        user.deductBalance(Money.fromCents(5000));
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(InsufficientBalanceError);
+      expect((error as Error).message).toBe(
+        'El usuario "testuser" no tiene saldo suficiente. Requerido: 5000, Disponible: 2000',
+      );
     });
   });
 

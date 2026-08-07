@@ -40,7 +40,7 @@ export class User {
    */
   deductBalance(amount: Money): User {
     if (!this.canDeduct(amount)) {
-      throw new InsufficientBalanceError(this.id, this._balance, amount.cents);
+      throw new InsufficientBalanceError(this.id, this.username, this._balance, amount.cents);
     }
     return new User(
       this.id,

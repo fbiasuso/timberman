@@ -197,6 +197,38 @@ describe('CarteleraPage', () => {
     expect(screen.getByText(/Torneo 1 — Fecha 3/)).toBeDefined();
   });
 
+  it('does not duplicate "Torneo" when the tournament name already includes it', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({
+      data: { ...mockMatchesData, tournamentName: 'Torneo Timberman' },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    const heading = screen.getByRole('heading', { level: 2 });
+    expect(heading.textContent).toBe('Torneo Timberman — Fecha 3');
+  });
+
+  it('prefixes "Torneo" when the tournament name does not include it', () => {
+    vi.mocked(useCurrentMatches).mockReturnValue({
+      data: { ...mockMatchesData, tournamentName: 'Timberman' },
+      isLoading: false,
+      error: null,
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <CarteleraPage />
+      </MemoryRouter>
+    );
+    const heading = screen.getByRole('heading', { level: 2 });
+    expect(heading.textContent).toBe('Torneo Timberman — Fecha 3');
+  });
+
   it('shows the pay button when date is open', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
@@ -237,7 +269,7 @@ describe('CarteleraPage', () => {
     expect(screen.queryByText(/Pagar Jugada/)).toBeNull();
   });
 
-  it('shows accumulated carryover pozo and clarifies open-date wagers are excluded', () => {
+  it('shows accumulated carryover pozo and clarifies it closes at date close', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({
       data: { ...mockMatchesData, carryover: 1500 },
       isLoading: false,
@@ -253,11 +285,11 @@ describe('CarteleraPage', () => {
     // carryover 1500 → $15.00 (the open date's wagers are NOT included)
     expect(screen.getByText('$15.00')).toBeDefined();
     expect(
-      screen.getByText(/No incluye las jugadas de esta fecha/),
+      screen.getByText('El pozo se calcula al cerrar la fecha.'),
     ).toBeDefined();
   });
 
-  it('shows zero accumulated pozo for a fresh tournament', () => {
+  it('hides the accumulated pozo card when carryover is zero', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
     render(
@@ -265,11 +297,11 @@ describe('CarteleraPage', () => {
         <CarteleraPage />
       </MemoryRouter>
     );
-    expect(screen.getByText('Pozo acumulado de fechas anteriores')).toBeDefined();
-    expect(screen.getByText('$0.00')).toBeDefined();
+    expect(screen.queryByText('Pozo acumulado de fechas anteriores')).toBeNull();
+    expect(screen.queryByText('$0.00')).toBeNull();
     expect(
-      screen.getByText(/No incluye las jugadas de esta fecha/),
-    ).toBeDefined();
+      screen.queryByText('El pozo se calcula al cerrar la fecha.'),
+    ).toBeNull();
   });
 
   it('renders Fechas anteriores below the active date content', () => {

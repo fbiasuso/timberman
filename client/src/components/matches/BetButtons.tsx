@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { Prediction } from '../../types';
 import { useBetSlipStore } from '../../stores/bet-slip-store';
 import theme from '../../styles/theme';
@@ -9,6 +10,11 @@ interface BetButtonsProps {
   disabled: boolean;
   /** Current prediction for this match, if any */
   currentPrediction: Prediction | null;
+  /**
+   * 'row' (default): L/E/V side by side at the end of the match row.
+   * 'grid': each button centered under its team column (mobile layout).
+   */
+  layout?: 'row' | 'grid';
 }
 
 const PREDICTIONS: { value: Prediction; label: string }[] = [
@@ -21,7 +27,12 @@ const PREDICTIONS: { value: Prediction; label: string }[] = [
  * Three outcome buttons: L / E / V
  * Highlights the selected one, toggles off if clicked again.
  */
-export default function BetButtons({ matchId, disabled, currentPrediction }: BetButtonsProps) {
+export default function BetButtons({
+  matchId,
+  disabled,
+  currentPrediction,
+  layout = 'row',
+}: BetButtonsProps) {
   const setPrediction = useBetSlipStore((s) => s.setPrediction);
 
   const handleClick = (prediction: Prediction) => {
@@ -29,8 +40,13 @@ export default function BetButtons({ matchId, disabled, currentPrediction }: Bet
     setPrediction(matchId, prediction);
   };
 
+  const containerStyle: CSSProperties =
+    layout === 'grid'
+      ? { display: 'grid', gridTemplateColumns: '1fr 60px 1fr', gap: 16, width: '100%' }
+      : { display: 'flex', gap: 6 };
+
   return (
-    <div style={{ display: 'flex', gap: 6 }}>
+    <div data-testid="bet-buttons" style={containerStyle}>
       {PREDICTIONS.map(({ value, label }) => {
         const isSelected = currentPrediction === value;
         const colors = getButtonColors(value, isSelected);
@@ -43,6 +59,7 @@ export default function BetButtons({ matchId, disabled, currentPrediction }: Bet
             style={{
               width: 44,
               height: 44,
+              justifySelf: layout === 'grid' ? 'center' : undefined,
               border: isSelected ? `2px solid ${colors.border}` : `2px solid ${theme.border}`,
               borderRadius: 8,
               background: isSelected ? colors.bg : theme.searchBg,

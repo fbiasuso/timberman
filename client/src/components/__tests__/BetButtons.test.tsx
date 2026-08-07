@@ -53,4 +53,32 @@ describe('BetButtons', () => {
       expect((btn as HTMLButtonElement).disabled).toBe(true);
     });
   });
+
+  it('renders buttons side by side by default', () => {
+    render(
+      <BetButtons matchId="1" disabled={false} currentPrediction={null} />,
+    );
+    expect(screen.getByTestId('bet-buttons').style.display).toBe('flex');
+  });
+
+  it('renders buttons in a team-aligned grid when layout="grid"', () => {
+    render(
+      <BetButtons matchId="1" disabled={false} currentPrediction={null} layout="grid" />,
+    );
+    const container = screen.getByTestId('bet-buttons');
+    expect(container.style.display).toBe('grid');
+    expect(container.style.gridTemplateColumns).toBe('1fr 60px 1fr');
+    expect(screen.getByText('L')).toBeDefined();
+    expect(screen.getByText('E')).toBeDefined();
+    expect(screen.getByText('V')).toBeDefined();
+  });
+
+  it('keeps setPrediction wiring in grid layout', async () => {
+    const user = userEvent.setup();
+    render(
+      <BetButtons matchId="1" disabled={false} currentPrediction={null} layout="grid" />,
+    );
+    await user.click(screen.getByText('V'));
+    expect(setPrediction).toHaveBeenCalledWith('1', 'V');
+  });
 });

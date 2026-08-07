@@ -1,9 +1,18 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import ResultsEntry from '../admin/ResultsEntry';
 import type { TournamentDateDTO } from '../../api/admin-api';
 
 // --- Mocks ---
+
+// Deterministically control the mobile/desktop branch of the match card layout
+const { mockUseIsMobile } = vi.hoisted(() => ({
+  mockUseIsMobile: vi.fn(() => false),
+}));
+
+vi.mock('../../hooks/use-is-mobile', () => ({
+  useIsMobile: () => mockUseIsMobile(),
+}));
 
 vi.mock('../../hooks/use-matches', () => ({
   useCurrentMatches: vi.fn(),
@@ -57,6 +66,11 @@ vi.mock('../../hooks/use-admin', () => ({
 
 import { useCurrentMatches, useMatchesByDate } from '../../hooks/use-matches';
 import { useAdminTournaments, usePublishResults } from '../../hooks/use-admin';
+
+beforeEach(() => {
+  // Default: desktop layout — all existing tests run the unchanged row path
+  mockUseIsMobile.mockReturnValue(false);
+});
 
 afterEach(() => {
   cleanup();
@@ -607,5 +621,83 @@ describe('ResultsEntry', () => {
       // Non-dirty entry resets to the persisted baseline
       expect((localInputsAfter[0] as HTMLInputElement).value).toBe('2');
     });
+  });
+});
+
+describe('ResultsEntry mobile layout', () => {
+  it('renders a two-column card with inputs below the teams line on mobile', () => {
+    mockUseIsMobile.mockReturnValue(true);
+    mockTournaments([openDate]);
+    mockCurrent(openDate, openMatches);
+
+    render(<ResultsEntry />);
+
+    // Teams line renders above the score inputs
+    const teamsRow = screen.getAllByTestId('results-teams-row')[0];
+    expect(screen.getByText(/River Plate/)).toBeDefined();
+    expect(screen.getByText(/Boca Juniors/)).toBeDefined();
+
+    // Score inputs live in a cartelera-style 3-column grid (local | empty | visitor)
+    const inputsGrid = screen.getAllByTestId('results-inputs-grid')[0];
+    expect(inputsGrid.style.display).toBe('grid');
+    expect(inputsGrid.style.gridTemplateColumns).toBe('1fr 60px 1fr');
+    expect(inputsGrid.contains(screen.getAllByPlaceholderText('2')[0])).toBe(true);
+    expect(inputsGrid.contains(screen.getAllByPlaceholderText('1')[0])).toBe(true);
+
+    // Left column stacks the teams row first, the inputs grid below it
+    const leftCol = screen.getAllByTestId('results-left-col')[0];
+    expect(leftCol.children[0]).toBe(teamsRow);
+    expect(leftCol.children[1]).toBe(inputsGrid);
+
+    // The actions column sits beside the content column
+    expect(screen.getAllByTestId('results-actions')[0]).toBeDefined();
+  });
+
+  it('keeps the single-row layout on desktop with no mobile columns', () => {
+    mockTournaments([openDate]);
+    mockCurrent(openDate, openMatches);
+
+    render(<ResultsEntry />);
+
+    // Desktop path: no mobile-specific structure
+    expect(screen.queryByTestId('results-left-col')).toBeNull();
+    expect(screen.queryByTestId('results-inputs-grid')).toBeNull();
+    expect(screen.queryByTestId('results-actions')).toBeNull();
+    // Inputs render as before
+    expect(screen.getAllByPlaceholderText('2')).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText('1')).toHaveLength(2);
+  });
+
+  it('keeps Guardar inside the right column on mobile', () => {
+    mockUseIsMobile.mockReturnValue(true);
+    mockTournaments([closedDate]);
+    mockCurrent(null);
+    mockMatchesByDate([noResultMatch]);
+
+    render(<ResultsEntry />);
+
+    fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '2' } });
+    fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '1' } });
+
+    const actionsCol = screen.getByTestId('results-actions');
+    expect(actionsCol.contains(screen.getByRole('button', { name: 'Guardar' }))).toBe(true);
+  });
+
+  it('stacks the checkmark above Limpiar in the right column on mobile', () => {
+    mockUseIsMobile.mockReturnValue(true);
+    mockTournaments([closedDate]);
+    mockCurrent(null);
+    mockMatchesByDate([savedMatch]);
+
+    render(<ResultsEntry />);
+
+    const actionsCol = screen.getByTestId('results-actions');
+    const checkmark = screen.getByText('✓');
+    const limpiar = screen.getByRole('button', { name: 'Limpiar' });
+    expect(actionsCol.contains(checkmark)).toBe(true);
+    expect(actionsCol.contains(limpiar)).toBe(true);
+    // Stacked column order: checkmark on top, Limpiar below it
+    const children = Array.from(actionsCol.children);
+    expect(children.indexOf(checkmark)).toBeLessThan(children.indexOf(limpiar));
   });
 });

@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { env } from './config/env.js';
@@ -14,6 +17,7 @@ import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
 import { DrizzleLeagueRepo } from './infrastructure/repositories/drizzle-league-repo.js';
 import { DrizzleTeamRepo } from './infrastructure/repositories/drizzle-team-repo.js';
+import { LocalFileImageService } from './infrastructure/images/local-file-image-service.js';
 import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
 import { ensureInitialTournament } from './infrastructure/bootstrap.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
@@ -25,6 +29,18 @@ const app = Fastify({ logger: true });
 
 // ── Plugins ──────────────────────────────────────────────────────
 await app.register(cors, { origin: true });
+
+// ── Static shields ────────────────────────────────────────────────
+// Team logos live under server/public/logos (created at build time by the
+// image service). Served at /public/ with a ~30-day client cache — NOT
+// immutable: logos may be re-uploaded, so browsers must revalidate
+// (design D7; Vite dev proxy maps /public → this server).
+const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+await app.register(fastifyStatic, {
+  root: publicDir,
+  prefix: '/public/',
+  maxAge: '30d',
+});
 
 // ── Error Handler ─────────────────────────────────────────────────
 app.setErrorHandler(errorHandler);
@@ -42,6 +58,7 @@ const auditLogRepo = new DrizzleAuditLogRepo(db);
 const systemConfigRepo = new DrizzleSystemConfigRepo(db);
 const leagueRepo = new DrizzleLeagueRepo(db);
 const teamRepo = new DrizzleTeamRepo(db);
+const imageService = new LocalFileImageService(path.join(publicDir, 'logos'), app.log);
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
 
@@ -88,6 +105,7 @@ await app.register(createRouter(
   tournamentPointsRepo,
   leagueRepo,
   teamRepo,
+  imageService,
   uow,
 ));
 

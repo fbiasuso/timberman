@@ -9,6 +9,7 @@ import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
 import type { TeamRepo } from '../../../domain/ports/team-repo.js';
+import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
@@ -133,6 +134,10 @@ function createMockServices() {
     countMatchesReferencing: vi.fn(),
   };
 
+  const imageService: ImageService = {
+    downloadAndStore: vi.fn(async () => 'logos/1.png'),
+  };
+
   const jwtService = {
     sign: vi.fn(() => 'fake-jwt-token'),
     verify: vi.fn(),
@@ -151,7 +156,7 @@ function createMockServices() {
 
   return {
     userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo,
-    tournamentPointsRepo, configRepo, leagueRepo, teamRepo,
+    tournamentPointsRepo, configRepo, leagueRepo, teamRepo, imageService,
     jwtService, bcryptService, config,
   };
 }
@@ -177,6 +182,7 @@ describe('API Integration Tests', () => {
       services.tournamentPointsRepo,
       services.leagueRepo,
       services.teamRepo,
+      services.imageService,
     ));
     await app.ready();
   });

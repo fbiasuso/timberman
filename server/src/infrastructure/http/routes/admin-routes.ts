@@ -9,6 +9,7 @@ import type { TournamentPointsRepo } from '../../../domain/ports/tournament-poin
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
 import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
 import type { TeamRepo } from '../../../domain/ports/team-repo.js';
+import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
@@ -43,6 +44,7 @@ import { ListTeamsByLeagueUseCase } from '../../../application/teams/list-teams-
 import { CreateTeamUseCase } from '../../../application/teams/create-team-use-case.js';
 import { UpdateTeamUseCase } from '../../../application/teams/update-team-use-case.js';
 import { DeleteTeamUseCase } from '../../../application/teams/delete-team-use-case.js';
+import { SetTeamLogoUseCase } from '../../../application/teams/set-team-logo-use-case.js';
 import type { LeagueDTO, LeagueWithTeamsDTO, TeamDTO } from '../../../application/teams/dto.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
@@ -150,6 +152,12 @@ const updateTeamSchema = z.object({
   logoUrl: z.string().url().nullable().optional(),
   // On PATCH, leagueIds is optional — but when present it must keep ≥1 league.
   leagueIds: z.array(z.number().int().positive()).min(1).optional(),
+});
+
+// Re-upload a team shield: the URL is validated by zod (absolute http(s)),
+// then downloaded/validated/stored by the image service (see design D5/D6).
+const setTeamLogoSchema = z.object({
+  url: z.string().url(),
 });
 
 // ── DTOs (shape of API responses) ─────────────────────────────────
@@ -281,6 +289,7 @@ export function createAdminRoutes(
   configRepo: SystemConfigRepo,
   leagueRepo: LeagueRepo,
   teamRepo: TeamRepo,
+  imageService: ImageService,
   uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
@@ -350,9 +359,10 @@ export function createAdminRoutes(
     const deleteLeagueUseCase = new DeleteLeagueUseCase(leagueRepo);
     const listLeaguesUseCase = new ListLeaguesUseCase(leagueRepo, teamRepo);
     const listTeamsByLeagueUseCase = new ListTeamsByLeagueUseCase(teamRepo, leagueRepo);
-    const createTeamUseCase = new CreateTeamUseCase(teamRepo, leagueRepo);
-    const updateTeamUseCase = new UpdateTeamUseCase(teamRepo, leagueRepo);
+    const createTeamUseCase = new CreateTeamUseCase(teamRepo, leagueRepo, imageService);
+    const updateTeamUseCase = new UpdateTeamUseCase(teamRepo, leagueRepo, imageService);
     const deleteTeamUseCase = new DeleteTeamUseCase(teamRepo);
+    const setTeamLogoUseCase = new SetTeamLogoUseCase(teamRepo, imageService);
 
     // ── GET /api/admin/users ─────────────────────────────────────
     fastify.get('/api/admin/users', {
@@ -630,6 +640,19 @@ export function createAdminRoutes(
       const { teamId } = teamParamsSchema.parse(request.params);
       await deleteTeamUseCase.execute(teamId);
       return reply.status(204).send();
+    });
+
+    // ── POST /api/admin/teams/:teamId/logo ─────────────────────────
+    // Re-upload a team shield: download → validate → store → persist path.
+    // A failed download/store NEVER throws — the team is returned unchanged
+    // (existing logo kept) and the failure is logged (image-service contract).
+    fastify.post('/api/admin/teams/:teamId/logo', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+      const body = setTeamLogoSchema.parse(request.body);
+      const team = await setTeamLogoUseCase.execute({ teamId, url: body.url });
+      return reply.send({ team: toTeamAPIDTO(team) });
     });
   };
 }

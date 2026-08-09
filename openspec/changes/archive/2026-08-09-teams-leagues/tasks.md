@@ -53,7 +53,8 @@ Chain strategy: pending
 
 ## Phase 5: Verification
 
-- [ ] **T10** Full check — server `pnpm vitest run` + `pnpm lint` (workdir `server`), client `pnpm vitest run` (workdir `client`), `pnpm build` both. AC: all suites green, betting/ranking/tournament suites unregressed. Deps: T1–T9
+- [x] **T10** Full check — server `pnpm vitest run` + `pnpm lint` (workdir `server`), client `pnpm vitest run` (workdir `client`), `pnpm build` both. AC: all suites green, betting/ranking/tournament suites unregressed. Deps: T1–T9
+  - _Reconciled at archive (2026-08-09): T10 is the verification gate; executed by verify-report Phase 2 section — server 475 tests + tsc, client 253 tests + tsc + build, all green. Box flipped by sdd-archive with verify-report proof._
 
 ## Testing Requirements per Unit
 

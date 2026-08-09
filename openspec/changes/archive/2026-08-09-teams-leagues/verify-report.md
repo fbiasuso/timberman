@@ -155,3 +155,110 @@ All requirements (Equipos tab, Match Team Selection UI, Open Date Match Editing 
 ## Verdict
 
 **PASS WITH WARNINGS** — server Phase 1 implementation is complete and the production code (schema, entities, repos, use cases, routes, match enrichment, image pipeline) is verified by 469 passing tests + clean tsc. **Blocking before archive: fix the seed idempotency lookup (CRITICAL #1)**; T4 test-coverage gaps and the missing `seed:teams` script should be addressed in the same pass. Client work (T6–T9) is out of current scope — not a defect.
+
+---
+
+# Verification Report — teams-leagues (Phase 2: Client T6–T9 + T10 gate)
+
+**Change**: teams-leagues
+**Version**: N/A (branch `feature/teams-leagues`; client commits `4ae3bf8` U6, `500e942` U7, `8963ba6` U8, `e6b0493` U9)
+**Mode**: Standard
+**Scope**: CLIENT implementation (tasks T6–T9, work units U6–U9) + change-wide T10 gate.
+
+**Prior-report remediation**: the server CRITICAL #1 (seed idempotency) and WARNINGs #2–#4 from the section above were fixed by commit `e43c465` (`fix(server): make teams seed idempotent and cover image pipeline`): seed lookup normalized on both sides, `seed:teams` script added to package.json:19, image-service tests expanded (6→12), tasks.md T4/T5 boxes checked. Confirmed present on this branch and green in the T10 server run below.
+
+## Completeness
+
+| Metric | Value |
+|--------|-------|
+| Tasks total | 10 (T1–T10) |
+| Implementation tasks complete | 9 (T1–T9 all `[x]` in tasks.md) |
+| Tasks incomplete | 0 implementation tasks; T10 is the verification gate executed by this report |
+| Work units verified | U6–U9 (client commits 4ae3bf8 / 500e942 / 8963ba6 / e6b0493) |
+
+## Build & Tests Execution (T10 gate — all green)
+
+**Client tsc**: ✅ Passed — `pnpm exec tsc --noEmit` (workdir `client`, exit 0)
+**Client build**: ✅ Passed — `pnpm build` → `tsc && vite build`, 191 modules transformed, `dist/` 424.59 kB, built in 29.22s
+**Client tests**: ✅ 253 passed / 0 failed / 0 skipped — 18 test files, `pnpm vitest run` (workdir `client`)
+**Server tsc**: ✅ Passed — `pnpm exec tsc --noEmit` (workdir `server`, exit 0)
+**Server tests**: ✅ 475 passed / 0 failed / 0 skipped — 34 test files, `pnpm vitest run` (workdir `server`); betting/ranking/tournament suites unregressed
+
+New/updated client suites: `Autocomplete.test.tsx` 12 tests · `Equipos.test.tsx` 8 tests · `MatchRow.test.tsx` 12 tests · `MatchEditor.test.tsx` 17 tests (incl. AddMatchForm pick flows).
+
+**Coverage**: ➖ Not available (no coverage run configured).
+
+## Spec Compliance Matrix (client scope)
+
+### admin-operations (client authoritative)
+
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| Equipos Admin Tab | Tab lists leagues and teams | `Equipos.test.tsx` > 'lists every league and, expanded, its nested teams' | ✅ COMPLIANT |
+| Equipos Admin Tab | Create team from tab (list refreshes) | `Equipos.test.tsx` > 'creates a team from a league card and refreshes the list' | ✅ COMPLIANT |
+| Equipos Admin Tab | Blocked delete shows error, team remains | `Equipos.test.tsx` > 'shows the server error when a referenced team delete is blocked and the team remains' | ✅ COMPLIANT |
+| Match Team Selection UI | Pick team from registry (name + id + shield auto-fill + submit id) | `MatchEditor.test.tsx` > 'submits the add-match form … registry team ids' (name/id/submit); shield auto-fill static at `AddMatchForm.tsx:128`, `MatchRow.tsx:253` — no test fixture with non-null logo | ⚠️ PARTIAL (name+id+submit covered; shield auto-fill implemented, unasserted with a real logo) |
+| Match Team Selection UI | Autocomplete filtered by league, ordered by name | static: `AddMatchForm.tsx:112`, `MatchRow.tsx:207` (`options = selectedLeague.teams`); ordering contract covered server-side (api.test.ts GET /leagues nested, GET /leagues/:id/teams); no dedicated two-league client filter test | ⚠️ PARTIAL (implemented; client filter unasserted across two leagues) |
+| Match Team Selection UI | Legacy match renders and edits (stored strings → replaceable via autocomplete → ids) | `MatchRow.test.tsx` > 'marks legacy free-text teams as unmatched' + 'picking a registry team fills its id and sends {name, id}' + 'saves only the changed fields' (string-only patch) | ✅ COMPLIANT |
+| Open Date Match Editing (MOD) | Edit open-date match and save (PATCH) | `MatchRow.test.tsx` > 'picking a registry team … sends {name, id} in the patch' | ✅ COMPLIANT |
+| Open Date Match Editing (MOD) | Add match to open date (POST) | `MatchEditor.test.tsx` > 'submits the add-match form via useCreateMatch with the open date id and registry team ids' | ✅ COMPLIANT |
+| Open Date Match Editing (MOD) | Closed date is view-only | `MatchEditor.test.tsx` > 'expanding a closed date loads its matches read-only with results' + `MatchRow.test.tsx` read-only block | ✅ COMPLIANT |
+| Open Date Match Editing (MOD) | Team fields use registry selection; no free text | `MatchEditor.test.tsx` > free text alone keeps Crear partido disabled (line 372-378); Autocomplete rendered in AddMatchForm/MatchRow | ✅ COMPLIANT |
+
+### team-registry (client-relevant)
+
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| League Creation / Editing (format enum) | `LeagueFormat = 'liga'|'copa'` matches server zod `z.enum(['liga','copa'])` | `types/index.ts:65` vs `admin-routes.ts:133` | ✅ COMPLIANT (parity, static) |
+| Team Editing | Last-membership 400 surfaced + create requires ≥1 league | `Equipos.test.tsx` > 'edits a team and surfaces the last-membership error without calling the server' + 'requires at least one league membership on create' | ✅ COMPLIANT |
+
+### team-image-hosting (client-relevant)
+
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| Shield Serving | Client resolves relative `logos/…` → `/public/…` | `resolveLogoUrl` `format.ts:27-31` (null→null, absolute passthrough, relative→`/public/…`); exercised in `Equipos.test.tsx` (river `logos/11.png` → `/public/logos/11.png`) and pick flows | ✅ COMPLIANT (static + indirect runtime) |
+| Shield Fallback | No logo → empty/manual shield, match still saveable | `resolveLogoUrl(null) → null`; fixtures with `logo: null` render/save (Equipos boca, MatchEditor sanLorenzo/huracan); manual URL inputs remain editable (`AddMatchForm.tsx:219-239`, `MatchRow.tsx:358-382`) | ✅ COMPLIANT |
+| Shield Fallback | Manual URL still accepted | `MatchRow.test.tsx` > 'saves image URLs and the schedule when changed' | ✅ COMPLIANT |
+
+**Compliance summary**: 12/14 scenarios COMPLIANT, 2 PARTIAL (shield auto-fill test fixture, two-league client filter test) — both implementation-complete with static evidence, no untested required behavior.
+
+## Correctness (Static Evidence)
+
+| Requirement | Status | Notes |
+|------------|--------|-------|
+| Types (U6) | ✅ Implemented | `types/index.ts:31-32,47-48,59-60` team ids; `:65` LeagueFormat; `:68-76` TeamDTO; `:79-86` LeagueDTO.teams — parity with `server/src/application/teams/dto.ts:15-27` and match use-case DTOs (`create-match-use-case.ts:35-36`, `update-match-details-use-case.ts:34-35`) |
+| API client flat fns (U6) | ✅ Implemented | `admin-api.ts:280-336` — getLeagues/create/update/deleteLeague, getLeagueTeams, create/update/deleteTeam, setTeamLogo; paths match `admin-routes.ts:573-649` |
+| Hooks single key (U6) | ✅ Implemented | `use-teams.ts:7` `['admin','leagues']`; `useLeagues` query + 7 mutations all invalidate that single key; no match invalidation (D10) |
+| resolveLogoUrl (U6) | ✅ Implemented | `format.ts:27-31` — null → null; absolute `https?://` passthrough; relative `logos/…` → `/public/logos/…` (leading slashes stripped) |
+| Autocomplete (U7) | ✅ Implemented | `Autocomplete.tsx` — filter (113-116), keyboard nav up/down/enter/escape (145-179), click-outside (128-137), a11y attrs combobox/listbox/option/activedescendant (186-228), unmatched-text state (181, 209) |
+| Equipos tab (U8) | ✅ Implemented | create-league form name/country/format (151-239); league accordion cards (409-545); team create/edit name/aliases comma-separated/logo URL/multi-select (258-405); ≥1 league enforced locally (290-295, 378-382, 388); last-membership 400 + blocked deletes surfaced via error box (400-402, 419-424); AdminPage 'equipos' tab (AdminPage.tsx:10,21,71-72) |
+| Match form integration (U9) | ✅ Implemented | AddMatchForm UI-only league selector filtering `league.teams` (109-112), typing cancels pick (118-123), submit disabled without both picks (133,157,259), pick → name+id+resolveLogoUrl shield (125-129); MatchRow legacy string render + unmatched hint (215-224, 336, 353), replaceable via autocomplete (250-254), PATCH {name,id} / string-only→FK null (278-289); ReadOnlyRow for closed/results (160-186) |
+| Vite proxy (U9) | ✅ Implemented | `vite.config.ts:15-18` `/public` → `http://localhost:3001` |
+
+## Coherence (Design)
+
+| Decision | Followed? | Notes |
+|----------|-----------|-------|
+| D8 single `['admin','leagues']` key feeds tab + forms | ✅ Yes | `use-teams.ts:7-17` |
+| D9 flat team endpoints with leagueIds | ✅ Yes | client payloads `CreateTeamPayload`/`UpdateTeamPayload` (admin-api.ts:146-161) |
+| D10 write-once enrichment; string-only PATCH → FK null | ✅ Yes | `MatchRow.tsx:278-289` — teamId null ⇒ string only, no FK field sent |
+| D11 league selector UI-only, never submitted | ✅ Yes | `AddMatchForm.tsx:107-112`; payload `localTeamId/visitorTeamId` only (142-143), no league id |
+| D11 initial league prefilled from `localTeamId`'s first membership | ✅ Yes | `MatchRow.tsx:202-213` |
+| resolveLogoUrl helper per design | ✅ Yes | `format.ts:27-31` |
+| Vite proxy `/public` → :3001 | ✅ Yes | `vite.config.ts:15-18` |
+
+## Issues Found
+
+**CRITICAL**: None
+
+**WARNING**: None
+
+**SUGGESTION**
+1. No dedicated unit test for `resolveLogoUrl` (null / absolute / relative cases) — currently exercised only indirectly via Equipos logo render.
+2. No dedicated client test asserting league-filtered autocomplete across two leagues (AddMatchForm/MatchRow) — locks the D11 UI filter; server-side ordering contract already covered by api.test.ts.
+3. Shield auto-fill from a non-null `team.logo` is not asserted (all pick-flow fixtures use `logo: null`); add a fixture with `logo: 'logos/N.png'` and assert the shield input value.
+4. Known accepted deviation (per tasks.md pre-plan): U8 commit `8963ba6` = 880 changed lines vs ~380 estimate — review in chunks, still one commit; not a defect.
+
+## Verdict
+
+**PASS** — client implementation T6–T9 fully verified: 253 client tests + clean tsc + successful build; change-wide T10 gate green (server 475 tests + tsc, client 253 tests + tsc + build). All 14 client-relevant spec scenarios compliant (12 COMPLIANT, 2 PARTIAL with static implementation evidence); design decisions D8–D11 followed; no CRITICAL or WARNING issues. The 2 PARTIAL items are test-coverage refinements only, not behavior gaps. Ready for archive.

@@ -88,8 +88,8 @@ Branch-only work. Revert migration (drop `leagues`/`teams`, drop FKs — columns
 
 ## Success Criteria
 
-- [ ] New matches in create/edit pick teams ONLY from the registry (no free text).
-- [ ] Selecting a team persists its `team_id` and auto-fills the shield; legacy matches still render/edit.
-- [ ] League/team CRUD enforces normalized uniqueness (409) and guarded deletes.
-- [ ] Seed loads real Primera A + B rosters; shields served from `public/logos/` with cache headers.
-- [ ] Existing suites stay green; new tests cover uniqueness, guards, fallback, autocomplete.
+- [x] New matches in create/edit pick teams ONLY from the registry (no free text).
+- [x] Selecting a team persists its `team_id` and auto-fills the shield; legacy matches still render/edit.
+- [x] League/team CRUD enforces normalized uniqueness (409) and guarded deletes.
+- [x] Seed loads real Primera A + B rosters; shields served from `public/logos/` with cache headers.
+- [x] Existing suites stay green; new tests cover uniqueness, guards, fallback, autocomplete.

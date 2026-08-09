@@ -55,7 +55,7 @@ Chain strategy: pending
 **Dependencies**: U2 (storeFromBuffer + service wiring)
 **Est. lines**: server ~280 | client 0
 
-- [ ] T3 (U3) — Change use-case input/return; add multipart registration + route branch + error contract; extend use-case and API tests — acceptance (spec team-registry): JSON `{url}` works; valid multipart `file` → 200 + `teams.logo` updated; oversized → 400 (`FST_REQ_FILE_TOO_LARGE`), team unchanged; invalid format → 415 `{message}`; unreachable URL (JSON) → 400, existing logo kept; team 404 preserved; team only updated after successful store.
+- [x] T3 (U3) — Change use-case input/return; add multipart registration + route branch + error contract; extend use-case and API tests — acceptance (spec team-registry): JSON `{url}` works; valid multipart `file` → 200 + `teams.logo` updated; oversized → 400 (`FST_REQ_FILE_TOO_LARGE`), team unchanged; invalid format → 415 `{message}`; unreachable URL (JSON) → 400, existing logo kept; team 404 preserved; team only updated after successful store.
 
 ## Phase 3: Client — file picker, preview, two-step upload (D4)
 

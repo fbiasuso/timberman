@@ -35,6 +35,17 @@ export function errorHandler(
     });
   }
 
+  // @fastify/multipart size-limit exceeded (design D3): the plugin rejects
+  // with FST_REQ_FILE_TOO_LARGE (default 413) when a file exceeds the 1 MiB
+  // cap. Map it to 400 with a client-facing message — the team is untouched.
+  const errorCode = (error as FastifyError).code;
+  if (errorCode === 'FST_REQ_FILE_TOO_LARGE') {
+    return reply.status(400).send({
+      error: 'FILE_TOO_LARGE',
+      message: 'Image exceeds the 1 MiB size limit',
+    });
+  }
+
   // JWT verification errors (from jsonwebtoken)
   if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
     return reply.status(401).send({

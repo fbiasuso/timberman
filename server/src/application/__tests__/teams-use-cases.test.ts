@@ -21,6 +21,7 @@ import { ListTeamsByLeagueUseCase } from '../teams/list-teams-by-league-use-case
 import { CreateTeamUseCase } from '../teams/create-team-use-case.js';
 import { UpdateTeamUseCase } from '../teams/update-team-use-case.js';
 import { DeleteTeamUseCase } from '../teams/delete-team-use-case.js';
+import { SetTeamLogoUseCase } from '../teams/set-team-logo-use-case.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────
 
@@ -390,6 +391,121 @@ describe('Team use cases', () => {
       vi.mocked(teamRepo.findById).mockResolvedValue(null);
 
       await expect(new DeleteTeamUseCase(teamRepo).execute(99))
+        .rejects.toBeInstanceOf(TeamNotFoundError);
+    });
+  });
+
+  describe('SetTeamLogoUseCase', () => {
+    function createImageService() {
+      return {
+        downloadAndStore: vi.fn(),
+        storeFromBuffer: vi.fn(),
+      } as unknown as ImageService;
+    }
+
+    it('stores uploaded bytes and returns stored: true with the updated team', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      vi.mocked(teamRepo.findById).mockResolvedValue(Team.create(teamSnap));
+      vi.mocked(imageService.storeFromBuffer).mockResolvedValue('logos/7.png');
+      vi.mocked(teamRepo.update).mockResolvedValue(
+        Team.create({ ...teamSnap, logo: 'logos/7.png' }),
+      );
+
+      const result = await new SetTeamLogoUseCase(teamRepo, imageService).execute({
+        teamId: 7,
+        bytes,
+      });
+
+      expect(imageService.storeFromBuffer).toHaveBeenCalledWith(bytes, 7);
+      expect(teamRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ logo: 'logos/7.png' }),
+      );
+      expect(result.stored).toBe(true);
+      expect(result.team.logo).toBe('logos/7.png');
+    });
+
+    it('downloads and stores a URL and returns stored: true with the updated team', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      vi.mocked(teamRepo.findById).mockResolvedValue(Team.create(teamSnap));
+      vi.mocked(imageService.downloadAndStore).mockResolvedValue('logos/7.png');
+      vi.mocked(teamRepo.update).mockResolvedValue(
+        Team.create({ ...teamSnap, logo: 'logos/7.png' }),
+      );
+
+      const result = await new SetTeamLogoUseCase(teamRepo, imageService).execute({
+        teamId: 7,
+        url: 'https://example.com/shield.png',
+      });
+
+      expect(imageService.downloadAndStore).toHaveBeenCalledWith('https://example.com/shield.png', 7);
+      expect(teamRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ logo: 'logos/7.png' }),
+      );
+      expect(result.stored).toBe(true);
+      expect(result.team.logo).toBe('logos/7.png');
+    });
+
+    it('keeps the team unchanged with stored: false when the store fails (bytes)', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      vi.mocked(teamRepo.findById).mockResolvedValue(Team.create({ ...teamSnap, logo: 'logos/old.png' }));
+      vi.mocked(imageService.storeFromBuffer).mockResolvedValue(null);
+
+      const result = await new SetTeamLogoUseCase(teamRepo, imageService).execute({
+        teamId: 7,
+        bytes: new Uint8Array([1, 2, 3]),
+      });
+
+      expect(teamRepo.update).not.toHaveBeenCalled();
+      expect(result.stored).toBe(false);
+      expect(result.team.logo).toBe('logos/old.png');
+    });
+
+    it('keeps the team unchanged with stored: false when the download fails (url)', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      vi.mocked(teamRepo.findById).mockResolvedValue(Team.create({ ...teamSnap, logo: 'logos/old.png' }));
+      vi.mocked(imageService.downloadAndStore).mockResolvedValue(null);
+
+      const result = await new SetTeamLogoUseCase(teamRepo, imageService).execute({
+        teamId: 7,
+        url: 'https://example.com/unreachable.png',
+      });
+
+      expect(teamRepo.update).not.toHaveBeenCalled();
+      expect(result.stored).toBe(false);
+      expect(result.team.logo).toBe('logos/old.png');
+    });
+
+    it('keeps the team unchanged with stored: false when the resolved logo matches the current one', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      vi.mocked(teamRepo.findById).mockResolvedValue(Team.create({ ...teamSnap, logo: 'logos/7.png' }));
+      vi.mocked(imageService.storeFromBuffer).mockResolvedValue('logos/7.png');
+
+      const result = await new SetTeamLogoUseCase(teamRepo, imageService).execute({
+        teamId: 7,
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      });
+
+      expect(teamRepo.update).not.toHaveBeenCalled();
+      expect(result.stored).toBe(false);
+      expect(result.team.logo).toBe('logos/7.png');
+    });
+
+    it('throws TeamNotFoundError for an unknown team (both input modes)', async () => {
+      const { teamRepo } = createRepos();
+      const imageService = createImageService();
+      vi.mocked(teamRepo.findById).mockResolvedValue(null);
+
+      const useCase = new SetTeamLogoUseCase(teamRepo, imageService);
+
+      await expect(useCase.execute({ teamId: 99, url: 'https://example.com/x.png' }))
+        .rejects.toBeInstanceOf(TeamNotFoundError);
+      await expect(useCase.execute({ teamId: 99, bytes: new Uint8Array([1]) }))
         .rejects.toBeInstanceOf(TeamNotFoundError);
     });
   });

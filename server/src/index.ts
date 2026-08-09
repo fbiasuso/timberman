@@ -1,11 +1,13 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { env } from './config/env.js';
+import { MAX_IMAGE_BYTES } from './infrastructure/images/image-validation.js';
 import { JwtServiceImpl } from './infrastructure/auth/jwt-service.js';
 import { BcryptServiceImpl } from './infrastructure/auth/bcrypt-service.js';
 import { DrizzleUserRepo } from './infrastructure/repositories/drizzle-user-repo.js';
@@ -29,6 +31,12 @@ const app = Fastify({ logger: true });
 
 // ── Plugins ──────────────────────────────────────────────────────
 await app.register(cors, { origin: true });
+
+// ── Multipart uploads ─────────────────────────────────────────────
+// Shield file uploads (design D3): the 1 MiB cap is enforced at the
+// transport layer so oversized payloads are cut before unbounded memory
+// buffering; a single `file` field is allowed.
+await app.register(multipart, { limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } });
 
 // ── Static shields ────────────────────────────────────────────────
 // Team logos live under server/public/logos (created at build time by the

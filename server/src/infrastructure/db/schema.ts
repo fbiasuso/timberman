@@ -66,12 +66,64 @@ export const matchDates = pgTable('match_dates', {
   index('idx_match_dates_tournament').on(table.tournamentId),
 ]);
 
+// ── Leagues ────────────────────────────────────────────────────
+// Sports entities (country + format) — independent from betting tournaments.
+export const leagues = pgTable('leagues', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  country: text('country').notNull(),
+  format: text('format', { enum: ['liga', 'copa'] }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  // Names are unique under a normalized comparison key: case-folded, all
+  // whitespace stripped. Comparison-only — names are stored as written.
+  uniqueIndex('idx_leagues_name_normalized_unique').on(
+    sql`lower(regexp_replace(${table.name}, '\\s+', '', 'g'))`,
+  ),
+]);
+
+// ── Teams (flat registry) ──────────────────────────────────────
+// Flat entities: league participation lives in the team_leagues junction
+// (M2M), so a team can belong to several leagues (design D1/D3).
+export const teams = pgTable('teams', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  aliases: text('aliases').array(), // nullable — common alternate spellings
+  logo: text('logo'), // relative path 'logos/{id}.{ext}', nullable
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  // Team names are unique GLOBALLY under the normalized key (spec team-registry
+  // "Duplicate name globally rejected") — a name cannot repeat across leagues.
+  uniqueIndex('idx_teams_name_normalized_unique').on(
+    sql`lower(regexp_replace(${table.name}, '\\s+', '', 'g'))`,
+  ),
+]);
+
+// ── Team–League Memberships (M2M junction) ─────────────────────
+// team delete → memberships vanish (CASCADE); league delete is blocked by
+// RESTRICT + app pre-check (countTeams) so memberships never dangle.
+export const teamLeagues = pgTable('team_leagues', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').references(() => teams.id, { onDelete: 'cascade' }).notNull(),
+  leagueId: integer('league_id').references(() => leagues.id, { onDelete: 'restrict' }).notNull(),
+}, (table) => [
+  // Membership-invariant backstop AND team-side lookup index.
+  uniqueIndex('idx_team_leagues_team_league_unique').on(table.teamId, table.leagueId),
+  // PG does not auto-index FKs: league-side lookups (findByLeagueId, countTeams).
+  index('idx_team_leagues_league').on(table.leagueId),
+]);
+
 // ── Matches ────────────────────────────────────────────────────
 export const matches = pgTable('matches', {
   id: serial('id').primaryKey(),
   matchDateId: integer('match_date_id').references(() => matchDates.id).notNull(),
   localTeam: text('local_team').notNull(),
   visitorTeam: text('visitor_team').notNull(),
+  // Team FKs are ENRICHMENT only — strings stay the display source of truth.
+  // SET NULL keeps legacy rows safe; the app-level delete guard produces the
+  // typed 409 (design D2).
+  localTeamId: integer('local_team_id').references(() => teams.id, { onDelete: 'set null' }),
+  visitorTeamId: integer('visitor_team_id').references(() => teams.id, { onDelete: 'set null' }),
   localImg: text('local_img'),
   visitorImg: text('visitor_img'),
   scheduledAt: timestamp('scheduled_at'),
@@ -80,6 +132,8 @@ export const matches = pgTable('matches', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => [
   index('idx_matches_date').on(table.matchDateId),
+  index('idx_matches_local_team').on(table.localTeamId),
+  index('idx_matches_visitor_team').on(table.visitorTeamId),
 ]);
 
 // ── Tickets ────────────────────────────────────────────────────

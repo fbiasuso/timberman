@@ -190,6 +190,34 @@ export class TournamentNameAlreadyExistsError extends DomainError {
   get statusCode(): number { return 409; }
 }
 
+// ── Team Registry Errors ─────────────────────────────────────────
+
+export class LeagueNameAlreadyExistsError extends DomainError {
+  /** Colliding league name (diagnostics only — the API message is fixed). */
+  readonly leagueName: string;
+
+  constructor(leagueName: string) {
+    super('Ya existe una liga con ese nombre');
+    this.leagueName = leagueName;
+  }
+
+  get code(): string { return 'LEAGUE_NAME_TAKEN'; }
+  get statusCode(): number { return 409; }
+}
+
+export class TeamNameAlreadyExistsError extends DomainError {
+  /** Colliding team name (diagnostics only — the API message is fixed). */
+  readonly teamName: string;
+
+  constructor(teamName: string) {
+    super('Ya existe un equipo con ese nombre');
+    this.teamName = teamName;
+  }
+
+  get code(): string { return 'TEAM_NAME_TAKEN'; }
+  get statusCode(): number { return 409; }
+}
+
 // ── Not Found Errors ──────────────────────────────────────────────
 
 export class UserNotFoundError extends DomainError {
@@ -207,6 +235,24 @@ export class TournamentNotFoundError extends DomainError {
   }
 
   get code(): string { return 'TOURNAMENT_NOT_FOUND'; }
+  get statusCode(): number { return 404; }
+}
+
+export class LeagueNotFoundError extends DomainError {
+  constructor(id: number) {
+    super(`League not found: ${id}`);
+  }
+
+  get code(): string { return 'LEAGUE_NOT_FOUND'; }
+  get statusCode(): number { return 404; }
+}
+
+export class TeamNotFoundError extends DomainError {
+  constructor(id: number) {
+    super(`Team not found: ${id}`);
+  }
+
+  get code(): string { return 'TEAM_NOT_FOUND'; }
   get statusCode(): number { return 404; }
 }
 

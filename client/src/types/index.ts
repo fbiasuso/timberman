@@ -27,6 +27,9 @@ export interface MatchDTO {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  /** Registry team id — null for legacy free-text matches (design D10) */
+  localTeamId: number | null;
+  visitorTeamId: number | null;
   scheduledAt: string | null;
   result: string | null;
   score: string | null;
@@ -40,6 +43,9 @@ export interface CreateMatchPayload {
   /** Image URLs / scheduled time are optional; null clears when updating */
   localImg?: string | null;
   visitorImg?: string | null;
+  /** Registry team ids — enrichment only; null/absent keeps free text (FK null) */
+  localTeamId?: number | null;
+  visitorTeamId?: number | null;
   scheduledAt?: string | null;
 }
 
@@ -49,7 +55,34 @@ export interface UpdateMatchDetailsPayload {
   visitorTeam?: string;
   localImg?: string | null;
   visitorImg?: string | null;
+  /** Registry team id — resolving it sets the FK and overwrites the string (design D10) */
+  localTeamId?: number | null;
+  visitorTeamId?: number | null;
   scheduledAt?: string | null;
+}
+
+/** League competition format (server enum) */
+export type LeagueFormat = 'liga' | 'copa';
+
+/** Team registry DTO (flat entity — league membership via leagueIds) */
+export interface TeamDTO {
+  id: number;
+  name: string;
+  aliases: string[] | null;
+  /** Self-hosted relative logo path (e.g. 'logos/5.png') or null */
+  logo: string | null;
+  leagueIds: number[];
+  createdAt: string;
+}
+
+/** League DTO — GET /api/admin/leagues nests the member teams (design D8) */
+export interface LeagueDTO {
+  id: number;
+  name: string;
+  country: string;
+  format: LeagueFormat;
+  createdAt: string;
+  teams: TeamDTO[];
 }
 
 /** Embedded match snapshot on a ticket prediction (team names + sanitized result) */

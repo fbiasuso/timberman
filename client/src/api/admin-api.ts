@@ -2,6 +2,7 @@ import client from './client';
 import type { UserDTO } from './auth-api';
 import type { MatchDateStatus, MatchDTO, MatchDateDTO } from '../types';
 import type { CreateMatchPayload, UpdateMatchDetailsPayload } from '../types';
+import type { LeagueDTO, LeagueFormat, TeamDTO } from '../types';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,41 @@ export interface UpdateConfigPayload {
   value: number | boolean;
 }
 
+// ─── Teams & Leagues (registry) ─────────────────────────────────────────────
+
+/** Body for POST /api/admin/leagues */
+export interface CreateLeaguePayload {
+  name: string;
+  country: string;
+  format: LeagueFormat;
+}
+
+/** Body for PATCH /api/admin/leagues/:leagueId — partial */
+export type UpdateLeaguePayload = Partial<CreateLeaguePayload>;
+
+/** Body for POST /api/admin/teams — at least one league membership required */
+export interface CreateTeamPayload {
+  name: string;
+  aliases?: string[] | null;
+  /** Remote shield URL — downloaded/validated/stored by the server */
+  logoUrl?: string | null;
+  leagueIds: number[];
+}
+
+/** Body for PATCH /api/admin/teams/:teamId — partial */
+export interface UpdateTeamPayload {
+  name?: string;
+  aliases?: string[] | null;
+  logoUrl?: string | null;
+  /** When present it must keep ≥1 league (removing the last → 400) */
+  leagueIds?: number[];
+}
+
+/** Body for POST /api/admin/teams/:teamId/logo — re-upload a shield */
+export interface SetTeamLogoPayload {
+  url: string;
+}
+
 // ─── API functions ──────────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -236,5 +272,66 @@ export const adminApi = {
     return client
       .patch<ConfigUpdateResult>('/admin/config', payload)
       .then((r) => r.data);
+  },
+
+  // ── Teams & Leagues (registry) ───────────────────────────────────────────
+
+  /** GET /api/admin/leagues — all leagues with nested member teams (design D8) */
+  getLeagues() {
+    return client
+      .get<{ leagues: LeagueDTO[] }>('/admin/leagues')
+      .then((r) => r.data.leagues);
+  },
+
+  /** POST /api/admin/leagues — create a league */
+  createLeague(payload: CreateLeaguePayload) {
+    return client
+      .post<{ league: LeagueDTO }>('/admin/leagues', payload)
+      .then((r) => r.data.league);
+  },
+
+  /** PATCH /api/admin/leagues/:leagueId — update league fields */
+  updateLeague(leagueId: number, payload: UpdateLeaguePayload) {
+    return client
+      .patch<{ league: LeagueDTO }>(`/admin/leagues/${leagueId}`, payload)
+      .then((r) => r.data.league);
+  },
+
+  /** DELETE /api/admin/leagues/:leagueId — 409 while the league has memberships */
+  deleteLeague(leagueId: number) {
+    return client.delete(`/admin/leagues/${leagueId}`).then((r) => r.data);
+  },
+
+  /** GET /api/admin/leagues/:leagueId/teams — league member teams, ordered by name */
+  getLeagueTeams(leagueId: number) {
+    return client
+      .get<{ teams: TeamDTO[] }>(`/admin/leagues/${leagueId}/teams`)
+      .then((r) => r.data.teams);
+  },
+
+  /** POST /api/admin/teams — create a team with league memberships */
+  createTeam(payload: CreateTeamPayload) {
+    return client
+      .post<{ team: TeamDTO }>('/admin/teams', payload)
+      .then((r) => r.data.team);
+  },
+
+  /** PATCH /api/admin/teams/:teamId — update team fields / memberships */
+  updateTeam(teamId: number, payload: UpdateTeamPayload) {
+    return client
+      .patch<{ team: TeamDTO }>(`/admin/teams/${teamId}`, payload)
+      .then((r) => r.data.team);
+  },
+
+  /** DELETE /api/admin/teams/:teamId — 409 while the team is referenced by matches */
+  deleteTeam(teamId: number) {
+    return client.delete(`/admin/teams/${teamId}`).then((r) => r.data);
+  },
+
+  /** POST /api/admin/teams/:teamId/logo — re-upload a team shield */
+  setTeamLogo(teamId: number, payload: SetTeamLogoPayload) {
+    return client
+      .post<{ team: TeamDTO }>(`/admin/teams/${teamId}/logo`, payload)
+      .then((r) => r.data.team);
   },
 };

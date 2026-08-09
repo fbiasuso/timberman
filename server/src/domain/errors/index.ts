@@ -218,6 +218,53 @@ export class TeamNameAlreadyExistsError extends DomainError {
   get statusCode(): number { return 409; }
 }
 
+/** A team must belong to at least one league — membership invariant (400). */
+export class TeamNeedsLeagueError extends DomainError {
+  /** teamId is absent on create (no id exists yet) — the message drops it. */
+  constructor(teamId?: number) {
+    super(teamId === undefined
+      ? 'Un equipo debe pertenecer al menos a una liga'
+      : `El equipo ${teamId} debe pertenecer al menos a una liga`);
+  }
+
+  get code(): string { return 'TEAM_NEEDS_LEAGUE'; }
+  get statusCode(): number { return 400; }
+}
+
+/** League delete guard — the league still has team memberships (409). */
+export class LeagueHasTeamsError extends DomainError {
+  constructor(leagueId: number, teamCount: number) {
+    super(`No se puede eliminar la liga ${leagueId}: todavía tiene ${teamCount} equipo(s)`);
+  }
+
+  get code(): string { return 'LEAGUE_HAS_TEAMS'; }
+  get statusCode(): number { return 409; }
+}
+
+/** Team delete guard — the team is referenced by at least one match (409). */
+export class TeamReferencedByMatchesError extends DomainError {
+  constructor(teamId: number, matchCount: number) {
+    super(`No se puede eliminar el equipo ${teamId}: está referenciado por ${matchCount} partido(s)`);
+  }
+
+  get code(): string { return 'TEAM_REFERENCED_BY_MATCHES'; }
+  get statusCode(): number { return 409; }
+}
+
+/**
+ * A team id on match create/edit could not be resolved against the registry —
+ * semantic resolution failure (422, design D4). Distinct from TeamNotFoundError
+ * (404) which is for registry CRUD on a missing id.
+ */
+export class TeamNotResolvableError extends DomainError {
+  constructor(teamId: number) {
+    super(`El equipo ${teamId} no existe en el registro`);
+  }
+
+  get code(): string { return 'TEAM_NOT_RESOLVABLE'; }
+  get statusCode(): number { return 422; }
+}
+
 // ── Not Found Errors ──────────────────────────────────────────────
 
 export class UserNotFoundError extends DomainError {

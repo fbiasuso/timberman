@@ -42,10 +42,14 @@ const queryClient = postgres(databaseUrl);
 const db = drizzle(queryClient, { schema });
 
 // ── Helpers ──────────────────────────────────────────────────────
-/** Normalize a name the same way the unique indexes do (lower + strip). */
-function normalize(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '').trim();
-}
+/**
+ * Normalized-name lookup that EXACTLY mirrors the functional unique indexes
+ * (schema.ts / repos): lowercase + whitespace-stripped on BOTH sides.
+ * Using plain `lower()` here would desync from the index and make re-runs
+ * crash with 23505 (see verify-report CRITICAL #1).
+ */
+const NORMALIZED_LOOKUP = (col: unknown, value: string) =>
+  sql`lower(regexp_replace(${col}, '\s+', '', 'g')) = lower(regexp_replace(${value}, '\s+', '', 'g'))`;
 
 interface TeamSeed {
   name: string;
@@ -144,29 +148,30 @@ const LEAGUES: LeagueSeed[] = [
 const logosDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'logos');
 const imageService = new LocalFileImageService(logosDir);
 
-async function upsertLeague(seed: LeagueSeed): Promise<number> {
-  const key = normalize(seed.name);
-  const existing = await db.query.leagues.findFirst({
-    where: (l, { sql }) => sql`lower(${l.name}) = ${key}`,
+/** The exact transaction handle type `db.transaction(cb)` passes to its callback. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function upsertLeague(tx: Tx, seed: LeagueSeed): Promise<number> {
+  const existing = await tx.query.leagues.findFirst({
+    where: (l) => NORMALIZED_LOOKUP(l.name, seed.name),
   });
   if (existing) return existing.id;
 
-  const [inserted] = await db.insert(schema.leagues)
+  const [inserted] = await tx.insert(schema.leagues)
     .values({ name: seed.name, country: seed.country, format: seed.format })
     .returning({ id: schema.leagues.id });
   console.log(`   🏆 League created: ${seed.name} (id=${inserted.id})`);
   return inserted.id;
 }
 
-async function upsertTeam(seed: TeamSeed, leagueId: number): Promise<number> {
-  const key = normalize(seed.name);
-  const existing = await db.query.teams.findFirst({
-    where: (t, { sql }) => sql`lower(${t.name}) = ${key}`,
+async function upsertTeam(tx: Tx, seed: TeamSeed, leagueId: number): Promise<number> {
+  const existing = await tx.query.teams.findFirst({
+    where: (t) => NORMALIZED_LOOKUP(t.name, seed.name),
   });
   const teamId = existing?.id;
 
   if (!teamId) {
-    const [inserted] = await db.insert(schema.teams)
+    const [inserted] = await tx.insert(schema.teams)
       .values({ name: seed.name, aliases: seed.aliases ?? [] })
       .returning({ id: schema.teams.id });
     console.log(`   ⚽ Team created: ${seed.name} (id=${inserted.id})`);
@@ -175,13 +180,13 @@ async function upsertTeam(seed: TeamSeed, leagueId: number): Promise<number> {
 
   // Team already exists — make sure aliases are present (idempotent enrich).
   if (seed.aliases?.length && (!existing.aliases || existing.aliases.length === 0)) {
-    await db.update(schema.teams).set({ aliases: seed.aliases }).where(eq(schema.teams.id, teamId));
+    await tx.update(schema.teams).set({ aliases: seed.aliases }).where(eq(schema.teams.id, teamId));
   }
   return teamId;
 }
 
-async function ensureMembership(teamId: number, leagueId: number): Promise<void> {
-  await db.insert(schema.teamLeagues)
+async function ensureMembership(tx: Tx, teamId: number, leagueId: number): Promise<void> {
+  await tx.insert(schema.teamLeagues)
     .values({ teamId, leagueId })
     .onConflictDoNothing();
 }
@@ -189,23 +194,25 @@ async function ensureMembership(teamId: number, leagueId: number): Promise<void>
 async function main() {
   console.log('🌱 Seeding leagues & teams (2026 Argentine rosters)...\n');
 
-  for (const league of LEAGUES) {
-    console.log(`\n📌 ${league.name} (${league.country}, ${league.format}) — ${league.teams.length} teams`);
-    const leagueId = await upsertLeague(league);
+  await db.transaction(async (tx) => {
+    for (const league of LEAGUES) {
+      console.log(`\n📌 ${league.name} (${league.country}, ${league.format}) — ${league.teams.length} teams`);
+      const leagueId = await upsertLeague(tx, league);
 
-    for (const team of league.teams) {
-      const teamId = await upsertTeam(team, leagueId);
-      await ensureMembership(teamId, leagueId);
+      for (const team of league.teams) {
+        const teamId = await upsertTeam(tx, team, leagueId);
+        await ensureMembership(tx, teamId, leagueId);
 
-      if (team.logoUrl) {
-        const logo = await imageService.downloadAndStore(team.logoUrl, teamId);
-        if (logo) {
-          await db.update(schema.teams).set({ logo }).where(eq(schema.teams.id, teamId));
-          console.log(`      🛡️  shield: ${logo}`);
+        if (team.logoUrl) {
+          const logo = await imageService.downloadAndStore(team.logoUrl, teamId);
+          if (logo) {
+            await tx.update(schema.teams).set({ logo }).where(eq(schema.teams.id, teamId));
+            console.log(`      🛡️  shield: ${logo}`);
+          }
         }
       }
     }
-  }
+  });
 
   const totalTeams = await db.select({ count: sql<number>`count(*)::int` }).from(schema.teams);
   const totalMemberships = await db.select({ count: sql<number>`count(*)::int` }).from(schema.teamLeagues);

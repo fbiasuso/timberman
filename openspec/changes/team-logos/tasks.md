@@ -35,7 +35,7 @@ Chain strategy: pending
 **Dependencies**: none
 **Est. lines**: server ~240 | client 0
 
-- [ ] T1 (U1) — Create `image-validation.ts` (`sniffImageType`, `MAX_IMAGE_BYTES` 1 MiB, `EXTENSIONS`, `downloadBytes` with 10s timeout); add `storeFromBuffer` to port; refactor `LocalFileImageService` to delegate; re-export validation — acceptance: existing 6 tests stay green; `storeFromBuffer` returns `logos/{id}.{ext}` for valid PNG/JPEG/WebP, null + no write on invalid/oversized, never throws (spec "Buffer Store Operation").
+- [x] T1 (U1) — Create `image-validation.ts` (`sniffImageType`, `MAX_IMAGE_BYTES` 1 MiB, `EXTENSIONS`, `downloadBytes` with 10s timeout); add `storeFromBuffer` to port; refactor `LocalFileImageService` to delegate; re-export validation — acceptance: existing 6 tests stay green; `storeFromBuffer` returns `logos/{id}.{ext}` for valid PNG/JPEG/WebP, null + no write on invalid/oversized, never throws (spec "Buffer Store Operation").
 
 ### U2 — SupabaseImageService + factory + env wiring (D2)
 

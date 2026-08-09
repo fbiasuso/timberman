@@ -254,6 +254,7 @@ describe('Team use cases', () => {
       const { leagueRepo, teamRepo } = createRepos();
       const imageService: ImageService = {
         downloadAndStore: vi.fn().mockResolvedValue(null),
+        storeFromBuffer: vi.fn().mockResolvedValue(null),
       };
       vi.mocked(leagueRepo.findById).mockResolvedValue(League.create(leagueSnap));
       vi.mocked(teamRepo.save).mockResolvedValue(Team.create(teamSnap));
@@ -272,6 +273,7 @@ describe('Team use cases', () => {
       const { leagueRepo, teamRepo } = createRepos();
       const imageService: ImageService = {
         downloadAndStore: vi.fn().mockResolvedValue('logos/7.png'),
+        storeFromBuffer: vi.fn().mockResolvedValue(null),
       };
       vi.mocked(leagueRepo.findById).mockResolvedValue(League.create(leagueSnap));
       vi.mocked(teamRepo.save).mockResolvedValue(Team.create(teamSnap));

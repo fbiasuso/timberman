@@ -136,6 +136,7 @@ function createMockServices() {
 
   const imageService: ImageService = {
     downloadAndStore: vi.fn(async () => 'logos/1.png'),
+    storeFromBuffer: vi.fn(async () => 'logos/1.png'),
   };
 
   const jwtService = {

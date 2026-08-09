@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useUpdateMatchDetails } from '../../hooks/use-admin';
-import { formatDate } from '../../utils/format';
+import { useLeagues } from '../../hooks/use-teams';
+import Autocomplete from '../Autocomplete';
+import { formatDate, resolveLogoUrl } from '../../utils/format';
 import type { MatchDTO, UpdateMatchDetailsPayload } from '../../types';
+import type { TeamDTO } from '../../types';
 import theme from '../../styles/theme';
 
 interface MatchRowProps {
   match: MatchDTO;
   /** true → editable inputs + per-row save (open date); false → read-only (closed/results) */
   editable: boolean;
+}
+
+/** One editable match side: the registry team id + the display fields. */
+interface TeamFieldState {
+  /** null → legacy free text (unmatched) — string-only PATCH clears the FK. */
+  teamId: number | null;
+  /** Input value — registry team name once picked, stored string for legacy. */
+  name: string;
+  /** Shield URL input (auto-filled from the team logo, overridable). */
+  img: string;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -176,43 +189,104 @@ function ReadOnlyRow({ match }: { match: MatchDTO }) {
 
 function EditableRow({ match }: { match: MatchDTO }) {
   const updateDetails = useUpdateMatchDetails();
+  const { data: leagues } = useLeagues();
+  const allLeagues = leagues ?? [];
+  const allTeams = allLeagues.flatMap((l) => l.teams);
+  const localRegistryTeam =
+    match.localTeamId != null ? allTeams.find((t) => t.id === match.localTeamId) : undefined;
+  const visitorRegistryTeam =
+    match.visitorTeamId != null ? allTeams.find((t) => t.id === match.visitorTeamId) : undefined;
 
-  const [localTeam, setLocalTeam] = useState(match.localTeam);
-  const [visitorTeam, setVisitorTeam] = useState(match.visitorTeam);
-  const [localImg, setLocalImg] = useState(match.localImg ?? '');
-  const [visitorImg, setVisitorImg] = useState(match.visitorImg ?? '');
+  // UI-only league selector (design D11): prefilled from the local team's
+  // first membership, overridable — it only filters the autocomplete options.
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(
+    localRegistryTeam?.leagueIds[0] ?? allLeagues[0]?.id ?? null,
+  );
+  const selectedLeague =
+    allLeagues.find((l) => l.id === selectedLeagueId) ?? allLeagues[0] ?? null;
+  const options = selectedLeague?.teams ?? [];
+
+  // Prefill the selector once the registry loads (keeps an explicit pick).
+  useEffect(() => {
+    const prefill = localRegistryTeam?.leagueIds[0] ?? allLeagues[0]?.id ?? null;
+    setSelectedLeagueId((current) => current ?? prefill);
+  }, [localRegistryTeam?.leagueIds, allLeagues]);
+
+  const [local, setLocal] = useState<TeamFieldState>({
+    teamId: match.localTeamId ?? null,
+    name: match.localTeam,
+    img: match.localImg ?? '',
+  });
+  const [visitor, setVisitor] = useState<TeamFieldState>({
+    teamId: match.visitorTeamId ?? null,
+    name: match.visitorTeam,
+    img: match.visitorImg ?? '',
+  });
   const [scheduledAt, setScheduledAt] = useState(toDatetimeLocal(match.scheduledAt));
 
   // Re-sync from the refetched match after a successful save so the row shows
   // the persisted state (invalidation triggers the refetch).
   useEffect(() => {
-    setLocalTeam(match.localTeam);
-    setVisitorTeam(match.visitorTeam);
-    setLocalImg(match.localImg ?? '');
-    setVisitorImg(match.visitorImg ?? '');
+    setLocal({
+      teamId: match.localTeamId ?? null,
+      name: match.localTeam,
+      img: match.localImg ?? '',
+    });
+    setVisitor({
+      teamId: match.visitorTeamId ?? null,
+      name: match.visitorTeam,
+      img: match.visitorImg ?? '',
+    });
     setScheduledAt(toDatetimeLocal(match.scheduledAt));
-  }, [match.id, match.localTeam, match.visitorTeam, match.localImg, match.visitorImg, match.scheduledAt]);
+  }, [match.id, match.localTeam, match.localTeamId, match.localImg, match.visitorTeam, match.visitorTeamId, match.visitorImg, match.scheduledAt]);
+
+  const handleType =
+    (set: React.Dispatch<React.SetStateAction<TeamFieldState>>) => (value: string) => {
+      // Typing cancels the picked team — the value becomes legacy free text
+      // (string-only PATCH clears the FK, spec "free text clears the team id").
+      set((prev) => ({ ...prev, name: value, teamId: null }));
+    };
+
+  const handleSelect =
+    (set: React.Dispatch<React.SetStateAction<TeamFieldState>>) => (team: TeamDTO) => {
+      // Pick → name + id from the registry, shield auto-filled (overridable).
+      set({ teamId: team.id, name: team.name, img: resolveLogoUrl(team.logo) ?? '' });
+    };
 
   const hasChanges =
-    localTeam.trim() !== match.localTeam ||
-    visitorTeam.trim() !== match.visitorTeam ||
-    (localImg.trim() || null) !== match.localImg ||
-    (visitorImg.trim() || null) !== match.visitorImg ||
+    local.name.trim() !== match.localTeam ||
+    local.teamId !== (match.localTeamId ?? null) ||
+    (local.img.trim() || null) !== match.localImg ||
+    visitor.name.trim() !== match.visitorTeam ||
+    visitor.teamId !== (match.visitorTeamId ?? null) ||
+    (visitor.img.trim() || null) !== match.visitorImg ||
     scheduledAt !== toDatetimeLocal(match.scheduledAt);
 
   const handleSave = () => {
     if (!hasChanges || updateDetails.isPending) return;
 
-    // Partial payload: only the fields the admin actually changed
+    // Partial payload: only the fields the admin actually changed.
+    // Team fields send {name, id} together once picked from the registry; a
+    // legacy string without a pick stays string-only (FK null, design D10).
     const payload: UpdateMatchDetailsPayload = {};
-    const trimmedLocal = localTeam.trim();
-    const trimmedVisitor = visitorTeam.trim();
-    const imgLocal = localImg.trim() || null;
-    const imgVisitor = visitorImg.trim() || null;
+    const trimmedLocal = local.name.trim();
+    const trimmedVisitor = visitor.name.trim();
+    const imgLocal = local.img.trim() || null;
+    const imgVisitor = visitor.img.trim() || null;
     const scheduled = fromDatetimeLocal(scheduledAt);
 
-    if (trimmedLocal !== match.localTeam) payload.localTeam = trimmedLocal;
-    if (trimmedVisitor !== match.visitorTeam) payload.visitorTeam = trimmedVisitor;
+    if (trimmedLocal !== match.localTeam || local.teamId !== (match.localTeamId ?? null)) {
+      if (trimmedLocal) {
+        payload.localTeam = trimmedLocal;
+        if (local.teamId != null) payload.localTeamId = local.teamId;
+      }
+    }
+    if (trimmedVisitor !== match.visitorTeam || visitor.teamId !== (match.visitorTeamId ?? null)) {
+      if (trimmedVisitor) {
+        payload.visitorTeam = trimmedVisitor;
+        if (visitor.teamId != null) payload.visitorTeamId = visitor.teamId;
+      }
+    }
     if (imgLocal !== match.localImg) payload.localImg = imgLocal;
     if (imgVisitor !== match.visitorImg) payload.visitorImg = imgVisitor;
     if (scheduled !== match.scheduledAt) payload.scheduledAt = scheduled;
@@ -222,70 +296,103 @@ function EditableRow({ match }: { match: MatchDTO }) {
 
   const saveDisabled = !hasChanges || updateDetails.isPending;
 
+  const unmatchedText = 'Texto libre (sin equipo registrado)';
+
   return (
     <div style={row}>
-      <div style={grid}>
-        <div>
-          <label style={label} htmlFor={`row-local-${match.id}`}>
-            Equipo Local
+      <div style={{ width: '100%' }}>
+        <div style={{ marginBottom: 12 }}>
+          <label style={label} htmlFor={`row-league-${match.id}`}>
+            Liga
           </label>
-          <input
-            id={`row-local-${match.id}`}
+          <select
+            id={`row-league-${match.id}`}
             style={input}
-            value={localTeam}
-            onChange={(e) => setLocalTeam(e.target.value)}
-          />
+            value={selectedLeague?.id ?? ''}
+            onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
+          >
+            {allLeagues.length === 0 && <option value="">Sin ligas</option>}
+            {allLeagues.map((league) => (
+              <option key={league.id} value={league.id}>
+                {league.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div>
-          <label style={label} htmlFor={`row-visitor-${match.id}`}>
-            Equipo Visitante
-          </label>
-          <input
-            id={`row-visitor-${match.id}`}
-            style={input}
-            value={visitorTeam}
-            onChange={(e) => setVisitorTeam(e.target.value)}
-          />
-        </div>
+        <div style={grid}>
+          <div>
+            <label style={label} htmlFor={`row-local-${match.id}`}>
+              Equipo Local
+            </label>
+            <Autocomplete
+              id={`row-local-${match.id}`}
+              options={options}
+              getKey={(t) => String(t.id)}
+              getLabel={(t) => t.name}
+              value={local.name}
+              onChange={handleType(setLocal)}
+              onSelect={handleSelect(setLocal)}
+              unmatchedText={local.teamId == null ? unmatchedText : undefined}
+              placeholder="Elegí un equipo"
+            />
+          </div>
 
-        <div>
-          <label style={label} htmlFor={`row-local-img-${match.id}`}>
-            Escudo Local (URL)
-          </label>
-          <input
-            id={`row-local-img-${match.id}`}
-            style={input}
-            placeholder="https://..."
-            value={localImg}
-            onChange={(e) => setLocalImg(e.target.value)}
-          />
-        </div>
+          <div>
+            <label style={label} htmlFor={`row-visitor-${match.id}`}>
+              Equipo Visitante
+            </label>
+            <Autocomplete
+              id={`row-visitor-${match.id}`}
+              options={options}
+              getKey={(t) => String(t.id)}
+              getLabel={(t) => t.name}
+              value={visitor.name}
+              onChange={handleType(setVisitor)}
+              onSelect={handleSelect(setVisitor)}
+              unmatchedText={visitor.teamId == null ? unmatchedText : undefined}
+              placeholder="Elegí un equipo"
+            />
+          </div>
 
-        <div>
-          <label style={label} htmlFor={`row-visitor-img-${match.id}`}>
-            Escudo Visitante (URL)
-          </label>
-          <input
-            id={`row-visitor-img-${match.id}`}
-            style={input}
-            placeholder="https://..."
-            value={visitorImg}
-            onChange={(e) => setVisitorImg(e.target.value)}
-          />
-        </div>
+          <div>
+            <label style={label} htmlFor={`row-local-img-${match.id}`}>
+              Escudo Local (URL)
+            </label>
+            <input
+              id={`row-local-img-${match.id}`}
+              style={input}
+              placeholder="https://..."
+              value={local.img}
+              onChange={(e) => setLocal((prev) => ({ ...prev, img: e.target.value }))}
+            />
+          </div>
 
-        <div>
-          <label style={label} htmlFor={`row-scheduled-${match.id}`}>
-            Fecha y Horario
-          </label>
-          <input
-            id={`row-scheduled-${match.id}`}
-            style={input}
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={(e) => setScheduledAt(e.target.value)}
-          />
+          <div>
+            <label style={label} htmlFor={`row-visitor-img-${match.id}`}>
+              Escudo Visitante (URL)
+            </label>
+            <input
+              id={`row-visitor-img-${match.id}`}
+              style={input}
+              placeholder="https://..."
+              value={visitor.img}
+              onChange={(e) => setVisitor((prev) => ({ ...prev, img: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label style={label} htmlFor={`row-scheduled-${match.id}`}>
+              Fecha y Horario
+            </label>
+            <input
+              id={`row-scheduled-${match.id}`}
+              style={input}
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

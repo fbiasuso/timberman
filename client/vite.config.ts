@@ -10,6 +10,12 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Self-hosted team shields live under server/public (design D7) — dev
+      // serves them through the API origin like production (single-origin).
+      '/public': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 });

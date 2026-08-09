@@ -40,8 +40,14 @@ vi.mock('../../hooks/use-matches', () => ({
   })),
 }));
 
+vi.mock('../../hooks/use-teams', () => ({
+  useLeagues: vi.fn(() => ({ data: [], isLoading: false, error: null })),
+}));
+
 import { useAdminTournaments } from '../../hooks/use-admin';
 import { useMatchesByDate } from '../../hooks/use-matches';
+import { useLeagues } from '../../hooks/use-teams';
+import type { LeagueDTO } from '../../types';
 
 afterEach(() => {
   cleanup();
@@ -53,7 +59,21 @@ afterEach(() => {
     isLoading: false,
     error: null,
   } as ReturnType<typeof useMatchesByDate>);
+  vi.mocked(useLeagues).mockReset();
+  vi.mocked(useLeagues).mockReturnValue({
+    data: [],
+    isLoading: false,
+    error: null,
+  } as any);
 });
+
+function mockLeagues(leagues: LeagueDTO[]) {
+  vi.mocked(useLeagues).mockReturnValue({
+    data: leagues,
+    isLoading: false,
+    error: null,
+  } as any);
+}
 
 // --- Fixtures ---
 
@@ -107,6 +127,41 @@ const openMatches = [
 const closedMatches = [
   { id: 21, matchDateId: 1, localTeam: 'Gimnasia', visitorTeam: 'Estudiantes', localImg: null, visitorImg: null, scheduledAt: null, result: 'L', score: '2-1' },
 ];
+
+const sanLorenzo = {
+  id: 100,
+  name: 'San Lorenzo',
+  aliases: ['CASLA'],
+  logo: null,
+  leagueIds: [1],
+  createdAt: '2026-07-28T00:00:00.000Z',
+};
+
+const huracan = {
+  id: 101,
+  name: 'Huracán',
+  aliases: [],
+  logo: null,
+  leagueIds: [1],
+  createdAt: '2026-07-28T00:00:00.000Z',
+};
+
+const primera: LeagueDTO = {
+  id: 1,
+  name: 'Primera',
+  country: 'Argentina',
+  format: 'liga',
+  createdAt: '2026-07-28T00:00:00.000Z',
+  teams: [sanLorenzo, huracan],
+};
+
+/** Picks a registry team from an autocomplete inside the add-match form. */
+function pickTeam(form: HTMLElement, label: string, filter: string, teamName: string) {
+  fireEvent.change(within(form).getByLabelText(label), {
+    target: { value: filter },
+  });
+  fireEvent.mouseDown(screen.getByRole('option', { name: teamName }));
+}
 
 function mockTournaments(t: AdminTournamentDTO | AdminTournamentDTO[] | null) {
   const list = t === null ? [] : Array.isArray(t) ? t : [t];
@@ -305,19 +360,25 @@ describe('MatchEditor', () => {
     expect(screen.queryByText('Agregar partido')).toBeNull();
   });
 
-  it('submits the add-match form via useCreateMatch with the open date id', () => {
+  it('submits the add-match form via useCreateMatch with the open date id and registry team ids', () => {
     mockTournaments(tournament([closedDate, openDate, resultsDate]));
     mockMatchesByDate(openMatches);
+    mockLeagues([primera]);
 
     render(<MatchEditor />);
     // Scope to the add-match form — the editable MatchRow inputs share label names
     const form = screen.getByText('Agregar partido').closest('form') as HTMLElement;
+
+    // Free text alone is not enough — both sides must be picked from the registry
     fireEvent.change(within(form).getByLabelText('Equipo Local'), {
       target: { value: 'San Lorenzo' },
     });
-    fireEvent.change(within(form).getByLabelText('Equipo Visitante'), {
-      target: { value: 'Huracán' },
-    });
+    expect(
+      (screen.getByRole('button', { name: /Crear partido/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    pickTeam(form, 'Equipo Local', 'San', 'San Lorenzo');
+    pickTeam(form, 'Equipo Visitante', 'Hurac', 'Huracán');
     fireEvent.click(screen.getByRole('button', { name: /Crear partido/ }));
 
     expect(createMatchMutate).toHaveBeenCalledWith(
@@ -327,6 +388,8 @@ describe('MatchEditor', () => {
         visitorTeam: 'Huracán',
         localImg: null,
         visitorImg: null,
+        localTeamId: 100,
+        visitorTeamId: 101,
         scheduledAt: null,
       },
       expect.anything(),
@@ -336,15 +399,12 @@ describe('MatchEditor', () => {
   it('shows a newly created match in the expanded date after the refetch', () => {
     mockTournaments(tournament([closedDate, openDate, resultsDate]));
     mockMatchesByDate(openMatches);
+    mockLeagues([primera]);
 
     const view = render(<MatchEditor />);
     const form = screen.getByText('Agregar partido').closest('form') as HTMLElement;
-    fireEvent.change(within(form).getByLabelText('Equipo Local'), {
-      target: { value: 'San Lorenzo' },
-    });
-    fireEvent.change(within(form).getByLabelText('Equipo Visitante'), {
-      target: { value: 'Huracán' },
-    });
+    pickTeam(form, 'Equipo Local', 'San', 'San Lorenzo');
+    pickTeam(form, 'Equipo Visitante', 'Hurac', 'Huracán');
     fireEvent.click(screen.getByRole('button', { name: /Crear partido/ }));
 
     // The create succeeds server-side; the invalidated per-date query refetches

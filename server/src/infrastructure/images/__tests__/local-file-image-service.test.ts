@@ -130,3 +130,70 @@ describe('LocalFileImageService.downloadAndStore', () => {
     }
   });
 });
+
+describe('LocalFileImageService.storeFromBuffer', () => {
+  let dir: string;
+
+  afterEach(async () => {
+    if (dir) await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeService() {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'logos-buf-'));
+    const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn() };
+    return { service: new LocalFileImageService(dir, logger), logger, dir };
+  }
+
+  it('stores valid PNG/JPEG/WebP buffers with the correct extension', async () => {
+    const { service, dir } = await makeService();
+    await expect(service.storeFromBuffer(PNG_BYTES, 7)).resolves.toBe('logos/7.png');
+    await expect(service.storeFromBuffer(bytes('FF D8 FF E0 00 10 4A 46 49 46'), 1)).resolves.toBe('logos/1.jpg');
+    await expect(service.storeFromBuffer(bytes('52 49 46 46 24 00 00 00 57 45 42 50 56 50 38'), 2)).resolves.toBe('logos/2.webp');
+    await expect(fs.readFile(path.join(dir, '7.png'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(dir, '1.jpg'))).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(dir, '2.webp'))).resolves.toBeDefined();
+  });
+
+  it('creates the logos directory when missing', async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'logos-parent-'));
+    const logosDir = path.join(parent, 'nested', 'not', 'created');
+    const service = new LocalFileImageService(logosDir, { warn: vi.fn(), error: vi.fn(), info: vi.fn() });
+    try {
+      await expect(service.storeFromBuffer(PNG_BYTES, 7)).resolves.toBe('logos/7.png');
+      const stored = await fs.readFile(path.join(logosDir, '7.png'));
+      expect(Buffer.from(stored)).toEqual(Buffer.from(PNG_BYTES));
+    } finally {
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an oversized buffer (null) without writing a file', async () => {
+    const { service, logger, dir } = await makeService();
+    const oversized = new Uint8Array(MAX_IMAGE_BYTES + 1);
+    oversized.set(PNG_BYTES); // starts like an image, but too big
+    await expect(service.storeFromBuffer(oversized, 7)).resolves.toBeNull();
+    expect(logger.warn).toHaveBeenCalled();
+    await expect(fs.access(path.join(dir, '7.png'))).rejects.toThrow();
+  });
+
+  it('rejects non-image bytes (null) without writing a file', async () => {
+    const { service, dir } = await makeService();
+    const html = new TextEncoder().encode('<!DOCTYPE html><html><body>not an image</body></html>');
+    await expect(service.storeFromBuffer(html, 7)).resolves.toBeNull();
+    await expect(fs.access(path.join(dir, '7.png'))).rejects.toThrow();
+  });
+
+  it('never throws on a write failure and returns null', async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'logos-parent-'));
+    const blocker = path.join(parent, 'blocker');
+    await fs.writeFile(blocker, 'not a directory');
+    const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn() };
+    const service = new LocalFileImageService(path.join(blocker, 'logos'), logger);
+    try {
+      await expect(service.storeFromBuffer(PNG_BYTES, 7)).resolves.toBeNull();
+      expect(logger.error).toHaveBeenCalled();
+    } finally {
+      await fs.rm(parent, { recursive: true, force: true });
+    }
+  });
+});

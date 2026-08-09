@@ -45,6 +45,7 @@ import { CreateTeamUseCase } from '../../../application/teams/create-team-use-ca
 import { UpdateTeamUseCase } from '../../../application/teams/update-team-use-case.js';
 import { DeleteTeamUseCase } from '../../../application/teams/delete-team-use-case.js';
 import { SetTeamLogoUseCase } from '../../../application/teams/set-team-logo-use-case.js';
+import { sniffImageType } from '../../images/image-validation.js';
 import type { LeagueDTO, LeagueWithTeamsDTO, TeamDTO } from '../../../application/teams/dto.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
@@ -643,16 +644,51 @@ export function createAdminRoutes(
     });
 
     // ── POST /api/admin/teams/:teamId/logo ─────────────────────────
-    // Re-upload a team shield: download → validate → store → persist path.
-    // A failed download/store NEVER throws — the team is returned unchanged
-    // (existing logo kept) and the failure is logged (image-service contract).
+    // Shield input is either a multipart file upload (field `file`) or a
+    // JSON `{url}` (legacy download path, kept for compatibility).
+    //
+    // Error contract (design D3, spec team-registry):
+    //   - multipart, invalid format (magic-byte sniff) → 415 { message }
+    //   - multipart, oversized (>1 MiB) → 400 (FST_REQ_FILE_TOO_LARGE mapped
+    //     by the error handler), team unchanged
+    //   - multipart, store failure after valid sniff → 200 { team, stored:false }
+    //     — the client surfaces the unchanged state
+    //   - JSON, unreachable/invalid URL → 400 { message }, existing logo kept
+    //   - team not found → 404 (existing behavior)
+    // The team is ONLY updated after a successful store (use-case invariant).
     fastify.post('/api/admin/teams/:teamId/logo', {
       preHandler: [authMiddleware, adminMiddleware],
     }, async (request, reply) => {
       const { teamId } = teamParamsSchema.parse(request.params);
+
+      if (request.isMultipart()) {
+        const file = await request.file();
+        if (!file) {
+          return reply.status(400).send({
+            error: 'FILE_REQUIRED',
+            message: 'Multipart field "file" is required',
+          });
+        }
+        const bytes = await file.toBuffer();
+        if (!sniffImageType(bytes)) {
+          return reply.status(415).send({
+            error: 'UNSUPPORTED_MEDIA_TYPE',
+            message: 'Image format not supported — must be PNG, JPEG or WebP',
+          });
+        }
+        const result = await setTeamLogoUseCase.execute({ teamId, bytes });
+        return reply.send({ team: toTeamAPIDTO(result.team), stored: result.stored });
+      }
+
       const body = setTeamLogoSchema.parse(request.body);
-      const team = await setTeamLogoUseCase.execute({ teamId, url: body.url });
-      return reply.send({ team: toTeamAPIDTO(team) });
+      const result = await setTeamLogoUseCase.execute({ teamId, url: body.url });
+      if (!result.stored) {
+        return reply.status(400).send({
+          error: 'LOGO_STORE_FAILED',
+          message: 'Could not download or store the shield image',
+        });
+      }
+      return reply.send({ team: toTeamAPIDTO(result.team), stored: result.stored });
     });
   };
 }

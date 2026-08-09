@@ -11,8 +11,10 @@ import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
 import type { TeamRepo } from '../../../domain/ports/team-repo.js';
 import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
+import multipart from '@fastify/multipart';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
+import { MAX_IMAGE_BYTES } from '../../images/image-validation.js';
 import { Ticket } from '../../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../../domain/entities/ticket-prediction.js';
 import { Match } from '../../../domain/entities/match.js';
@@ -170,6 +172,9 @@ describe('API Integration Tests', () => {
     services = createMockServices();
     app = Fastify();
     app.setErrorHandler(errorHandler);
+    // Mirror the production registration (server/src/index.ts): the 1 MiB
+    // file cap must be enforced at the transport layer for upload tests.
+    await app.register(multipart, { limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } });
     await app.register(createRouter(
       services.userRepo,
       services.tournamentRepo,
@@ -3442,6 +3447,184 @@ describe('API Integration Tests', () => {
 
       expect(res.statusCode).toBe(409);
       expect(JSON.parse(res.body).error).toBe('TEAM_REFERENCED_BY_MATCHES');
+    });
+  });
+
+  describe('POST /api/admin/teams/:teamId/logo', () => {
+    // PNG magic bytes (89 50 4E 47 0D 0A 1A 0A) — passes the route sniff.
+    const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+
+    function adminAuth() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    function mockTeam(logo: string | null = null) {
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+    }
+
+    function multipartFile(fileBytes: Buffer): { payload: Buffer; headers: Record<string, string> } {
+      const boundary = '----test-boundary-7d3c9f';
+      const head = Buffer.from(
+        `--${boundary}\r\n` +
+        'Content-Disposition: form-data; name="file"; filename="shield.png"\r\n' +
+        'Content-Type: image/png\r\n' +
+        '\r\n',
+      );
+      const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+      return {
+        payload: Buffer.concat([head, fileBytes, tail]),
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      };
+    }
+
+    it('updates the logo from a remote URL (JSON path, compat) — 200 stored: true', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam();
+      vi.mocked(services.imageService.downloadAndStore).mockResolvedValue('logos/7.png');
+      vi.mocked(services.teamRepo.update).mockImplementation(async (team) =>
+        Team.create({ ...team.toSnapshot(), logo: 'logos/7.png' }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { url: 'https://example.com/shield.png' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.stored).toBe(true);
+      expect(body.team.logo).toBe('logos/7.png');
+    });
+
+    it('rejects an unreachable URL (JSON path) — 400 LOGO_STORE_FAILED, existing logo kept', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      vi.mocked(services.imageService.downloadAndStore).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { url: 'https://example.com/unreachable.png' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('LOGO_STORE_FAILED');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('stores a valid multipart upload — 200 stored: true, team updated', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam();
+      vi.mocked(services.imageService.storeFromBuffer).mockResolvedValue('logos/7.png');
+      vi.mocked(services.teamRepo.update).mockImplementation(async (team) =>
+        Team.create({ ...team.toSnapshot(), logo: 'logos/7.png' }),
+      );
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.body);
+      expect(json.stored).toBe(true);
+      expect(json.team.logo).toBe('logos/7.png');
+      expect(services.imageService.storeFromBuffer).toHaveBeenCalledWith(PNG_BYTES, 7);
+    });
+
+    it('rejects an oversized multipart upload — 400 FILE_TOO_LARGE, team unchanged', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      const oversized = Buffer.concat([PNG_BYTES, Buffer.alloc(MAX_IMAGE_BYTES + 1)]);
+      const body = multipartFile(oversized);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('FILE_TOO_LARGE');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-image multipart upload — 415 UNSUPPORTED_MEDIA_TYPE', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      const body = multipartFile(Buffer.from('this is definitely not an image'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(415);
+      expect(JSON.parse(res.body).error).toBe('UNSUPPORTED_MEDIA_TYPE');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the team unchanged when the store fails — 200 stored: false', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      vi.mocked(services.imageService.storeFromBuffer).mockResolvedValue(null);
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.body);
+      expect(json.stored).toBe(false);
+      expect(json.team.logo).toBe('logos/old.png');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 TEAM_NOT_FOUND for an unknown team (multipart)', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/999/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_FOUND');
     });
   });
 });

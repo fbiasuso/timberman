@@ -96,6 +96,8 @@ const matchDetailsFields = {
   visitorTeam: z.string().min(1),
   localImg: z.string().nullable().optional(),
   visitorImg: z.string().nullable().optional(),
+  localTeamId: z.number().int().positive().nullable().optional(),
+  visitorTeamId: z.number().int().positive().nullable().optional(),
   scheduledAt: z
     .string()
     .refine((v) => !Number.isNaN(Date.parse(v)), 'Must be a valid ISO date string')
@@ -159,6 +161,8 @@ interface MatchDTO {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  localTeamId: number | null;
+  visitorTeamId: number | null;
   scheduledAt: string | null;
   result: string | null;
   score: string | null;
@@ -184,6 +188,8 @@ function toMatchDTO(match: MatchDetailsDTO): MatchDTO {
     visitorTeam: match.visitorTeam,
     localImg: match.localImg,
     visitorImg: match.visitorImg,
+    localTeamId: match.localTeamId,
+    visitorTeamId: match.visitorTeamId,
     scheduledAt: match.scheduledAt?.toISOString() ?? null,
     result: match.result,
     score: match.score,
@@ -335,8 +341,8 @@ export function createAdminRoutes(
       uow,
     );
     const createDateUseCase = new CreateDateUseCase(tournamentRepo, config);
-    const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo);
-    const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
+    const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo, teamRepo);
+    const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo, teamRepo);
 
     // ── Teams & Leagues (registry) ─────────────────────────────
     const createLeagueUseCase = new CreateLeagueUseCase(leagueRepo);
@@ -480,6 +486,8 @@ export function createAdminRoutes(
         visitorTeam: body.visitorTeam,
         localImg: body.localImg,
         visitorImg: body.visitorImg,
+        localTeamId: body.localTeamId,
+        visitorTeamId: body.visitorTeamId,
         scheduledAt: toDateOrUndefined(body.scheduledAt),
       });
       return reply.status(201).send({ match: toMatchDTO(match) });
@@ -497,6 +505,8 @@ export function createAdminRoutes(
         visitorTeam: body.visitorTeam,
         localImg: body.localImg,
         visitorImg: body.visitorImg,
+        localTeamId: body.localTeamId,
+        visitorTeamId: body.visitorTeamId,
         scheduledAt: toDateOrUndefined(body.scheduledAt),
       });
       return reply.send({ match: toMatchDTO(match) });

@@ -7,6 +7,10 @@ export interface MatchSnapshot {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  /** Registry team id — enrichment only; the string remains the display source of truth. */
+  localTeamId: number | null;
+  /** Registry team id — enrichment only; the string remains the display source of truth. */
+  visitorTeamId: number | null;
   scheduledAt: Date | null;
   result: Prediction | null;
   score: string | null;
@@ -21,6 +25,8 @@ export class Match {
     public readonly visitorTeam: string,
     public readonly localImg: string | null,
     public readonly visitorImg: string | null,
+    public readonly localTeamId: number | null,
+    public readonly visitorTeamId: number | null,
     public readonly scheduledAt: Date | null,
     private readonly _result: Prediction | null,
     private readonly _score: string | null,
@@ -50,6 +56,8 @@ export class Match {
       this.visitorTeam,
       this.localImg,
       this.visitorImg,
+      this.localTeamId,
+      this.visitorTeamId,
       this.scheduledAt,
       result,
       score,
@@ -66,6 +74,8 @@ export class Match {
       this.visitorTeam,
       this.localImg,
       this.visitorImg,
+      this.localTeamId,
+      this.visitorTeamId,
       this.scheduledAt,
       null,
       null,
@@ -76,8 +86,9 @@ export class Match {
   /**
    * Update editable match details — returns a NEW Match instance (immutable).
    *
-   * Only localTeam, visitorTeam, localImg, visitorImg and scheduledAt can be
-   * edited here. Passing `null` for localImg/visitorImg/scheduledAt CLEARS the
+   * Only localTeam, visitorTeam, localImg, visitorImg, localTeamId,
+   * visitorTeamId and scheduledAt can be edited here. Passing `null` for
+   * localImg/visitorImg/localTeamId/visitorTeamId/scheduledAt CLEARS the
    * value; leaving a field `undefined` keeps the current value. Result and
    * score are NEVER touched by this method — results are set via setResult.
    */
@@ -86,6 +97,8 @@ export class Match {
     visitorTeam?: string;
     localImg?: string | null;
     visitorImg?: string | null;
+    localTeamId?: number | null;
+    visitorTeamId?: number | null;
     scheduledAt?: Date | null;
   }): Match {
     return new Match(
@@ -95,6 +108,8 @@ export class Match {
       details.visitorTeam !== undefined ? details.visitorTeam : this.visitorTeam,
       details.localImg !== undefined ? details.localImg : this.localImg,
       details.visitorImg !== undefined ? details.visitorImg : this.visitorImg,
+      details.localTeamId !== undefined ? details.localTeamId : this.localTeamId,
+      details.visitorTeamId !== undefined ? details.visitorTeamId : this.visitorTeamId,
       details.scheduledAt !== undefined ? details.scheduledAt : this.scheduledAt,
       this._result,
       this._score,
@@ -117,6 +132,8 @@ export class Match {
       snapshot.visitorTeam,
       snapshot.localImg,
       snapshot.visitorImg,
+      snapshot.localTeamId,
+      snapshot.visitorTeamId,
       snapshot.scheduledAt,
       snapshot.result,
       snapshot.score,
@@ -131,6 +148,8 @@ export class Match {
     visitorTeam: string;
     localImg?: string | null;
     visitorImg?: string | null;
+    localTeamId?: number | null;
+    visitorTeamId?: number | null;
     scheduledAt?: Date | null;
   }): Match {
     return new Match(
@@ -140,6 +159,8 @@ export class Match {
       props.visitorTeam,
       props.localImg ?? null,
       props.visitorImg ?? null,
+      props.localTeamId ?? null,
+      props.visitorTeamId ?? null,
       props.scheduledAt ?? null,
       null,
       null,
@@ -155,6 +176,8 @@ export class Match {
       visitorTeam: this.visitorTeam,
       localImg: this.localImg,
       visitorImg: this.visitorImg,
+      localTeamId: this.localTeamId,
+      visitorTeamId: this.visitorTeamId,
       scheduledAt: this.scheduledAt,
       result: this._result,
       score: this._score,

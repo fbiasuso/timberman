@@ -1941,6 +1941,109 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(400);
       expect(services.matchRepo.save).not.toHaveBeenCalled();
     });
+
+    it('creates a match from registry team ids (201) — strings set to team names, FKs stored', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.teamRepo.findById).mockImplementation(async (id) => id === 7
+        ? Team.create({
+            id: 7,
+            name: 'River Plate',
+            aliases: null,
+            logo: null,
+            leagueIds: [1],
+            createdAt: new Date(),
+          })
+        : Team.create({
+            id: 8,
+            name: 'Boca Juniors',
+            aliases: null,
+            logo: null,
+            leagueIds: [1],
+            createdAt: new Date(),
+          }));
+      vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
+        Match.create({ ...m.toSnapshot(), id: 1 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'cualquier cosa',
+          visitorTeam: 'otra cosa',
+          localTeamId: 7,
+          visitorTeamId: 8,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        id: 1,
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+        localTeamId: 7,
+        visitorTeamId: 8,
+      });
+    });
+
+    it('rejects an unknown team id with 422 TEAM_NOT_RESOLVABLE — no match created', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'X',
+          visitorTeam: 'Y',
+          localTeamId: 999,
+        },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_RESOLVABLE');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates a legacy match with null team ids when only free text is sent', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
+        Match.create({ ...m.toSnapshot(), id: 1 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.match.localTeamId).toBeNull();
+      expect(body.match.visitorTeamId).toBeNull();
+      expect(services.teamRepo.findById).not.toHaveBeenCalled();
+    });
   });
 
   describe('PATCH /api/admin/matches/:matchId', () => {
@@ -1968,6 +2071,8 @@ describe('API Integration Tests', () => {
       visitorTeam: 'Boca Juniors',
       localImg: 'river.png',
       visitorImg: 'boca.png',
+      localTeamId: null,
+      visitorTeamId: null,
       scheduledAt: new Date('2026-08-02T20:00:00Z'),
       result: null,
       score: null,
@@ -2065,6 +2170,83 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(403);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('FORBIDDEN');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('links a registry team via localTeamId — FK stored, string set to the team name', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date(),
+      }));
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeamId: 7 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        localTeamId: 7,
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+      });
+    });
+
+    it('clears the FK when free text is sent without a team id', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(Match.create({
+        ...matchWithDetails.toSnapshot(),
+        localTeamId: 7,
+        visitorTeamId: 8,
+      }));
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeam: 'Racing Club' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        localTeam: 'Racing Club',
+        localTeamId: null,
+        visitorTeamId: 8, // untouched side keeps its FK
+      });
+    });
+
+    it('rejects an unknown team id with 422 TEAM_NOT_RESOLVABLE — nothing written', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { visitorTeamId: 999 },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_RESOLVABLE');
       expect(services.matchRepo.update).not.toHaveBeenCalled();
     });
   });

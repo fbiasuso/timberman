@@ -8,12 +8,14 @@ import { PointsCalculator } from '../tournament/points-calculator.js';
 import type { TournamentRepo } from '../../domain/ports/tournament-repo.js';
 import type { TournamentPointsRepo } from '../../domain/ports/tournament-points-repo.js';
 import type { MatchRepo } from '../../domain/ports/match-repo.js';
+import type { TeamRepo } from '../../domain/ports/team-repo.js';
 import type { TicketRepo } from '../../domain/ports/ticket-repo.js';
 import type { UserRepo } from '../../domain/ports/user-repo.js';
 import type { AuditLogRepo } from '../../domain/ports/audit-log-repo.js';
 import { Tournament } from '../../domain/entities/tournament.js';
 import { MatchDate } from '../../domain/entities/match-date.js';
 import { Match } from '../../domain/entities/match.js';
+import { Team } from '../../domain/entities/team.js';
 import { Ticket } from '../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../domain/entities/ticket-prediction.js';
 import { User } from '../../domain/entities/user.js';
@@ -31,6 +33,7 @@ import {
   UserNotFoundError,
   MatchesNotReadyError,
   OpenDateExistsError,
+  TeamNotResolvableError,
 } from '../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -61,6 +64,20 @@ function createMatchRepoMocks() {
     save: vi.fn(),
     update: vi.fn(),
     saveMany: vi.fn(),
+  };
+  return repo;
+}
+
+function createTeamRepoMocks() {
+  const repo: TeamRepo = {
+    findAll: vi.fn(),
+    findById: vi.fn(),
+    findByLeagueId: vi.fn(),
+    findByName: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countMatchesReferencing: vi.fn(),
   };
   return repo;
 }
@@ -1085,8 +1102,8 @@ describe('CreateMatchUseCase', () => {
     pozo: 5000,
   });
 
-  function buildUseCase(tournamentRepo: TournamentRepo, matchRepo: MatchRepo) {
-    return new CreateMatchUseCase(tournamentRepo, matchRepo);
+  function buildUseCase(tournamentRepo: TournamentRepo, matchRepo: MatchRepo, teamRepo?: TeamRepo) {
+    return new CreateMatchUseCase(tournamentRepo, matchRepo, teamRepo);
   }
 
   it('creates and persists a match on an open date', async () => {
@@ -1125,6 +1142,94 @@ describe('CreateMatchUseCase', () => {
       result: null,
       score: null,
     });
+  });
+
+  it('stores registry team ids and persists the team names as strings', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(Tournament.new({ id: 1, name: 'Test' }));
+    vi.mocked(teamRepo.findById).mockImplementation(async (id) => id === 7
+      ? Team.create({
+          id: 7,
+          name: 'River Plate',
+          aliases: null,
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date(),
+        })
+      : Team.create({
+          id: 8,
+          name: 'Boca Juniors',
+          aliases: null,
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date(),
+        }));
+    vi.mocked(matchRepo.save).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, teamRepo);
+    const result = await uc.execute({
+      matchDateId: 10,
+      localTeam: 'cualquier cosa',
+      visitorTeam: 'otra cosa',
+      localTeamId: 7,
+      visitorTeamId: 8,
+    });
+
+    // The strings are overwritten with the registry names; FKs are stored.
+    expect(result.localTeam).toBe('River Plate');
+    expect(result.visitorTeam).toBe('Boca Juniors');
+    expect(result.localTeamId).toBe(7);
+    expect(result.visitorTeamId).toBe(8);
+    expect(matchRepo.save).toHaveBeenCalledOnce();
+    const saved = vi.mocked(matchRepo.save).mock.calls[0][0];
+    expect(saved.toSnapshot()).toMatchObject({
+      localTeam: 'River Plate',
+      visitorTeam: 'Boca Juniors',
+      localTeamId: 7,
+      visitorTeamId: 8,
+    });
+  });
+
+  it('keeps free text with null team ids when no registry id is given', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(Tournament.new({ id: 1, name: 'Test' }));
+    vi.mocked(matchRepo.save).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, teamRepo);
+    const result = await uc.execute({
+      matchDateId: 10,
+      localTeam: 'River Plate',
+      visitorTeam: 'Boca Juniors',
+    });
+
+    expect(result.localTeam).toBe('River Plate');
+    expect(result.localTeamId).toBeNull();
+    expect(result.visitorTeamId).toBeNull();
+    expect(teamRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown team id with 422 and saves nothing', async () => {
+    const tournamentRepo = createTournamentRepoMocks();
+    const matchRepo = createMatchRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(tournamentRepo.findById).mockResolvedValue(Tournament.new({ id: 1, name: 'Test' }));
+    vi.mocked(teamRepo.findById).mockResolvedValue(null);
+
+    const uc = buildUseCase(tournamentRepo, matchRepo, teamRepo);
+    await expect(uc.execute({
+      matchDateId: 10,
+      localTeam: 'X',
+      visitorTeam: 'Y',
+      localTeamId: 999,
+    })).rejects.toBeInstanceOf(TeamNotResolvableError);
+    expect(matchRepo.save).not.toHaveBeenCalled();
   });
 
   it('rejects creation when the date is closed — 422, nothing saved', async () => {
@@ -1242,14 +1347,16 @@ describe('UpdateMatchDetailsUseCase', () => {
     visitorTeam: 'Boca Juniors',
     localImg: 'river.png',
     visitorImg: 'boca.png',
+    localTeamId: null,
+    visitorTeamId: null,
     scheduledAt: new Date('2026-08-02T20:00:00Z'),
     result: null,
     score: null,
     createdAt: new Date(),
   });
 
-  function buildUseCase(matchRepo: MatchRepo, tournamentRepo: TournamentRepo) {
-    return new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
+  function buildUseCase(matchRepo: MatchRepo, tournamentRepo: TournamentRepo, teamRepo?: TeamRepo) {
+    return new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo, teamRepo);
   }
 
   it('applies a partial change and persists it via repo.update', async () => {
@@ -1349,6 +1456,107 @@ describe('UpdateMatchDetailsUseCase', () => {
     await expect(uc.execute({ matchId: 1, localTeam: 'Racing' }))
       .rejects.toThrow(MatchDateNotFoundError);
     expect(matchRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('resolves a registry team id — sets the FK and overwrites the string with the team name', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(teamRepo.findById).mockResolvedValue(Team.create({
+      id: 7,
+      name: 'River Plate',
+      aliases: null,
+      logo: null,
+      leagueIds: [1],
+      createdAt: new Date(),
+    }));
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo, teamRepo);
+    const result = await uc.execute({ matchId: 1, localTeamId: 7 });
+
+    expect(result.localTeamId).toBe(7);
+    expect(result.localTeam).toBe('River Plate');
+    // Untouched fields stay intact
+    expect(result.visitorTeam).toBe('Boca Juniors');
+    expect(result.localImg).toBe('river.png');
+  });
+
+  it('clears the team id FK when only free text is sent (spec "Free text clears the team id")', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    const linkedMatch = Match.create({
+      ...matchWithDetails.toSnapshot(),
+      localTeamId: 7,
+      visitorTeamId: 8,
+    });
+    vi.mocked(matchRepo.findById).mockResolvedValue(linkedMatch);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo, teamRepo);
+    const result = await uc.execute({ matchId: 1, localTeam: 'Racing Club' });
+
+    expect(result.localTeam).toBe('Racing Club');
+    expect(result.localTeamId).toBeNull();
+    // The untouched visitor side keeps its FK
+    expect(result.visitorTeamId).toBe(8);
+    expect(teamRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('keeps the FK unchanged when the field is not mentioned at all', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    const linkedMatch = Match.create({
+      ...matchWithDetails.toSnapshot(),
+      localTeamId: 7,
+      visitorTeamId: 8,
+    });
+    vi.mocked(matchRepo.findById).mockResolvedValue(linkedMatch);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo, teamRepo);
+    const result = await uc.execute({ matchId: 1, localImg: null });
+
+    expect(result.localTeamId).toBe(7);
+    expect(result.visitorTeamId).toBe(8);
+    expect(teamRepo.findById).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown team id with 422 and writes nothing', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(teamRepo.findById).mockResolvedValue(null);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo, teamRepo);
+    await expect(uc.execute({ matchId: 1, visitorTeamId: 999 }))
+      .rejects.toBeInstanceOf(TeamNotResolvableError);
+    expect(matchRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('legacy match (null FKs) renders and edits unchanged with no team id required', async () => {
+    const matchRepo = createMatchRepoMocks();
+    const tournamentRepo = createTournamentRepoMocks();
+    const teamRepo = createTeamRepoMocks();
+    vi.mocked(matchRepo.findById).mockResolvedValue(matchWithDetails);
+    vi.mocked(tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+    vi.mocked(matchRepo.update).mockImplementation(async (m) => m);
+
+    const uc = buildUseCase(matchRepo, tournamentRepo, teamRepo);
+    const result = await uc.execute({ matchId: 1, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' });
+
+    expect(result.localTeamId).toBeNull();
+    expect(result.visitorTeamId).toBeNull();
+    expect(matchRepo.update).toHaveBeenCalledOnce();
+    expect(teamRepo.findById).not.toHaveBeenCalled();
   });
 });
 

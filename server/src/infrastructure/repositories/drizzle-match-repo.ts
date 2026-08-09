@@ -46,6 +46,8 @@ export class DrizzleMatchRepo implements MatchRepo {
         visitorTeam: snap.visitorTeam,
         localImg: snap.localImg,
         visitorImg: snap.visitorImg,
+        localTeamId: snap.localTeamId,
+        visitorTeamId: snap.visitorTeamId,
         scheduledAt: snap.scheduledAt,
         result: snap.result,
         score: snap.score,

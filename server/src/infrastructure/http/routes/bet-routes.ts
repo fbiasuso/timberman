@@ -133,6 +133,8 @@ function toSanitizableMatch(match: Match): {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  localTeamId: number | null;
+  visitorTeamId: number | null;
   scheduledAt: string | null;
   result: string | null;
   score: string | null;
@@ -144,6 +146,8 @@ function toSanitizableMatch(match: Match): {
     visitorTeam: match.visitorTeam,
     localImg: match.localImg,
     visitorImg: match.visitorImg,
+    localTeamId: match.localTeamId,
+    visitorTeamId: match.visitorTeamId,
     scheduledAt: match.scheduledAt?.toISOString() ?? null,
     result: match.result,
     score: match.score,

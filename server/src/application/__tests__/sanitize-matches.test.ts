@@ -12,6 +12,8 @@ function makeMatch(overrides: Partial<MatchDTO> = {}): MatchDTO {
     visitorTeam: 'Boca Juniors',
     localImg: null,
     visitorImg: null,
+    localTeamId: null,
+    visitorTeamId: null,
     scheduledAt: null,
     result: 'L',
     score: '2-1',

@@ -17,7 +17,7 @@ import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
 import { DrizzleLeagueRepo } from './infrastructure/repositories/drizzle-league-repo.js';
 import { DrizzleTeamRepo } from './infrastructure/repositories/drizzle-team-repo.js';
-import { LocalFileImageService } from './infrastructure/images/local-file-image-service.js';
+import { createImageService } from './infrastructure/images/image-service-factory.js';
 import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
 import { ensureInitialTournament } from './infrastructure/bootstrap.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
@@ -58,7 +58,13 @@ const auditLogRepo = new DrizzleAuditLogRepo(db);
 const systemConfigRepo = new DrizzleSystemConfigRepo(db);
 const leagueRepo = new DrizzleLeagueRepo(db);
 const teamRepo = new DrizzleTeamRepo(db);
-const imageService = new LocalFileImageService(path.join(publicDir, 'logos'), app.log);
+const imageService = createImageService({
+  storage: env.IMAGE_STORAGE,
+  supabaseUrl: env.SUPABASE_URL,
+  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+  logosDir: path.join(publicDir, 'logos'),
+  logger: app.log,
+});
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
 

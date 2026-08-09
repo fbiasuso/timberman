@@ -44,7 +44,7 @@ Chain strategy: pending
 **Dependencies**: U1 (port method)
 **Est. lines**: server ~290 | client 0
 
-- [ ] T2 (U2) — Add `SupabaseImageService` + factory + env fields; wire into `index.ts` via `createImageService` — acceptance: default `local`; `supabase` + creds → supabase adapter (mocked client, no network); missing creds → fail-soft local + error log (spec "Storage Backend Selection"); `storeFromBuffer` uploads `logos/{teamId}.{ext}` and returns public URL, null on error, never throws.
+- [x] T2 (U2) — Add `SupabaseImageService` + factory + env fields; wire into `index.ts` via `createImageService` — acceptance: default `local`; `supabase` + creds → supabase adapter (mocked client, no network); missing creds → fail-soft local + error log (spec "Storage Backend Selection"); `storeFromBuffer` uploads `logos/{teamId}.{ext}` and returns public URL, null on error, never throws.
 
 ## Phase 2: Server Routes — multipart logo endpoint (D3)
 

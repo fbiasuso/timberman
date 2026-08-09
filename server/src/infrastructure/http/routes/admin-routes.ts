@@ -7,6 +7,8 @@ import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { TournamentPointsRepo } from '../../../domain/ports/tournament-points-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
+import type { TeamRepo } from '../../../domain/ports/team-repo.js';
 import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
@@ -33,6 +35,15 @@ import { CreateMatchUseCase } from '../../../application/tournament/create-match
 import { UpdateMatchDetailsUseCase } from '../../../application/tournament/update-match-details-use-case.js';
 import type { MatchDTO as MatchDetailsDTO } from '../../../application/tournament/update-match-details-use-case.js';
 import { PozoCalculator } from '../../../application/betting/pozo-calculator.js';
+import { CreateLeagueUseCase } from '../../../application/teams/create-league-use-case.js';
+import { UpdateLeagueUseCase } from '../../../application/teams/update-league-use-case.js';
+import { DeleteLeagueUseCase } from '../../../application/teams/delete-league-use-case.js';
+import { ListLeaguesUseCase } from '../../../application/teams/list-leagues-use-case.js';
+import { ListTeamsByLeagueUseCase } from '../../../application/teams/list-teams-by-league-use-case.js';
+import { CreateTeamUseCase } from '../../../application/teams/create-team-use-case.js';
+import { UpdateTeamUseCase } from '../../../application/teams/update-team-use-case.js';
+import { DeleteTeamUseCase } from '../../../application/teams/delete-team-use-case.js';
+import type { LeagueDTO, LeagueWithTeamsDTO, TeamDTO } from '../../../application/teams/dto.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
 
@@ -99,6 +110,46 @@ const createMatchSchema = z.object({
 
 const updateMatchDetailsSchema = z.object(matchDetailsFields).partial();
 
+// Non-blank text: min(1) rejects '', the refine rejects whitespace-only.
+// Values are stored AS TYPED (no trim transform — tournament convention).
+const nonBlankText = (max: number) =>
+  z.string().min(1).max(max).refine((v) => v.trim().length > 0, { message: 'Must not be blank' });
+
+const leagueParamsSchema = z.object({
+  leagueId: z.coerce.number().int().positive(),
+});
+
+const teamParamsSchema = z.object({
+  teamId: z.coerce.number().int().positive(),
+});
+
+const createLeagueSchema = z.object({
+  name: nonBlankText(100),
+  country: nonBlankText(100),
+  format: z.enum(['liga', 'copa']),
+});
+
+const updateLeagueSchema = createLeagueSchema.partial();
+
+// Team aliases: at most 20 short strings (design server-layers note).
+const aliasesField = z.array(z.string().min(1).max(100)).max(20).nullable().optional();
+
+const createTeamSchema = z.object({
+  name: nonBlankText(100),
+  aliases: aliasesField,
+  logoUrl: z.string().url().nullable().optional(),
+  // A team MUST belong to at least one league (spec "Membership required").
+  leagueIds: z.array(z.number().int().positive()).min(1),
+});
+
+const updateTeamSchema = z.object({
+  name: nonBlankText(100).optional(),
+  aliases: aliasesField,
+  logoUrl: z.string().url().nullable().optional(),
+  // On PATCH, leagueIds is optional — but when present it must keep ≥1 league.
+  leagueIds: z.array(z.number().int().positive()).min(1).optional(),
+});
+
 // ── DTOs (shape of API responses) ─────────────────────────────────
 
 interface MatchDTO {
@@ -153,6 +204,51 @@ function toMatchDateDTO(md: CreatedMatchDateDTO, carryover: number): MatchDateDT
   };
 }
 
+interface LeagueAPIDTO {
+  id: number;
+  name: string;
+  country: string;
+  format: 'liga' | 'copa';
+  createdAt: string;
+}
+
+interface TeamAPIDTO {
+  id: number;
+  name: string;
+  aliases: string[] | null;
+  logo: string | null;
+  leagueIds: number[];
+  createdAt: string;
+}
+
+function toLeagueAPIDTO(league: LeagueDTO): LeagueAPIDTO {
+  return {
+    id: league.id,
+    name: league.name,
+    country: league.country,
+    format: league.format,
+    createdAt: league.createdAt.toISOString(),
+  };
+}
+
+function toTeamAPIDTO(team: TeamDTO): TeamAPIDTO {
+  return {
+    id: team.id,
+    name: team.name,
+    aliases: team.aliases,
+    logo: team.logo,
+    leagueIds: team.leagueIds,
+    createdAt: team.createdAt.toISOString(),
+  };
+}
+
+function toLeagueWithTeamsAPIDTO(league: LeagueWithTeamsDTO) {
+  return {
+    ...toLeagueAPIDTO(league),
+    teams: league.teams.map(toTeamAPIDTO),
+  };
+}
+
 /**
  * Convert an ISO `scheduledAt` string from the request body into the use case
  * input: `undefined` keeps the current value (PATCH), `null` clears it, and a
@@ -177,6 +273,8 @@ export function createAdminRoutes(
   bcryptService: BcryptServiceImpl,
   config: SystemConfig,
   configRepo: SystemConfigRepo,
+  leagueRepo: LeagueRepo,
+  teamRepo: TeamRepo,
   uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
@@ -239,6 +337,16 @@ export function createAdminRoutes(
     const createDateUseCase = new CreateDateUseCase(tournamentRepo, config);
     const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo);
     const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
+
+    // ── Teams & Leagues (registry) ─────────────────────────────
+    const createLeagueUseCase = new CreateLeagueUseCase(leagueRepo);
+    const updateLeagueUseCase = new UpdateLeagueUseCase(leagueRepo);
+    const deleteLeagueUseCase = new DeleteLeagueUseCase(leagueRepo);
+    const listLeaguesUseCase = new ListLeaguesUseCase(leagueRepo, teamRepo);
+    const listTeamsByLeagueUseCase = new ListTeamsByLeagueUseCase(teamRepo, leagueRepo);
+    const createTeamUseCase = new CreateTeamUseCase(teamRepo, leagueRepo);
+    const updateTeamUseCase = new UpdateTeamUseCase(teamRepo, leagueRepo);
+    const deleteTeamUseCase = new DeleteTeamUseCase(teamRepo);
 
     // ── GET /api/admin/users ─────────────────────────────────────
     fastify.get('/api/admin/users', {
@@ -439,6 +547,79 @@ export function createAdminRoutes(
       const { dateId } = dateParamsSchema.parse(request.params);
       const result = await publishResultsUseCase.execute(dateId);
       return reply.send(result);
+    });
+
+    // ── POST /api/admin/leagues ────────────────────────────────────
+    fastify.post('/api/admin/leagues', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createLeagueSchema.parse(request.body);
+      const league = await createLeagueUseCase.execute(body);
+      return reply.status(201).send({ league: toLeagueAPIDTO(league) });
+    });
+
+    // ── GET /api/admin/leagues ─────────────────────────────────────
+    fastify.get('/api/admin/leagues', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (_request, _reply) => {
+      const leagues = await listLeaguesUseCase.execute();
+      return { leagues: leagues.map(toLeagueWithTeamsAPIDTO) };
+    });
+
+    // ── PATCH /api/admin/leagues/:leagueId ─────────────────────────
+    fastify.patch('/api/admin/leagues/:leagueId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      const body = updateLeagueSchema.parse(request.body);
+      const league = await updateLeagueUseCase.execute({ leagueId, ...body });
+      return reply.send({ league: toLeagueAPIDTO(league) });
+    });
+
+    // ── DELETE /api/admin/leagues/:leagueId ────────────────────────
+    fastify.delete('/api/admin/leagues/:leagueId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      await deleteLeagueUseCase.execute(leagueId);
+      return reply.status(204).send();
+    });
+
+    // ── GET /api/admin/leagues/:leagueId/teams ─────────────────────
+    fastify.get('/api/admin/leagues/:leagueId/teams', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      const teams = await listTeamsByLeagueUseCase.execute(leagueId);
+      return { teams: teams.map(toTeamAPIDTO) };
+    });
+
+    // ── POST /api/admin/teams ──────────────────────────────────────
+    fastify.post('/api/admin/teams', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createTeamSchema.parse(request.body);
+      const team = await createTeamUseCase.execute(body);
+      return reply.status(201).send({ team: toTeamAPIDTO(team) });
+    });
+
+    // ── PATCH /api/admin/teams/:teamId ─────────────────────────────
+    fastify.patch('/api/admin/teams/:teamId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+      const body = updateTeamSchema.parse(request.body);
+      const team = await updateTeamUseCase.execute({ teamId, ...body });
+      return reply.send({ team: toTeamAPIDTO(team) });
+    });
+
+    // ── DELETE /api/admin/teams/:teamId ────────────────────────────
+    fastify.delete('/api/admin/teams/:teamId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+      await deleteTeamUseCase.execute(teamId);
+      return reply.status(204).send();
     });
   };
 }

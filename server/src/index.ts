@@ -12,6 +12,8 @@ import { DrizzleMatchRepo } from './infrastructure/repositories/drizzle-match-re
 import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-repo.js';
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
+import { DrizzleLeagueRepo } from './infrastructure/repositories/drizzle-league-repo.js';
+import { DrizzleTeamRepo } from './infrastructure/repositories/drizzle-team-repo.js';
 import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
 import { ensureInitialTournament } from './infrastructure/bootstrap.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
@@ -38,6 +40,8 @@ const matchRepo = new DrizzleMatchRepo(db);
 const ticketRepo = new DrizzleTicketRepo(db);
 const auditLogRepo = new DrizzleAuditLogRepo(db);
 const systemConfigRepo = new DrizzleSystemConfigRepo(db);
+const leagueRepo = new DrizzleLeagueRepo(db);
+const teamRepo = new DrizzleTeamRepo(db);
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
 
@@ -82,6 +86,8 @@ await app.register(createRouter(
   config,
   systemConfigRepo,
   tournamentPointsRepo,
+  leagueRepo,
+  teamRepo,
   uow,
 ));
 

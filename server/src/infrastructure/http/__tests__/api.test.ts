@@ -7,6 +7,8 @@ import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
+import type { TeamRepo } from '../../../domain/ports/team-repo.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
@@ -16,7 +18,18 @@ import { Match } from '../../../domain/entities/match.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
 import { Tournament } from '../../../domain/entities/tournament.js';
 import { User } from '../../../domain/entities/user.js';
-import { TournamentNameAlreadyExistsError } from '../../../domain/errors/index.js';
+import { League } from '../../../domain/entities/league.js';
+import { Team } from '../../../domain/entities/team.js';
+import {
+  TournamentNameAlreadyExistsError,
+  LeagueNotFoundError,
+  LeagueNameAlreadyExistsError,
+  LeagueHasTeamsError,
+  TeamNotFoundError,
+  TeamNameAlreadyExistsError,
+  TeamNeedsLeagueError,
+  TeamReferencedByMatchesError,
+} from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -99,6 +112,27 @@ function createMockServices() {
     upsert: vi.fn(),
   };
 
+  const leagueRepo: LeagueRepo = {
+    findAll: vi.fn(),
+    findById: vi.fn(),
+    findByName: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countTeams: vi.fn(),
+  };
+
+  const teamRepo: TeamRepo = {
+    findAll: vi.fn(),
+    findById: vi.fn(),
+    findByLeagueId: vi.fn(),
+    findByName: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countMatchesReferencing: vi.fn(),
+  };
+
   const jwtService = {
     sign: vi.fn(() => 'fake-jwt-token'),
     verify: vi.fn(),
@@ -117,7 +151,8 @@ function createMockServices() {
 
   return {
     userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo,
-    tournamentPointsRepo, configRepo, jwtService, bcryptService, config,
+    tournamentPointsRepo, configRepo, leagueRepo, teamRepo,
+    jwtService, bcryptService, config,
   };
 }
 
@@ -140,6 +175,8 @@ describe('API Integration Tests', () => {
       services.config,
       services.configRepo,
       services.tournamentPointsRepo,
+      services.leagueRepo,
+      services.teamRepo,
     ));
     await app.ready();
   });
@@ -2679,6 +2716,543 @@ describe('API Integration Tests', () => {
       const body = JSON.parse(res.body);
       expect(body.error).toBe('TOURNAMENT_NAME_TAKEN');
       expect(body.message).toBe('Ya existe un torneo con ese nombre');
+    });
+  });
+
+  // ── Team registry: leagues ────────────────────────────────────────
+
+  describe('POST /api/admin/leagues', () => {
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('creates a league (201)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.leagueRepo.save).mockImplementation(async (l) =>
+        League.create({ ...l.toSnapshot(), id: 5 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Primera División', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.league.id).toBe(5);
+      expect(body.league.name).toBe('Primera División');
+      expect(body.league.format).toBe('liga');
+    });
+
+    it('returns 409 LEAGUE_NAME_TAKEN on a name collision', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.leagueRepo.save).mockRejectedValue(
+        new LeagueNameAlreadyExistsError('primera division'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'primera division', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NAME_TAKEN');
+    });
+
+    it('rejects a blank league name (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: '   ', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects non-admin users (403)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'user',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Primera División', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).error).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('GET /api/admin/leagues', () => {
+    it('returns leagues with their nested member teams', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findAll).mockResolvedValue([
+        League.create({
+          id: 1,
+          name: 'Primera División',
+          country: 'Argentina',
+          format: 'liga',
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+      vi.mocked(services.teamRepo.findAll).mockResolvedValue([
+        Team.create({
+          id: 7,
+          name: 'River Plate',
+          aliases: ['El Millonario'],
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.leagues).toHaveLength(1);
+      expect(body.leagues[0].name).toBe('Primera División');
+      expect(body.leagues[0].teams[0].name).toBe('River Plate');
+    });
+  });
+
+  describe('PATCH /api/admin/leagues/:leagueId', () => {
+    it('renames a league (200)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.update).mockImplementation(async (l) =>
+        League.create({ ...l.toSnapshot(), name: 'Torneo Apertura' }),
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Torneo Apertura' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).league.name).toBe('Torneo Apertura');
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/leagues/99',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Torneo Apertura' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/admin/leagues/:leagueId', () => {
+    it('deletes an empty league (204)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.countTeams).mockResolvedValue(0);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(services.leagueRepo.delete).toHaveBeenCalledWith(1);
+    });
+
+    it('blocks deletion of a league that still has teams (409 LEAGUE_HAS_TEAMS)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.countTeams).mockResolvedValue(3);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_HAS_TEAMS');
+    });
+  });
+
+  describe('GET /api/admin/leagues/:leagueId/teams', () => {
+    it('returns the teams of a league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.findByLeagueId).mockResolvedValue([
+        Team.create({
+          id: 7,
+          name: 'River Plate',
+          aliases: null,
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues/1/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.teams).toHaveLength(1);
+      expect(body.teams[0].id).toBe(7);
+      expect(body.teams[0].leagueIds).toEqual([1]);
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues/99/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+  });
+
+  // ── Team registry: teams ─────────────────────────────────────────
+
+  describe('POST /api/admin/teams', () => {
+    it('creates a team with memberships (201)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.save).mockImplementation(async (t) =>
+        Team.create({ ...t.toSnapshot(), id: 7 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', aliases: ['El Millonario'], leagueIds: [1] },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.team.id).toBe(7);
+      expect(body.team.name).toBe('River Plate');
+      expect(body.team.leagueIds).toEqual([1]);
+    });
+
+    it('rejects a team with no leagueIds (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', leagueIds: [] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league id', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', leagueIds: [99] },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+
+    it('returns 409 TEAM_NAME_TAKEN on a global name collision', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.save).mockRejectedValue(
+        new TeamNameAlreadyExistsError('river plate'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'river plate', leagueIds: [1] },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NAME_TAKEN');
+    });
+  });
+
+  describe('PATCH /api/admin/teams/:teamId', () => {
+    it('renames a team keeping memberships (200)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.update).mockImplementation(async (t) =>
+        Team.create({ ...t.toSnapshot(), name: 'River Plate FC' }),
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate FC' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).team.name).toBe('River Plate FC');
+    });
+
+    it('rejects removing the last membership (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { leagueIds: [] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 404 TEAM_NOT_FOUND for an unknown team', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/99',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'X' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/admin/teams/:teamId', () => {
+    it('deletes an unreferenced team (204)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.countMatchesReferencing).mockResolvedValue(0);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(services.teamRepo.delete).toHaveBeenCalledWith(7);
+    });
+
+    it('blocks deletion of a match-referenced team (409 TEAM_REFERENCED_BY_MATCHES)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.countMatchesReferencing).mockResolvedValue(2);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('TEAM_REFERENCED_BY_MATCHES');
     });
   });
 });

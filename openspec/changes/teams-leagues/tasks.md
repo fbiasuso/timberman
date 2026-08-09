@@ -40,11 +40,11 @@ Chain strategy: pending
 
 ## Phase 2: Client Data Layer (U6)
 
-- [ ] **T6** (U6) `client/src/types/index.ts` (MatchDTO/CreateMatchPayload/UpdateMatchDetailsPayload += localTeamId/visitorTeamId: number|null; LeagueFormat 'liga'|'copa'; LeagueDTO {teams: TeamDTO[]}; TeamDTO {leagueIds}); `utils/format.ts` resolveLogoUrl; `api/admin-api.ts` flat fns (getLeagues/create/update/deleteLeague, getLeagueTeams, create/update/deleteTeam, setTeamLogo); `hooks/use-teams.ts` useLeagues ['admin','leagues'] + 7 mutations invalidating that key. AC: shapes match server DTOs; single invalidation key; tsc clean. Deps: server contract (T2/T3)
+- [x] **T6** (U6) `client/src/types/index.ts` (MatchDTO/CreateMatchPayload/UpdateMatchDetailsPayload += localTeamId/visitorTeamId: number|null; LeagueFormat 'liga'|'copa'; LeagueDTO {teams: TeamDTO[]}; TeamDTO {leagueIds}); `utils/format.ts` resolveLogoUrl; `api/admin-api.ts` flat fns (getLeagues/create/update/deleteLeague, getLeagueTeams, create/update/deleteTeam, setTeamLogo); `hooks/use-teams.ts` useLeagues ['admin','leagues'] + 7 mutations invalidating that key. AC: shapes match server DTOs; single invalidation key; tsc clean. Deps: server contract (T2/T3)
 
 ## Phase 3: Client UI (U7, U8)
 
-- [ ] **T7** (U7) `client/src/components/Autocomplete.tsx` (combobox, keyboard nav up/down/enter/escape, click-outside, a11y attrs, unmatched-text state for legacy strings) + `Autocomplete.test.tsx`. AC: keyboard nav/filter/outside/a11y tests pass. Deps: T6
+- [x] **T7** (U7) `client/src/components/Autocomplete.tsx` (combobox, keyboard nav up/down/enter/escape, click-outside, a11y attrs, unmatched-text state for legacy strings) + `Autocomplete.test.tsx`. AC: keyboard nav/filter/outside/a11y tests pass. Deps: T6
 - [ ] **T8** (U8) `client/src/components/admin/Equipos.tsx` (create-league form: name/country/format select; league accordion cards; per-team create/edit: name, aliases comma-separated, logo URL, league multi-select checkbox → leagueIds — ≥1 required, last-membership 400 and blocked deletes surfaced via error box) + `AdminPage.tsx` 'equipos' Tab + switch + `Equipos.test.tsx`. AC: lists leagues with nested teams; create refreshes list; blocked delete shows server error, team remains. Deps: T6
 
 ## Phase 4: Client Match Integration (U9)

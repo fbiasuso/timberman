@@ -12,8 +12,7 @@ export const DOWNLOAD_TIMEOUT_MS = 10_000;
  * Shared by the shield resolver (API lookups) and the image downloader
  * (upload.wikimedia.org payloads) so both agree on a single identity.
  */
-export const SHIELD_USER_AGENT =
-  'timberman-shield-seed/1.0 (https://github.com/fbiasuso/timberman; contact: admin@example.com)';
+export const SHIELD_USER_AGENT = 'timberman-shield-seed/1.0 (https://github.com/fbiasuso/timberman)';
 
 /** Minimal logger surface the image services need (fastify's logger fits it). */
 export interface Logger {

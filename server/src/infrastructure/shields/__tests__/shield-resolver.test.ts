@@ -256,6 +256,5 @@ describe('resolveShieldUrl — User-Agent header', () => {
   it('exposes a descriptive, contactable User-Agent constant', () => {
     expect(SHIELD_RESOLVER_USER_AGENT).toContain('timberman-shield-seed/1.0');
     expect(SHIELD_RESOLVER_USER_AGENT).toContain('https://github.com/fbiasuso/timberman');
-    expect(SHIELD_RESOLVER_USER_AGENT).toContain('contact: admin@example.com');
   });
 });

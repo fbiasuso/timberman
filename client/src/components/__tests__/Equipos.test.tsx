@@ -1,17 +1,18 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within, act } from '@testing-library/react';
 import Equipos from '../admin/Equipos';
 import type { LeagueDTO, TeamDTO } from '../../types';
 
 // --- Mocks ---
 
-const { createLeagueMutate, deleteLeagueMutate, createTeamMutate, updateTeamMutate, deleteTeamMutate } =
+const { createLeagueMutate, deleteLeagueMutate, createTeamMutate, updateTeamMutate, deleteTeamMutate, setTeamLogoMutate } =
   vi.hoisted(() => ({
     createLeagueMutate: vi.fn(),
     deleteLeagueMutate: vi.fn(),
     createTeamMutate: vi.fn(),
     updateTeamMutate: vi.fn(),
     deleteTeamMutate: vi.fn(),
+    setTeamLogoMutate: vi.fn(),
   }));
 
 // Toggleable mutation states (simulate async errors after a click + rerender)
@@ -55,6 +56,12 @@ vi.mock('../../hooks/use-teams', () => ({
     isError: deleteTeamState.isError,
     error: deleteTeamState.error,
   }),
+  useSetTeamLogo: () => ({
+    mutate: setTeamLogoMutate,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 import { useLeagues } from '../../hooks/use-teams';
@@ -66,6 +73,7 @@ afterEach(() => {
   createTeamMutate.mockClear();
   updateTeamMutate.mockClear();
   deleteTeamMutate.mockClear();
+  setTeamLogoMutate.mockClear();
   deleteTeamState.isError = false;
   deleteTeamState.error = null;
   vi.mocked(useLeagues).mockReset();
@@ -86,6 +94,16 @@ const river: TeamDTO = {
 const boca: TeamDTO = {
   id: 12,
   name: 'Boca Juniors',
+  aliases: null,
+  logo: null,
+  leagueIds: [1],
+  createdAt: '2026-08-01T00:00:00.000Z',
+};
+
+/** The team a successful "San Lorenzo" create resolves with (for two-step tests). */
+const sanLorenzo: TeamDTO = {
+  id: 13,
+  name: 'San Lorenzo',
   aliases: null,
   logo: null,
   leagueIds: [1],
@@ -126,6 +144,12 @@ function expandLeague() {
 function teamRow(teamName: string): HTMLElement {
   const name = screen.getByText(teamName);
   return (name.parentElement as HTMLElement).parentElement as HTMLElement;
+}
+
+/** Opens the create-team form inside an expanded league and returns it. */
+function openCreateTeamForm(): HTMLElement {
+  fireEvent.click(screen.getByRole('button', { name: /Agregar equipo/ }));
+  return screen.getByRole('button', { name: 'Crear equipo' }).closest('form') as HTMLElement;
 }
 
 // --- Tests ---
@@ -201,7 +225,6 @@ describe('Equipos', () => {
       {
         name: 'San Lorenzo',
         aliases: ['El Ciclón', 'Azulgrana'],
-        logoUrl: null,
         leagueIds: [1],
       },
       expect.anything(),
@@ -279,5 +302,171 @@ describe('Equipos', () => {
     expect(screen.getByText('El equipo está referenciado por partidos')).toBeDefined();
     // The team remains in the list — the invalidated refetch never ran
     expect(screen.getByText('Boca Juniors')).toBeDefined();
+  });
+
+  it('renders the shield as a file picker restricted to images', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    const fileInput = within(form).getByLabelText(/Escudo/) as HTMLInputElement;
+    expect(fileInput.type).toBe('file');
+    expect(fileInput.accept).toBe('image/png,image/jpeg,image/webp');
+  });
+
+  it('previews a valid shield selection, enables save and revokes the old URL', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL');
+
+    fireEvent.change(within(form).getByLabelText('Nombre'), { target: { value: 'San Lorenzo' } });
+    const file = new File(['png-bytes'], 'escudo.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    // Live preview renders and the submit is enabled
+    expect(within(form).getByAltText('Vista previa del escudo')).toBeDefined();
+    expect((within(form).getByRole('button', { name: 'Crear equipo' }) as HTMLButtonElement).disabled).toBe(false);
+
+    // Selecting a different file revokes the previous preview object URL
+    const other = new File(['more-bytes'], 'otro.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [other] },
+    });
+    expect(revokeSpy).toHaveBeenCalled();
+    revokeSpy.mockRestore();
+  });
+
+  it('blocks save and shows an inline error for an invalid shield type', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    const file = new File(['not-an-image'], 'datos.txt', { type: 'text/plain' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    expect(within(form).getByText('El escudo debe ser PNG, JPEG o WebP.')).toBeDefined();
+    const submit = within(form).getByRole('button', { name: 'Crear equipo' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(createTeamMutate).not.toHaveBeenCalled();
+  });
+
+  it('blocks save and shows an inline error for an oversized shield', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    const file = new File([new Uint8Array(1024 * 1024 + 1)], 'grande.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    expect(within(form).getByText('El escudo debe pesar menos de 1 MiB.')).toBeDefined();
+    const submit = within(form).getByRole('button', { name: 'Crear equipo' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(createTeamMutate).not.toHaveBeenCalled();
+  });
+
+  it('chains the shield upload with the File after the team is created', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    fireEvent.change(within(form).getByLabelText('Nombre'), { target: { value: 'San Lorenzo' } });
+    const file = new File(['png-bytes'], 'escudo.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    // Team create resolves with the persisted team (id 13); upload resolves stored:true
+    createTeamMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(sanLorenzo));
+    setTeamLogoMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.({ team: sanLorenzo, stored: true });
+      opts?.onSettled?.();
+    });
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Crear equipo' }));
+
+    expect(createTeamMutate).toHaveBeenCalledWith(
+      { name: 'San Lorenzo', aliases: null, leagueIds: [1] },
+      expect.anything(),
+    );
+    // The upload runs AFTER the team is saved, with the persisted id + the File
+    expect(setTeamLogoMutate).toHaveBeenCalledWith({ teamId: 13, file }, expect.anything());
+  });
+
+  it('surfaces a not-stored upload and keeps the form open for retry', () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    fireEvent.change(within(form).getByLabelText('Nombre'), { target: { value: 'San Lorenzo' } });
+    const file = new File(['png-bytes'], 'escudo.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    createTeamMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(sanLorenzo));
+    setTeamLogoMutate.mockImplementation((_args, opts) => {
+      opts?.onSuccess?.({ team: sanLorenzo, stored: false });
+      opts?.onSettled?.();
+    });
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Crear equipo' }));
+
+    // Team saved, but the store backend rejected the bytes → upload error box
+    expect(within(form).getByText('El escudo no se pudo guardar. El equipo se guardó sin escudo.')).toBeDefined();
+    // The form stays open so the admin can retry or cancel (re-edit retry)
+    expect(within(form).getByRole('button', { name: 'Crear equipo' })).toBeDefined();
+  });
+
+  it('shows the combined pending state while the chained shield upload runs', async () => {
+    mockLeagues([liga]);
+    render(<Equipos />);
+    expandLeague();
+    const form = openCreateTeamForm();
+
+    fireEvent.change(within(form).getByLabelText('Nombre'), { target: { value: 'San Lorenzo' } });
+    const file = new File(['png-bytes'], 'escudo.png', { type: 'image/png' });
+    fireEvent.change(within(form).getByLabelText(/Escudo/) as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    // The upload stays pending until the test resolves it
+    let resolveUpload!: (value: unknown) => void;
+    const uploadPending = new Promise((resolve) => {
+      resolveUpload = resolve;
+    });
+    createTeamMutate.mockImplementation((_payload, opts) => opts?.onSuccess?.(sanLorenzo));
+    setTeamLogoMutate.mockImplementation((_args, opts) => {
+      uploadPending.then(() => {
+        opts?.onSuccess?.({ team: sanLorenzo, stored: true });
+        opts?.onSettled?.();
+      });
+    });
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Crear equipo' }));
+
+    // Combined pending state: the form stays open with the upload label
+    expect(within(form).getByText('Subiendo escudo...')).toBeDefined();
+    expect(setTeamLogoMutate).toHaveBeenCalledWith({ teamId: 13, file }, expect.anything());
+
+    // The upload resolves stored:true → the form closes
+    await act(async () => {
+      resolveUpload(undefined);
+    });
+    expect(screen.getByRole('button', { name: /Agregar equipo/ })).toBeDefined();
   });
 });

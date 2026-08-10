@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import theme from '../../styles/theme';
 import { resolveLogoUrl } from '../../utils/format';
 import {
@@ -8,6 +8,7 @@ import {
   useCreateTeam,
   useUpdateTeam,
   useDeleteTeam,
+  useSetTeamLogo,
 } from '../../hooks/use-teams';
 import type { LeagueDTO, LeagueFormat, TeamDTO } from '../../types';
 import type { CreateLeaguePayload, CreateTeamPayload, UpdateTeamPayload } from '../../api/admin-api';
@@ -146,6 +147,25 @@ function textToAliases(text: string): string[] | null {
   return parts.length > 0 ? parts : null;
 }
 
+// ─── Shield file rules (design D4 — mirrored by the server's 1 MiB cap) ────
+
+/** 1 MiB — same cap as the server (`MAX_IMAGE_BYTES`). */
+const MAX_LOGO_BYTES = 1024 * 1024;
+/** Native picker filter — PNG, JPEG, WebP only (spec "Team Logo Upload UI"). */
+const LOGO_ACCEPT = 'image/png,image/jpeg,image/webp';
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+/** Client-side shield validation — null when the file may be uploaded. */
+function validateLogo(file: File): string | null {
+  if (!LOGO_TYPES.includes(file.type)) {
+    return 'El escudo debe ser PNG, JPEG o WebP.';
+  }
+  if (file.size > MAX_LOGO_BYTES) {
+    return 'El escudo debe pesar menos de 1 MiB.';
+  }
+  return null;
+}
+
 // ─── Create league form ─────────────────────────────────────────────────────
 
 function CreateLeagueForm() {
@@ -248,11 +268,16 @@ interface TeamFormProps {
   /** League preselected when creating from a league card. */
   defaultLeagueId?: number;
   isPending: boolean;
-  /** Server error from the mutation (surfaced in the error box). */
+  /** True while the chained shield upload runs (design D4 two-step save). */
+  uploading?: boolean;
+  /** Server error from the team mutation (surfaced in the error box). */
   serverError?: string | null;
+  /** Upload failure after the team was saved (200 stored:false or 4xx). */
+  uploadError?: string | null;
   submitLabel: string;
   onCancel?: () => void;
-  onSubmit: (payload: CreateTeamPayload | UpdateTeamPayload) => void;
+  /** Two-step save (design D4): team payload first, then the selected file. */
+  onSubmit: (payload: CreateTeamPayload | UpdateTeamPayload, file?: File) => void;
 }
 
 function TeamForm({
@@ -260,7 +285,9 @@ function TeamForm({
   initial,
   defaultLeagueId,
   isPending,
+  uploading = false,
   serverError,
+  uploadError,
   submitLabel,
   onCancel,
   onSubmit,
@@ -268,19 +295,36 @@ function TeamForm({
   const isEdit = initial != null;
   const [name, setName] = useState(initial?.name ?? '');
   const [aliases, setAliases] = useState(aliasesToText(initial?.aliases));
-  // The logo field only carries a REMOTE URL for the shield pipeline; leaving
-  // it empty keeps the current logo (server treats null as "no change").
-  const [logoUrl, setLogoUrl] = useState('');
+  // The shield is uploaded through the logo endpoint (two-step save); it is
+  // NEVER sent as logoUrl in the team payload (design D4).
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [leagueIds, setLeagueIds] = useState<number[]>(
     initial?.leagueIds ?? (defaultLeagueId != null ? [defaultLeagueId] : []),
   );
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Revoke the object URL when the selection changes or the form unmounts.
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
 
   const toggleLeague = (id: number) => {
     setLocalError(null);
     setLeagueIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setLogoFile(file);
+    setLogoError(file ? validateLogo(file) : null);
+    // The effect above revokes the previous preview URL on change.
+    setLogoPreview(file ? URL.createObjectURL(file) : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -293,12 +337,19 @@ function TeamForm({
       setLocalError('El equipo debe pertenecer a al menos una liga.');
       return;
     }
-    onSubmit({
-      name: trimmedName,
-      aliases: textToAliases(aliases),
-      logoUrl: logoUrl.trim() || null,
-      leagueIds,
-    });
+    // Re-validate at submit — an invalid selection must block save (spec
+    // "Invalid type blocked" / "Oversized file blocked").
+    if (logoFile) {
+      const error = validateLogo(logoFile);
+      if (error) {
+        setLogoError(error);
+        return;
+      }
+    }
+    onSubmit(
+      { name: trimmedName, aliases: textToAliases(aliases), leagueIds },
+      logoFile ?? undefined,
+    );
   };
 
   const createMissingLeague = !isEdit && leagueIds.length === 0;
@@ -333,15 +384,26 @@ function TeamForm({
         </div>
         <div>
           <label style={label} htmlFor={`team-logo-${initial?.id ?? 'new'}`}>
-            Escudo (URL)
+            Escudo (PNG, JPEG o WebP)
           </label>
           <input
             id={`team-logo-${initial?.id ?? 'new'}`}
+            type="file"
+            accept={LOGO_ACCEPT}
             style={input}
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            placeholder="https://..."
+            onChange={handleLogoChange}
+            title="Máximo 1 MiB"
           />
+          {logoPreview && !logoError && (
+            <img
+              src={logoPreview}
+              alt="Vista previa del escudo"
+              style={{ width: 40, height: 40, objectFit: 'contain', marginTop: 8 }}
+            />
+          )}
+          {logoError && (
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: theme.rojo }}>{logoError}</p>
+          )}
         </div>
       </div>
 
@@ -385,10 +447,14 @@ function TeamForm({
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
         <button
           type="submit"
-          disabled={isPending || createMissingLeague}
-          style={isPending || createMissingLeague ? primaryBtnDisabled : primaryBtn}
+          disabled={isPending || uploading || createMissingLeague || !!logoError}
+          style={
+            isPending || uploading || createMissingLeague || !!logoError
+              ? primaryBtnDisabled
+              : primaryBtn
+          }
         >
-          {isPending ? 'Guardando...' : submitLabel}
+          {uploading ? 'Subiendo escudo...' : isPending ? 'Guardando...' : submitLabel}
         </button>
         {onCancel && (
           <button type="button" style={smallBtn} onClick={onCancel}>
@@ -400,6 +466,7 @@ function TeamForm({
       {(localError || serverError) && (
         <div style={errorBox}>{localError ?? serverError}</div>
       )}
+      {uploadError && <div style={errorBox}>{uploadError}</div>}
     </form>
   );
 }
@@ -410,11 +477,14 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
   const [expanded, setExpanded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const deleteLeague = useDeleteLeague();
   const createTeam = useCreateTeam();
   const updateTeam = useUpdateTeam();
   const deleteTeam = useDeleteTeam();
+  const uploadLogo = useSetTeamLogo();
 
   const cardError = [
     deleteLeague.isError && apiErrorMessage(deleteLeague.error),
@@ -427,6 +497,61 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
     // Blocked deletes (409 referenced by matches) surface here — the list
     // state is untouched because invalidation only runs on success.
     deleteTeam.mutate(team.id);
+  };
+
+  /** Two-step save (design D4): the chained shield upload runs after the team
+   *  create/update succeeds, keeping the form open with a combined pending
+   *  state ("Subiendo escudo..."). A failed upload (4xx or 200 stored:false)
+   *  surfaces in the upload error box and the team stays saved without a logo;
+   *  the admin can retry via re-edit. */
+  const chainLogoUpload = (teamId: number, wasCreating: boolean, file: File) => {
+    setUploading(true);
+    uploadLogo.mutate(
+      { teamId, file },
+      {
+        onSuccess: (result) => {
+          if (result.stored) {
+            if (wasCreating) setCreating(false);
+            else setEditingTeamId(null);
+          } else {
+            setUploadError('El escudo no se pudo guardar. El equipo se guardó sin escudo.');
+          }
+        },
+        onError: (err) => {
+          setUploadError(apiErrorMessage(err) || 'No se pudo subir el escudo.');
+        },
+        onSettled: () => setUploading(false),
+      },
+    );
+  };
+
+  const handleCreateSubmit = (payload: CreateTeamPayload, file?: File) => {
+    setUploadError(null);
+    createTeam.mutate(payload, {
+      onSuccess: (team) => {
+        if (file) {
+          chainLogoUpload(team.id, true, file);
+        } else {
+          setCreating(false);
+        }
+      },
+    });
+  };
+
+  const handleUpdateSubmit = (team: TeamDTO, payload: UpdateTeamPayload, file?: File) => {
+    setUploadError(null);
+    updateTeam.mutate(
+      { teamId: team.id, ...payload },
+      {
+        onSuccess: () => {
+          if (file) {
+            chainLogoUpload(team.id, false, file);
+          } else {
+            setEditingTeamId(null);
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -500,13 +625,13 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
                     leagues={allLeagues}
                     initial={team}
                     isPending={updateTeam.isPending}
+                    uploading={uploading}
                     serverError={updateTeam.isError ? apiErrorMessage(updateTeam.error) : null}
+                    uploadError={uploadError}
                     submitLabel="Guardar equipo"
                     onCancel={() => setEditingTeamId(null)}
-                    onSubmit={(payload) =>
-                      updateTeam.mutate({ teamId: team.id, ...payload }, {
-                        onSuccess: () => setEditingTeamId(null),
-                      })
+                    onSubmit={(payload, file) =>
+                      handleUpdateSubmit(team, payload as UpdateTeamPayload, file)
                     }
                   />
                 )}
@@ -520,13 +645,13 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
               initial={null}
               defaultLeagueId={league.id}
               isPending={createTeam.isPending}
+              uploading={uploading}
               serverError={createTeam.isError ? apiErrorMessage(createTeam.error) : null}
+              uploadError={uploadError}
               submitLabel="Crear equipo"
               onCancel={() => setCreating(false)}
-              onSubmit={(payload) =>
-                createTeam.mutate(payload as CreateTeamPayload, {
-                  onSuccess: () => setCreating(false),
-                })
+              onSubmit={(payload, file) =>
+                handleCreateSubmit(payload as CreateTeamPayload, file)
               }
             />
           ) : (

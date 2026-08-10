@@ -88,12 +88,13 @@ export function useDeleteTeam() {
   });
 }
 
-/** Re-upload a team shield */
+/** Upload a team shield file — multipart FormData to the logo endpoint
+ *  (design D4: chained after a successful team create/update). */
 export function useSetTeamLogo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ teamId, ...payload }: { teamId: number } & Parameters<typeof adminApi.setTeamLogo>[1]) =>
-      adminApi.setTeamLogo(teamId, payload),
+    mutationFn: ({ teamId, file }: { teamId: number; file: File }) =>
+      adminApi.setTeamLogo(teamId, file),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: leaguesQueryKey });
     },

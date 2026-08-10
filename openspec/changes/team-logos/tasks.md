@@ -66,7 +66,7 @@ Chain strategy: pending
 **Dependencies**: U3 (multipart endpoint)
 **Est. lines**: server 0 | client ~370
 
-- [ ] T4 (U4) — Multipart transport (admin-api + hook) then TeamForm file picker/preview/validation + two-step save; extend `Equipos.test.tsx` (mock `useSetTeamLogo`) — acceptance (spec admin-operations): valid selection previews + save enabled; invalid type → inline error + save blocked; oversized → blocked; save posts multipart FormData and list refreshes; team without logo adds one; existing logo replaced.
+- [x] T4 (U4) — Multipart transport (admin-api + hook) then TeamForm file picker/preview/validation + two-step save; extend `Equipos.test.tsx` (mock `useSetTeamLogo`) — acceptance (spec admin-operations): valid selection previews + save enabled; invalid type → inline error + save blocked; oversized → blocked; save posts multipart FormData and list refreshes; team without logo adds one; existing logo replaced.
 
 ## Phase 4: Seed — shield population (D5)
 

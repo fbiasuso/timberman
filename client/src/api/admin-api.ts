@@ -160,9 +160,12 @@ export interface UpdateTeamPayload {
   leagueIds?: number[];
 }
 
-/** Body for POST /api/admin/teams/:teamId/logo — re-upload a shield */
-export interface SetTeamLogoPayload {
-  url: string;
+/** Result of POST /api/admin/teams/:teamId/logo (multipart or JSON) */
+export interface SetTeamLogoResult {
+  /** The team after the attempt — unchanged when `stored` is false */
+  team: TeamDTO;
+  /** false when the store backend rejected the bytes (team NOT updated) */
+  stored: boolean;
 }
 
 // ─── API functions ──────────────────────────────────────────────────────────
@@ -328,10 +331,17 @@ export const adminApi = {
     return client.delete(`/admin/teams/${teamId}`).then((r) => r.data);
   },
 
-  /** POST /api/admin/teams/:teamId/logo — re-upload a team shield */
-  setTeamLogo(teamId: number, payload: SetTeamLogoPayload) {
+  /** POST /api/admin/teams/:teamId/logo — upload a shield file (multipart
+   *  field `file`). The browser sets the multipart boundary automatically, so
+   *  the raw FormData is posted without a manual Content-Type. Returns the
+   *  full `{ team, stored }` result: on 4xx the request rejects (surface via
+   *  the mutation error); on 200 with `stored: false` the store backend failed
+   *  and the team is returned unchanged. */
+  setTeamLogo(teamId: number, file: File) {
+    const form = new FormData();
+    form.append('file', file);
     return client
-      .post<{ team: TeamDTO }>(`/admin/teams/${teamId}/logo`, payload)
-      .then((r) => r.data.team);
+      .post<SetTeamLogoResult>(`/admin/teams/${teamId}/logo`, form)
+      .then((r) => r.data);
   },
 };

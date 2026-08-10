@@ -24,16 +24,25 @@ const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), { sta
 // ── buildCandidateTitles (pure) ────────────────────────────────────
 
 describe('buildCandidateTitles', () => {
-  it('tries the direct name first, then aliases, then the "Club Atlético" form', () => {
+  it('tries the direct name first, then aliases, then the "Club Atlético" and "Club" forms', () => {
     expect(buildCandidateTitles('Gimnasia', ['Gimnasia de Mendoza'])).toEqual([
       'Gimnasia',
       'Gimnasia de Mendoza',
       'Club Atlético Gimnasia',
+      'Club Gimnasia',
     ]);
   });
 
+  it('generates the bare "Club {name}" form after "Club Atlético {name}"', () => {
+    expect(buildCandidateTitles('Almagro')).toEqual(['Almagro', 'Club Atlético Almagro', 'Club Almagro']);
+  });
+
   it('dedupes repeated titles and drops empty strings', () => {
-    expect(buildCandidateTitles('Boca', ['Boca', '', '  '])).toEqual(['Boca', 'Club Atlético Boca']);
+    expect(buildCandidateTitles('Boca', ['Boca', 'Club Boca', '', '  '])).toEqual([
+      'Boca',
+      'Club Boca',
+      'Club Atlético Boca',
+    ]);
   });
 });
 
@@ -87,6 +96,16 @@ describe('resolveShieldUrl — Wikimedia primary', () => {
     );
     const url = await resolveShieldUrl('Boca Juniors', [], { fetchFn, delayMs: 0 });
     expect(url).toBe('https://upload.wikimedia.org/cabj.png');
+  });
+
+  it('tries the "Club {name}" page-title form when name and the "Club Atlético" form miss', async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('titles=Club%20Almagro')
+        ? jsonResponse(WIKI_HIT('https://upload.wikimedia.org/almagro.png'))
+        : jsonResponse(WIKI_MISS),
+    );
+    const url = await resolveShieldUrl('Almagro', [], { fetchFn, delayMs: 0 });
+    expect(url).toBe('https://upload.wikimedia.org/almagro.png');
   });
 
   it('treats a non-2xx Wikimedia response as a miss and tries the fallback', async () => {

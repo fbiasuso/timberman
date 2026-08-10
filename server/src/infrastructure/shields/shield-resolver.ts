@@ -10,8 +10,9 @@
  * Resolution order per team:
  *   1. PRIMARY — Wikimedia es.wikipedia.org `pageimages` (pithumbsize 256):
  *      queried for the direct name, then each DB alias, then the common
- *      "Club Atlético {name}" page-title form (redirects=1 resolves page
- *      aliases server-side). First page with a thumbnail wins.
+ *      "Club Atlético {name}" and "Club {name}" page-title forms
+ *      (redirects=1 resolves page aliases server-side). First page with a
+ *      thumbnail wins.
  *   2. FALLBACK — TheSportsDB `searchteams.php?t={name}` → `strTeamBadge`
  *      (full URL, stored as-is).
  *   3. Both miss (or fail) → null; the caller reports the team as
@@ -84,13 +85,13 @@ function buildTheSportsDbUrl(name: string, key: string): string {
 
 /**
  * Candidate page titles for a team: the direct name, then the DB aliases,
- * then the common "Club Atlético {name}" page-title form (Wikipedia
- * redirects cover the rest). Deduped, empties removed.
+ * then the common "Club Atlético {name}" and "Club {name}" page-title
+ * forms (Wikipedia redirects cover the rest). Deduped, empties removed.
  */
 export function buildCandidateTitles(name: string, aliases: readonly string[] = []): string[] {
   const seen = new Set<string>();
   const candidates: string[] = [];
-  for (const title of [name, ...aliases, `Club Atlético ${name}`]) {
+  for (const title of [name, ...aliases, `Club Atlético ${name}`, `Club ${name}`]) {
     const trimmed = title.trim();
     if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);

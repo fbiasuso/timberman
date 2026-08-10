@@ -16,7 +16,8 @@
     "db:push": "drizzle-kit push",
     "seed:dev": "tsx scripts/seed-dev.ts",
     "seed:from-json": "tsx scripts/seed-from-json.ts",
-    "seed:teams": "tsx scripts/seed-leagues-teams.ts"
+    "seed:teams": "tsx scripts/seed-leagues-teams.ts",
+    "seed:shields": "tsx scripts/seed-shields.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

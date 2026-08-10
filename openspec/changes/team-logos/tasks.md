@@ -77,7 +77,7 @@ Chain strategy: pending
 **Dependencies**: U2 (factory + validated write path)
 **Est. lines**: server ~320 | client 0
 
-- [ ] T5 (U5) — Write `seed-shields.ts` (export testable run function; build service from `process.env`, dotenv — avoids `env.ts` JWT_SECRET hard-fail) + npm script + script test (mocked fetch, in-memory teams) — acceptance (spec "Seed Shields Population"): Wikimedia primary; TheSportsDB fallback; existing logo skipped; `--force` re-syncs; unresolved listed and script completes; summary counts correct.
+- [x] T5 (U5) — Write `seed-shields.ts` (export testable run function; build service from `process.env`, dotenv — avoids `env.ts` JWT_SECRET hard-fail) + npm script + script test (mocked fetch, in-memory teams) — acceptance (spec "Seed Shields Population"): Wikimedia primary; TheSportsDB fallback; existing logo skipped; `--force` re-syncs; unresolved listed and script completes; summary counts correct.
 
 ## Phase 5: Verification — change-wide gate
 

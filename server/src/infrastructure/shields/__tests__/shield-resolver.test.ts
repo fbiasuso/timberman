@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildCandidateTitles, resolveShieldUrl } from '../shield-resolver.js';
+import { buildCandidateTitles, resolveShieldUrl, SHIELD_RESOLVER_USER_AGENT } from '../shield-resolver.js';
 
 // ── Fake API payloads ──────────────────────────────────────────────
 
@@ -147,5 +147,96 @@ describe('resolveShieldUrl — both miss', () => {
       throw new Error('network down');
     });
     await expect(resolveShieldUrl('River Plate', [], { fetchFn, delayMs: 0 })).resolves.toBeNull();
+  });
+});
+
+// ── resolveShieldUrl — rate-limit retries (429/503 + backoff) ──────
+
+describe('resolveShieldUrl — rate-limit retries', () => {
+  it('retries on 429 and returns the thumbnail once the request succeeds', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 429 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 429 }))
+      .mockResolvedValueOnce(jsonResponse(WIKI_HIT('https://upload.wikimedia.org/river.png')));
+    const url = await resolveShieldUrl('River Plate', [], { fetchFn, delayMs: 0, retryBackoffMs: [1, 2] });
+    expect(url).toBe('https://upload.wikimedia.org/river.png');
+    expect(fetchFn).toHaveBeenCalledTimes(3); // 2 × 429, then success
+  });
+
+  it('retries on 503, then falls back to TheSportsDB when Wikimedia stays down', async () => {
+    const fetchFn = vi.fn(async (url: string) =>
+      url.includes('wikipedia.org')
+        ? new Response('{}', { status: 503 })
+        : jsonResponse(SPORTSDB_HIT('https://www.thesportsdb.com/badge.png')),
+    );
+    const url = await resolveShieldUrl('Deportivo Riestra', [], { fetchFn, delayMs: 0, retryBackoffMs: [1, 2, 4] });
+    expect(url).toBe('https://www.thesportsdb.com/badge.png');
+
+    // The first Wikimedia candidate was attempted 1 + 3 times before giving up.
+    const firstWikiUrl = fetchFn.mock.calls.map(([u]) => u).find((u) => u.includes('wikipedia.org'));
+    const firstWikiAttempts = fetchFn.mock.calls.filter(([u]) => u === firstWikiUrl);
+    expect(firstWikiAttempts).toHaveLength(4); // 1 initial + 3 retries on 503
+  });
+
+  it('gives up after max retries on persistent 429 and resolves to null (never throws)', async () => {
+    const fetchFn = vi.fn(async () => new Response('{}', { status: 429 }));
+    await expect(resolveShieldUrl('X', [], { fetchFn, delayMs: 0, retryBackoffMs: [1, 1, 1] })).resolves.toBeNull();
+  });
+
+  it('backs off per the Retry-After header instead of the schedule', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchFn = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('{}', { status: 429, headers: { 'Retry-After': '3' } }))
+        .mockResolvedValueOnce(jsonResponse(WIKI_HIT('https://upload.wikimedia.org/river.png')));
+      const promise = resolveShieldUrl('River Plate', [], { fetchFn, delayMs: 0, retryBackoffMs: [1, 2] });
+
+      // Retry-After: 3s — after 2s the retry must NOT have fired yet.
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+
+      // Past 3s → the retry fires and succeeds.
+      await vi.advanceTimersByTimeAsync(1_500);
+      await expect(promise).resolves.toBe('https://upload.wikimedia.org/river.png');
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── resolveShieldUrl — User-Agent header ───────────────────────────
+
+describe('resolveShieldUrl — User-Agent header', () => {
+  it('sends the descriptive User-Agent on every Wikimedia request', async () => {
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('wikipedia.org')) return jsonResponse(WIKI_HIT('https://upload.wikimedia.org/river.png'));
+      return jsonResponse(SPORTSDB_HIT('https://www.thesportsdb.com/badge.png'));
+    });
+    await resolveShieldUrl('River Plate', [], { fetchFn, delayMs: 0 });
+
+    const uas = fetchFn.mock.calls.map(([, init]) => (init?.headers as Record<string, string>)['User-Agent']);
+    expect(uas).toHaveLength(1);
+    expect(uas[0]).toBe(SHIELD_RESOLVER_USER_AGENT);
+  });
+
+  it('sends the descriptive User-Agent on the TheSportsDB fallback request', async () => {
+    let sportsInit: RequestInit | undefined;
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('wikipedia.org')) return jsonResponse(WIKI_MISS);
+      sportsInit = init;
+      return jsonResponse(SPORTSDB_HIT('https://www.thesportsdb.com/badge.png'));
+    });
+    const url = await resolveShieldUrl('Gimnasia', [], { fetchFn, delayMs: 0 });
+    expect(url).toBe('https://www.thesportsdb.com/badge.png');
+    expect((sportsInit?.headers as Record<string, string>)['User-Agent']).toBe(SHIELD_RESOLVER_USER_AGENT);
+  });
+
+  it('exposes a descriptive, contactable User-Agent constant', () => {
+    expect(SHIELD_RESOLVER_USER_AGENT).toContain('timberman-shield-seed/1.0');
+    expect(SHIELD_RESOLVER_USER_AGENT).toContain('https://github.com/fbiasuso/timberman');
+    expect(SHIELD_RESOLVER_USER_AGENT).toContain('contact: admin@example.com');
   });
 });

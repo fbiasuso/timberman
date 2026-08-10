@@ -22,7 +22,7 @@
 
 **Alternatives considered**: inline if/else in `index.ts` — rejected: untestable fail-soft logic; env var switch in the adapters themselves — rejected: service shouldn't know about selection.
 
-**Supabase client — choice: `@supabase/supabase-js` v2 (upload + `getPublicUrl`).** Alternatives: raw REST via fetch — rejected: hand-rolls auth headers, signed uploads, error handling; supabase-js is the canonical client. Upload path inside bucket: `{teamId}.{ext}` with `{ contentType, cacheControl: '30d', upsert: true }`; `getPublicUrl` yields `…/storage/v1/object/public/logos/{teamId}.{ext}`. `upsert: true` replaces the old object on re-upload (no orphans, mirrors local overwrite).
+**Supabase client — choice: `@supabase/supabase-js` v2 (upload + `getPublicUrl`).** Alternatives: raw REST via fetch — rejected: hand-rolls auth headers, signed uploads, error handling; supabase-js is the canonical client. Upload path inside bucket: `team-{teamId}.{ext}` with `{ contentType, cacheControl: '30d', upsert: true }`; `getPublicUrl` yields `…/storage/v1/object/public/logos/team-{teamId}.{ext}`. `upsert: true` replaces the old object on re-upload (no orphans, mirrors local overwrite).
 
 ### Decision D3: Multipart route — `POST /api/admin/teams/:teamId/logo`
 

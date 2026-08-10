@@ -44,7 +44,7 @@ Chain strategy: pending
 **Dependencies**: U1 (port method)
 **Est. lines**: server ~290 | client 0
 
-- [x] T2 (U2) — Add `SupabaseImageService` + factory + env fields; wire into `index.ts` via `createImageService` — acceptance: default `local`; `supabase` + creds → supabase adapter (mocked client, no network); missing creds → fail-soft local + error log (spec "Storage Backend Selection"); `storeFromBuffer` uploads `logos/{teamId}.{ext}` and returns public URL, null on error, never throws.
+- [x] T2 (U2) — Add `SupabaseImageService` + factory + env fields; wire into `index.ts` via `createImageService` — acceptance: default `local`; `supabase` + creds → supabase adapter (mocked client, no network); missing creds → fail-soft local + error log (spec "Storage Backend Selection"); `storeFromBuffer` uploads `team-{teamId}.{ext}` and returns public URL, null on error, never throws.
 
 ## Phase 2: Server Routes — multipart logo endpoint (D3)
 
@@ -88,7 +88,8 @@ Chain strategy: pending
 **Dependencies**: U1–U5
 **Est. lines**: 0 | 0
 
-- [ ] T6 (U6) — Run `npm run lint` (tsc --noEmit) + `npm test` in `server/`, then `npm run lint` + `npm test` in `client/` — acceptance: full suite (728+ existing + new) green on both sides, tsc clean, no regressions in `resolveLogoUrl`/static serving (D6 untouched).
+- [x] T6 (U6) — Run `npm run lint` (tsc --noEmit) + `npm test` in `server/`, then `npm run lint` + `npm test` in `client/` — acceptance: full suite (790: 530 server + 260 client) green on both sides, tsc clean, no regressions in `resolveLogoUrl`/static serving (D6 untouched).
+  - _Reconciled at archive (2026-08-09): T6 is the verification gate; executed by sdd-verify — PASS WITH WARNINGS, 790 tests (530 server + 260 client), tsc clean on both sides. Box flipped by sdd-archive with verify gate proof._
 
 ## Review Workload Forecast (summary)
 

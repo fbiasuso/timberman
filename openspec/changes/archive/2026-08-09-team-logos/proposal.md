@@ -39,7 +39,7 @@ None — all changes extend existing capabilities.
 ## Approach
 
 1. Extract shared validation (`sniffImageType`, 1 MiB cap) into a reusable helper; add `storeFromBuffer` to the `ImageService` port; `LocalFileImageService.downloadAndStore` delegates to it.
-2. Add `SupabaseImageService` (`@supabase/supabase-js`): `storeFromBuffer` uploads to `logos/{teamId}.{ext}`, returns the public URL; `downloadAndStore` = download → shared validation → upload. Select in `server/src/index.ts` via new `IMAGE_STORAGE` env (plus `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+2. Add `SupabaseImageService` (`@supabase/supabase-js`): `storeFromBuffer` uploads `team-{teamId}.{ext}` to bucket `logos`, returns the public URL; `downloadAndStore` = download → shared validation → upload. Select in `server/src/index.ts` via new `IMAGE_STORAGE` env (plus `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
 3. Server: register `@fastify/multipart`; `POST /api/admin/teams/:teamId/logo` branches on `request.isMultipart()` — file → buffer → `storeFromBuffer`; JSON `{url}` → existing `downloadAndStore`. `SetTeamLogoUseCase` accepts a pre-built logo value (URL from buffer path or download).
 4. Client: TeamForm file input with preview and validation; upload helper posts multipart; invalid/oversized files blocked client-side before upload.
 5. `server/scripts/seed-shields.ts`: for each team without a logo (or all with `--force`), resolve → download → upload → update `teams.logo`; log failures in a curated list. Safe to re-run.
@@ -85,11 +85,11 @@ None — all changes extend existing capabilities.
 
 ## Success Criteria
 
-- [ ] With `IMAGE_STORAGE=supabase`, `teams.logo` stores the full public URL; dev/test with `local` unchanged
-- [ ] `storeFromBuffer` shares the validated write path; all existing image-service tests pass
-- [ ] TeamForm uploads a file with preview; invalid type/size blocked client-side; `POST /api/admin/teams/:teamId/logo` works for both multipart and JSON
-- [ ] `seed-shields` populates shields for the 66 seeded teams; re-run skips existing logos; `--force` re-syncs; failed teams reported
-- [ ] Full existing test suite (728 tests) stays green
+- [x] With `IMAGE_STORAGE=supabase`, `teams.logo` stores the full public URL; dev/test with `local` unchanged
+- [x] `storeFromBuffer` shares the validated write path; all existing image-service tests pass
+- [x] TeamForm uploads a file with preview; invalid type/size blocked client-side; `POST /api/admin/teams/:teamId/logo` works for both multipart and JSON
+- [x] `seed-shields` populates shields for the 66 seeded teams; re-run skips existing logos; `--force` re-syncs; failed teams reported
+- [x] Full existing test suite (790 tests: 530 server + 260 client) stays green
 
 ## Open Questions
 

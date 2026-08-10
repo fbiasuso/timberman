@@ -19,8 +19,15 @@
  * Unresolvable teams are listed in the summary for manual curation — the
  * script still exits 0 (the unresolved list IS the report).
  *
+ * With `--dry-run` the script previews what a real run WOULD do: shield
+ * URLs are still resolved for every eligible team (so the report shows
+ * what would be found), but NOTHING is downloaded, stored, or persisted —
+ * no files written, no DB writes. Pairs with `--force` to preview a full
+ * re-resolve. The dry-run summary reports a `wouldStore` count instead of
+ * `stored`; `storeFailed` is always empty in dry-run (no store attempted).
+ *
  * Usage:
- *   npx tsx server/scripts/seed-shields.ts [--force]
+ *   npx tsx server/scripts/seed-shields.ts [--force] [--dry-run]
  *
  * Env:
  *   DATABASE_URL                    required
@@ -52,6 +59,7 @@ async function main(): Promise<void> {
   }
 
   const force = process.argv.includes('--force');
+  const dryRun = process.argv.includes('--dry-run');
   const queryClient = postgres(databaseUrl);
   const db = drizzle(queryClient, { schema });
 
@@ -73,21 +81,29 @@ async function main(): Promise<void> {
     },
   };
 
+  if (dryRun) {
+    console.log('⚠️  DRY RUN — no data will be written. Preview only.\n');
+  }
   console.log(
-    `🛡️  Seeding team shields${force ? ' (--force: re-resolving every team)' : ' (skipping teams with a logo)'}...\n`,
+    `🛡️  Seeding team shields${force ? ' (--force: re-resolving every team)' : ' (skipping teams with a logo)'}${dryRun ? ' (--dry-run: preview only)' : ''}...\n`,
   );
 
   const summary = await runShieldSeed({
     db: dbAdapter,
     imageService,
     force,
+    dryRun,
     delayMs: DEFAULT_DELAY_MS,
   });
 
   console.log('\n────────────────────────────────────────');
-  console.log('✅ Shield seed completed');
+  console.log(`✅ Shield seed completed${dryRun ? ' (dry-run — nothing was written)' : ''}`);
   console.log(`   Teams processed:    ${summary.total}`);
-  console.log(`   Stored:             ${summary.stored}`);
+  if (dryRun) {
+    console.log(`   Would store:        ${summary.wouldStore ?? 0}`);
+  } else {
+    console.log(`   Stored:             ${summary.stored}`);
+  }
   console.log(`   Skipped (has logo): ${summary.skipped}`);
   if (summary.unresolved.length > 0) {
     console.log(`   Unresolved (${summary.unresolved.length}) — for manual curation:`);

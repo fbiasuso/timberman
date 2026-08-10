@@ -11,6 +11,9 @@
  *   2. download + store through the injected image service (validated
  *      write path — 1 MiB cap + magic-byte sniff);
  *   3. persist `teams.logo` with the resolved value.
+ * With `dryRun`, step 1 still runs (so the preview shows what WOULD be
+ * found) but steps 2–3 are skipped entirely — no files written, no DB
+ * writes; resolved teams are counted in `wouldStore` instead of `stored`.
  * Unresolvable teams are reported in the summary — the run never throws on
  * them (spec "Unresolved reported") and the caller exits 0 (the list IS the
  * report).
@@ -43,6 +46,11 @@ export interface ShieldSeedSummary {
   unresolved: string[];
   /** Teams whose source resolved but the store rejected/failed the image. */
   storeFailed: string[];
+  /**
+   * Dry-run only: teams whose source resolved and WOULD have been stored.
+   * Undefined in normal runs so the bare summary shape is unchanged.
+   */
+  wouldStore?: number;
 }
 
 export interface RunShieldSeedOptions {
@@ -52,6 +60,12 @@ export interface RunShieldSeedOptions {
   resolveShield?: (name: string, aliases: string[] | null) => Promise<string | null>;
   /** Re-resolve/re-store even for teams that already have a logo. */
   force?: boolean;
+  /**
+   * Preview mode: still resolve each shield URL, but never download/store
+   * or write to the DB. Teams that would be stored are counted in
+   * `wouldStore`; `storeFailed` stays empty (no store attempted).
+   */
+  dryRun?: boolean;
   /** Pacing between teams in ms (0 disables) — Wikimedia/TheSportsDB rate limits. */
   delayMs?: number;
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
@@ -67,6 +81,7 @@ const DEFAULT_DELAY_MS = 300;
 /**
  * Seed shields for the whole registry. Skips teams with a logo unless
  * `force`; reports stored/skipped/unresolved/storeFailed counts and names.
+ * With `dryRun`, resolves URLs but never writes (see `RunShieldSeedOptions`).
  */
 export async function runShieldSeed(options: RunShieldSeedOptions): Promise<ShieldSeedSummary> {
   const {
@@ -74,6 +89,7 @@ export async function runShieldSeed(options: RunShieldSeedOptions): Promise<Shie
     imageService,
     resolveShield = (name: string, aliases: string[] | null) => resolveShieldUrl(name, aliases ?? []),
     force = false,
+    dryRun = false,
     delayMs = DEFAULT_DELAY_MS,
     logger = console,
   } = options;
@@ -85,6 +101,7 @@ export async function runShieldSeed(options: RunShieldSeedOptions): Promise<Shie
     skipped: 0,
     unresolved: [],
     storeFailed: [],
+    ...(dryRun ? { wouldStore: 0 } : {}),
   };
 
   for (const team of teams) {
@@ -96,6 +113,10 @@ export async function runShieldSeed(options: RunShieldSeedOptions): Promise<Shie
     const sourceUrl = await resolveShield(team.name, team.aliases);
     if (!sourceUrl) {
       summary.unresolved.push(team.name);
+    } else if (dryRun) {
+      // Preview only: nothing is downloaded, stored, or persisted.
+      summary.wouldStore = (summary.wouldStore ?? 0) + 1;
+      logger.log(`   🔍 ${team.name} → ${sourceUrl} (dry-run: would store)`);
     } else {
       const logo = await imageService.downloadAndStore(sourceUrl, team.id);
       if (!logo) {

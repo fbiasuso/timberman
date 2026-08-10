@@ -18,23 +18,23 @@
  *      unresolved. The resolver NEVER throws.
  *
  * Rate-limit hardening (Wikipedia throttles anonymous traffic mid-run):
- *   - every request sends a descriptive User-Agent (SHIELD_RESOLVER_USER_AGENT);
+ *   - every request sends a descriptive User-Agent (SHIELD_USER_AGENT,
+ *     shared with the image downloader in image-validation.ts);
  *   - 429/503 responses are retried up to `maxRetries` times (default 3)
  *     with exponential backoff (1s, 2s, 4s), honoring `Retry-After`
  *     (clamped to 10s per wait) before giving up.
  */
 
-import { DOWNLOAD_TIMEOUT_MS } from '../images/image-validation.js';
+import { DOWNLOAD_TIMEOUT_MS, SHIELD_USER_AGENT } from '../images/image-validation.js';
 
 /** Pacing between external API attempts — Wikimedia/TheSportsDB rate limits (design D5). */
 export const SHIELD_RESOLVER_DELAY_MS = 1000;
 
 /**
- * Descriptive User-Agent sent on every Wikimedia/TheSportsDB request —
- * Wikipedia throttles or blocks anonymous, UA-less traffic.
+ * Backward-compatible alias for the shared User-Agent constant — its home
+ * is image-validation.ts so the resolver and the image downloader agree.
  */
-export const SHIELD_RESOLVER_USER_AGENT =
-  'timberman-shield-seed/1.0 (https://github.com/fbiasuso/timberman; contact: admin@example.com)';
+export { SHIELD_USER_AGENT as SHIELD_RESOLVER_USER_AGENT } from '../images/image-validation.js';
 
 /** Statuses that trigger retry-with-backoff — Wikimedia/TheSportsDB rate limits. */
 const RETRYABLE_STATUSES = new Set([429, 503]);
@@ -134,7 +134,7 @@ async function fetchJson(fetchFn: ShieldFetch, url: string, retry: FetchJsonRetr
     try {
       response = await fetchFn(url, {
         signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-        headers: { 'User-Agent': SHIELD_RESOLVER_USER_AGENT },
+        headers: { 'User-Agent': SHIELD_USER_AGENT },
       });
     } catch {
       return null; // network failure — a miss, never a throw

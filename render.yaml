@@ -19,3 +19,12 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Team shield storage — supabase mode serves logos from the public
+      # `logos` bucket (durable, CDN) instead of Render's ephemeral disk.
+      # Fill SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in the Render dashboard.
+      - key: IMAGE_STORAGE
+        value: "supabase"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

@@ -56,3 +56,13 @@ archive:
     status: complete
     total_tests: 444
     prs: 5
+  teams-leagues:
+    archived_at: "2026-08-09"
+    status: complete
+    total_tests: 728
+    prs: 0
+  team-logos:
+    archived_at: "2026-08-09"
+    status: complete
+    total_tests: 790
+    prs: 5

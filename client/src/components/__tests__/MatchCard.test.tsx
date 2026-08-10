@@ -50,6 +50,8 @@ const baseMatch: MatchDTO = {
   visitorTeam: 'Boca Juniors',
   localImg: null,
   visitorImg: null,
+  localTeamId: null,
+  visitorTeamId: null,
   scheduledAt: null,
   result: null,
   score: null,

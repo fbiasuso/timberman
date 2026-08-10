@@ -6,6 +6,9 @@ import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { TournamentPointsRepo } from '../../../domain/ports/tournament-points-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
+import type { TeamRepo } from '../../../domain/ports/team-repo.js';
+import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
@@ -32,6 +35,9 @@ export function createRouter(
   config: SystemConfig,
   configRepo: SystemConfigRepo,
   tournamentPointsRepo: TournamentPointsRepo,
+  leagueRepo: LeagueRepo,
+  teamRepo: TeamRepo,
+  imageService: ImageService,
   uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
@@ -68,6 +74,9 @@ export function createRouter(
       bcryptService,
       config,
       configRepo,
+      leagueRepo,
+      teamRepo,
+      imageService,
       uow,
     ));
 

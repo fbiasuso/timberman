@@ -8,6 +8,12 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
+  // Image storage backend (design D2): 'local' (default) or 'supabase'.
+  IMAGE_STORAGE: z.enum(['local', 'supabase']).default('local'),
+  // Supabase Storage credentials — required only when IMAGE_STORAGE=supabase;
+  // the factory fails soft to local when they are missing.
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

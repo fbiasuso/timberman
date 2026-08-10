@@ -289,7 +289,7 @@ describe('CarteleraPage', () => {
     ).toBeDefined();
   });
 
-  it('hides the accumulated pozo card when carryover is zero', () => {
+  it('hides the accumulated pozo card when carryover is zero but keeps the pozo note', () => {
     vi.mocked(useCurrentMatches).mockReturnValue({ data: mockMatchesData, isLoading: false, error: null } as any);
 
     render(
@@ -299,9 +299,11 @@ describe('CarteleraPage', () => {
     );
     expect(screen.queryByText('Pozo acumulado de fechas anteriores')).toBeNull();
     expect(screen.queryByText('$0.00')).toBeNull();
+    // The clarification note is NOT part of the pozo container: it must stay
+    // visible even when there is no carryover.
     expect(
-      screen.queryByText('El pozo se calcula al cerrar la fecha.'),
-    ).toBeNull();
+      screen.getByText('El pozo se calcula al cerrar la fecha.'),
+    ).toBeDefined();
   });
 
   it('renders Fechas anteriores below the active date content', () => {

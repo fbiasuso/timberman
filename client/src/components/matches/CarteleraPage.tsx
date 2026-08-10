@@ -207,7 +207,10 @@ export default function CarteleraPage() {
         </div>
       )}
 
-      {!isExpired && carryover > 0 && (
+      {/* Pozo note — always visible while the date is open, regardless of
+          whether there is a carryover (the pozo container above is hidden
+          when carryover is zero, but this clarification must not hide). */}
+      {!isExpired && (
         <p
           style={{
             margin: '-12px 0 20px',

@@ -18,6 +18,14 @@ describe('Match', () => {
       expect(match.result).toBeNull();
       expect(match.score).toBeNull();
       expect(match.hasResult()).toBe(false);
+      expect(match.localTeamId).toBeNull();
+      expect(match.visitorTeamId).toBeNull();
+    });
+
+    it('creates a match with registry team ids', () => {
+      const match = Match.new({ ...baseProps, localTeamId: 7, visitorTeamId: 8 });
+      expect(match.localTeamId).toBe(7);
+      expect(match.visitorTeamId).toBe(8);
     });
 
     it('creates a match from snapshot', () => {
@@ -28,6 +36,8 @@ describe('Match', () => {
         visitorTeam: 'Independiente',
         localImg: null,
         visitorImg: null,
+        localTeamId: null,
+        visitorTeamId: null,
         scheduledAt: null,
         result: null,
         score: null,
@@ -104,6 +114,17 @@ describe('Match', () => {
       expect(updated.scheduledAt).toEqual(new Date('2026-08-02T20:00:00Z')); // unchanged
       expect(updated.result).toBeNull();
       expect(updated.score).toBeNull();
+    });
+
+    it('sets team ids and clears them with null', () => {
+      const match = Match.new(baseProps);
+      const linked = match.withDetails({ localTeamId: 7, visitorTeamId: 8 });
+      expect(linked.localTeamId).toBe(7);
+      expect(linked.visitorTeamId).toBe(8);
+
+      const cleared = linked.withDetails({ localTeamId: null });
+      expect(cleared.localTeamId).toBeNull();
+      expect(cleared.visitorTeamId).toBe(8); // untouched side kept
     });
 
     it('clears images and scheduledAt when null is passed', () => {

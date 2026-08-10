@@ -1,10 +1,23 @@
 import { useState } from 'react';
 import { useCreateMatch } from '../../hooks/use-admin';
+import { useLeagues } from '../../hooks/use-teams';
+import Autocomplete from '../Autocomplete';
+import { resolveLogoUrl } from '../../utils/format';
+import type { TeamDTO } from '../../types';
 import theme from '../../styles/theme';
 
 interface AddMatchFormProps {
   /** The open date the new match will belong to */
   dateId: number;
+}
+
+/** One match side: the picked registry team + the editable shield field. */
+interface SideState {
+  team: TeamDTO | null;
+  /** Input value — the registry team's name once picked. */
+  name: string;
+  /** Shield URL input (auto-filled from the team logo, overridable). */
+  img: string;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -78,59 +91,108 @@ const errorBox: React.CSSProperties = {
   fontSize: 14,
 };
 
+const hintText: React.CSSProperties = {
+  margin: '8px 0 0',
+  fontSize: 12,
+  color: theme.textoSecundario,
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AddMatchForm({ dateId }: AddMatchFormProps) {
   const createMatch = useCreateMatch();
-  const [localTeam, setLocalTeam] = useState('');
-  const [visitorTeam, setVisitorTeam] = useState('');
-  const [localImg, setLocalImg] = useState('');
-  const [visitorImg, setVisitorImg] = useState('');
+  const { data: leagues } = useLeagues();
+  const allLeagues = leagues ?? [];
+
+  // UI-only league selector (design D11): it only filters the autocomplete
+  // options; the league id is NEVER submitted to the match endpoints.
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(null);
+  const selectedLeague =
+    allLeagues.find((l) => l.id === selectedLeagueId) ?? allLeagues[0] ?? null;
+  const options = selectedLeague?.teams ?? [];
+
+  const [local, setLocal] = useState<SideState>({ team: null, name: '', img: '' });
+  const [visitor, setVisitor] = useState<SideState>({ team: null, name: '', img: '' });
   const [scheduledAt, setScheduledAt] = useState('');
+
+  const handleType =
+    (set: React.Dispatch<React.SetStateAction<SideState>>) => (value: string) => {
+      // Typing cancels the picked team — create requires an explicit pick
+      // (free-text team input is removed).
+      set((prev) => ({ ...prev, name: value, team: null }));
+    };
+
+  const handleSelect =
+    (set: React.Dispatch<React.SetStateAction<SideState>>) => (team: TeamDTO) => {
+      // Pick → name + id from the registry, shield auto-filled (overridable).
+      set({ team, name: team.name, img: resolveLogoUrl(team.logo) ?? '' });
+    };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const local = localTeam.trim();
-    const visitor = visitorTeam.trim();
-    if (!local || !visitor) return;
+    if (!local.team || !visitor.team) return;
 
     createMatch.mutate(
       {
         matchDateId: dateId,
-        localTeam: local,
-        visitorTeam: visitor,
-        localImg: localImg.trim() || null,
-        visitorImg: visitorImg.trim() || null,
+        localTeam: local.team.name,
+        visitorTeam: visitor.team.name,
+        localImg: local.img.trim() || null,
+        visitorImg: visitor.img.trim() || null,
+        localTeamId: local.team.id,
+        visitorTeamId: visitor.team.id,
         scheduledAt: scheduledAt || null,
       },
       {
         onSuccess: () => {
-          setLocalTeam('');
-          setVisitorTeam('');
-          setLocalImg('');
-          setVisitorImg('');
+          setLocal({ team: null, name: '', img: '' });
+          setVisitor({ team: null, name: '', img: '' });
           setScheduledAt('');
         },
       },
     );
   };
 
+  // Both teams must be picked from the registry before the match can be created
+  const canSubmit = local.team != null && visitor.team != null && !createMatch.isPending;
+
   return (
     <form onSubmit={handleSubmit} style={form}>
       <h4 style={title}>Agregar partido</h4>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={label} htmlFor="add-match-league">
+          Liga
+        </label>
+        <select
+          id="add-match-league"
+          style={input}
+          value={selectedLeague?.id ?? ''}
+          onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
+        >
+          {allLeagues.length === 0 && <option value="">Sin ligas</option>}
+          {allLeagues.map((league) => (
+            <option key={league.id} value={league.id}>
+              {league.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div style={grid}>
         <div>
           <label style={label} htmlFor="add-match-local">
             Equipo Local
           </label>
-          <input
+          <Autocomplete
             id="add-match-local"
-            style={input}
-            placeholder="Equipo local"
-            value={localTeam}
-            onChange={(e) => setLocalTeam(e.target.value)}
-            required
+            options={options}
+            getKey={(t) => String(t.id)}
+            getLabel={(t) => t.name}
+            value={local.name}
+            onChange={handleType(setLocal)}
+            onSelect={handleSelect(setLocal)}
+            placeholder="Elegí un equipo"
           />
         </div>
 
@@ -138,13 +200,15 @@ export default function AddMatchForm({ dateId }: AddMatchFormProps) {
           <label style={label} htmlFor="add-match-visitor">
             Equipo Visitante
           </label>
-          <input
+          <Autocomplete
             id="add-match-visitor"
-            style={input}
-            placeholder="Equipo visitante"
-            value={visitorTeam}
-            onChange={(e) => setVisitorTeam(e.target.value)}
-            required
+            options={options}
+            getKey={(t) => String(t.id)}
+            getLabel={(t) => t.name}
+            value={visitor.name}
+            onChange={handleType(setVisitor)}
+            onSelect={handleSelect(setVisitor)}
+            placeholder="Elegí un equipo"
           />
         </div>
 
@@ -156,8 +220,8 @@ export default function AddMatchForm({ dateId }: AddMatchFormProps) {
             id="add-match-local-img"
             style={input}
             placeholder="https://..."
-            value={localImg}
-            onChange={(e) => setLocalImg(e.target.value)}
+            value={local.img}
+            onChange={(e) => setLocal((prev) => ({ ...prev, img: e.target.value }))}
           />
         </div>
 
@@ -169,8 +233,8 @@ export default function AddMatchForm({ dateId }: AddMatchFormProps) {
             id="add-match-visitor-img"
             style={input}
             placeholder="https://..."
-            value={visitorImg}
-            onChange={(e) => setVisitorImg(e.target.value)}
+            value={visitor.img}
+            onChange={(e) => setVisitor((prev) => ({ ...prev, img: e.target.value }))}
           />
         </div>
 
@@ -188,11 +252,11 @@ export default function AddMatchForm({ dateId }: AddMatchFormProps) {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={createMatch.isPending}
-        style={createMatch.isPending ? submitBtnDisabled : submitBtn}
-      >
+      {!canSubmit && allLeagues.length > 0 && (
+        <p style={hintText}>Elegí un equipo de la lista para cada lado.</p>
+      )}
+
+      <button type="submit" disabled={!canSubmit} style={canSubmit ? submitBtn : submitBtnDisabled}>
         {createMatch.isPending ? 'Creando...' : 'Crear partido'}
       </button>
 

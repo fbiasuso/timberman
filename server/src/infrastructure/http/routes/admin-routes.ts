@@ -7,6 +7,9 @@ import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { TournamentPointsRepo } from '../../../domain/ports/tournament-points-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
+import type { TeamRepo } from '../../../domain/ports/team-repo.js';
+import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { UnitOfWork } from '../../../domain/ports/unit-of-work.js';
 import type { JwtServiceImpl } from '../../auth/jwt-service.js';
 import type { BcryptServiceImpl } from '../../auth/bcrypt-service.js';
@@ -33,6 +36,17 @@ import { CreateMatchUseCase } from '../../../application/tournament/create-match
 import { UpdateMatchDetailsUseCase } from '../../../application/tournament/update-match-details-use-case.js';
 import type { MatchDTO as MatchDetailsDTO } from '../../../application/tournament/update-match-details-use-case.js';
 import { PozoCalculator } from '../../../application/betting/pozo-calculator.js';
+import { CreateLeagueUseCase } from '../../../application/teams/create-league-use-case.js';
+import { UpdateLeagueUseCase } from '../../../application/teams/update-league-use-case.js';
+import { DeleteLeagueUseCase } from '../../../application/teams/delete-league-use-case.js';
+import { ListLeaguesUseCase } from '../../../application/teams/list-leagues-use-case.js';
+import { ListTeamsByLeagueUseCase } from '../../../application/teams/list-teams-by-league-use-case.js';
+import { CreateTeamUseCase } from '../../../application/teams/create-team-use-case.js';
+import { UpdateTeamUseCase } from '../../../application/teams/update-team-use-case.js';
+import { DeleteTeamUseCase } from '../../../application/teams/delete-team-use-case.js';
+import { SetTeamLogoUseCase } from '../../../application/teams/set-team-logo-use-case.js';
+import { sniffImageType } from '../../images/image-validation.js';
+import type { LeagueDTO, LeagueWithTeamsDTO, TeamDTO } from '../../../application/teams/dto.js';
 import { createAuthMiddleware } from '../middlewares/auth-middleware.js';
 import { createAdminMiddleware } from '../middlewares/admin-middleware.js';
 
@@ -85,6 +99,8 @@ const matchDetailsFields = {
   visitorTeam: z.string().min(1),
   localImg: z.string().nullable().optional(),
   visitorImg: z.string().nullable().optional(),
+  localTeamId: z.number().int().positive().nullable().optional(),
+  visitorTeamId: z.number().int().positive().nullable().optional(),
   scheduledAt: z
     .string()
     .refine((v) => !Number.isNaN(Date.parse(v)), 'Must be a valid ISO date string')
@@ -99,6 +115,52 @@ const createMatchSchema = z.object({
 
 const updateMatchDetailsSchema = z.object(matchDetailsFields).partial();
 
+// Non-blank text: min(1) rejects '', the refine rejects whitespace-only.
+// Values are stored AS TYPED (no trim transform — tournament convention).
+const nonBlankText = (max: number) =>
+  z.string().min(1).max(max).refine((v) => v.trim().length > 0, { message: 'Must not be blank' });
+
+const leagueParamsSchema = z.object({
+  leagueId: z.coerce.number().int().positive(),
+});
+
+const teamParamsSchema = z.object({
+  teamId: z.coerce.number().int().positive(),
+});
+
+const createLeagueSchema = z.object({
+  name: nonBlankText(100),
+  country: nonBlankText(100),
+  format: z.enum(['liga', 'copa']),
+});
+
+const updateLeagueSchema = createLeagueSchema.partial();
+
+// Team aliases: at most 20 short strings (design server-layers note).
+const aliasesField = z.array(z.string().min(1).max(100)).max(20).nullable().optional();
+
+const createTeamSchema = z.object({
+  name: nonBlankText(100),
+  aliases: aliasesField,
+  logoUrl: z.string().url().nullable().optional(),
+  // A team MUST belong to at least one league (spec "Membership required").
+  leagueIds: z.array(z.number().int().positive()).min(1),
+});
+
+const updateTeamSchema = z.object({
+  name: nonBlankText(100).optional(),
+  aliases: aliasesField,
+  logoUrl: z.string().url().nullable().optional(),
+  // On PATCH, leagueIds is optional — but when present it must keep ≥1 league.
+  leagueIds: z.array(z.number().int().positive()).min(1).optional(),
+});
+
+// Re-upload a team shield: the URL is validated by zod (absolute http(s)),
+// then downloaded/validated/stored by the image service (see design D5/D6).
+const setTeamLogoSchema = z.object({
+  url: z.string().url(),
+});
+
 // ── DTOs (shape of API responses) ─────────────────────────────────
 
 interface MatchDTO {
@@ -108,6 +170,8 @@ interface MatchDTO {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  localTeamId: number | null;
+  visitorTeamId: number | null;
   scheduledAt: string | null;
   result: string | null;
   score: string | null;
@@ -133,6 +197,8 @@ function toMatchDTO(match: MatchDetailsDTO): MatchDTO {
     visitorTeam: match.visitorTeam,
     localImg: match.localImg,
     visitorImg: match.visitorImg,
+    localTeamId: match.localTeamId,
+    visitorTeamId: match.visitorTeamId,
     scheduledAt: match.scheduledAt?.toISOString() ?? null,
     result: match.result,
     score: match.score,
@@ -150,6 +216,51 @@ function toMatchDateDTO(md: CreatedMatchDateDTO, carryover: number): MatchDateDT
     commission: 0, // fresh date — commission is snapshotted at close
     carryover,
     createdAt: md.createdAt.toISOString(),
+  };
+}
+
+interface LeagueAPIDTO {
+  id: number;
+  name: string;
+  country: string;
+  format: 'liga' | 'copa';
+  createdAt: string;
+}
+
+interface TeamAPIDTO {
+  id: number;
+  name: string;
+  aliases: string[] | null;
+  logo: string | null;
+  leagueIds: number[];
+  createdAt: string;
+}
+
+function toLeagueAPIDTO(league: LeagueDTO): LeagueAPIDTO {
+  return {
+    id: league.id,
+    name: league.name,
+    country: league.country,
+    format: league.format,
+    createdAt: league.createdAt.toISOString(),
+  };
+}
+
+function toTeamAPIDTO(team: TeamDTO): TeamAPIDTO {
+  return {
+    id: team.id,
+    name: team.name,
+    aliases: team.aliases,
+    logo: team.logo,
+    leagueIds: team.leagueIds,
+    createdAt: team.createdAt.toISOString(),
+  };
+}
+
+function toLeagueWithTeamsAPIDTO(league: LeagueWithTeamsDTO) {
+  return {
+    ...toLeagueAPIDTO(league),
+    teams: league.teams.map(toTeamAPIDTO),
   };
 }
 
@@ -177,6 +288,9 @@ export function createAdminRoutes(
   bcryptService: BcryptServiceImpl,
   config: SystemConfig,
   configRepo: SystemConfigRepo,
+  leagueRepo: LeagueRepo,
+  teamRepo: TeamRepo,
+  imageService: ImageService,
   uow?: UnitOfWork,
 ): FastifyPluginAsync {
   return async (fastify) => {
@@ -237,8 +351,19 @@ export function createAdminRoutes(
       uow,
     );
     const createDateUseCase = new CreateDateUseCase(tournamentRepo, config);
-    const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo);
-    const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo);
+    const createMatchUseCase = new CreateMatchUseCase(tournamentRepo, matchRepo, teamRepo);
+    const updateMatchDetailsUseCase = new UpdateMatchDetailsUseCase(matchRepo, tournamentRepo, teamRepo);
+
+    // ── Teams & Leagues (registry) ─────────────────────────────
+    const createLeagueUseCase = new CreateLeagueUseCase(leagueRepo);
+    const updateLeagueUseCase = new UpdateLeagueUseCase(leagueRepo);
+    const deleteLeagueUseCase = new DeleteLeagueUseCase(leagueRepo);
+    const listLeaguesUseCase = new ListLeaguesUseCase(leagueRepo, teamRepo);
+    const listTeamsByLeagueUseCase = new ListTeamsByLeagueUseCase(teamRepo, leagueRepo);
+    const createTeamUseCase = new CreateTeamUseCase(teamRepo, leagueRepo, imageService);
+    const updateTeamUseCase = new UpdateTeamUseCase(teamRepo, leagueRepo, imageService);
+    const deleteTeamUseCase = new DeleteTeamUseCase(teamRepo);
+    const setTeamLogoUseCase = new SetTeamLogoUseCase(teamRepo, imageService);
 
     // ── GET /api/admin/users ─────────────────────────────────────
     fastify.get('/api/admin/users', {
@@ -372,6 +497,8 @@ export function createAdminRoutes(
         visitorTeam: body.visitorTeam,
         localImg: body.localImg,
         visitorImg: body.visitorImg,
+        localTeamId: body.localTeamId,
+        visitorTeamId: body.visitorTeamId,
         scheduledAt: toDateOrUndefined(body.scheduledAt),
       });
       return reply.status(201).send({ match: toMatchDTO(match) });
@@ -389,6 +516,8 @@ export function createAdminRoutes(
         visitorTeam: body.visitorTeam,
         localImg: body.localImg,
         visitorImg: body.visitorImg,
+        localTeamId: body.localTeamId,
+        visitorTeamId: body.visitorTeamId,
         scheduledAt: toDateOrUndefined(body.scheduledAt),
       });
       return reply.send({ match: toMatchDTO(match) });
@@ -439,6 +568,127 @@ export function createAdminRoutes(
       const { dateId } = dateParamsSchema.parse(request.params);
       const result = await publishResultsUseCase.execute(dateId);
       return reply.send(result);
+    });
+
+    // ── POST /api/admin/leagues ────────────────────────────────────
+    fastify.post('/api/admin/leagues', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createLeagueSchema.parse(request.body);
+      const league = await createLeagueUseCase.execute(body);
+      return reply.status(201).send({ league: toLeagueAPIDTO(league) });
+    });
+
+    // ── GET /api/admin/leagues ─────────────────────────────────────
+    fastify.get('/api/admin/leagues', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (_request, _reply) => {
+      const leagues = await listLeaguesUseCase.execute();
+      return { leagues: leagues.map(toLeagueWithTeamsAPIDTO) };
+    });
+
+    // ── PATCH /api/admin/leagues/:leagueId ─────────────────────────
+    fastify.patch('/api/admin/leagues/:leagueId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      const body = updateLeagueSchema.parse(request.body);
+      const league = await updateLeagueUseCase.execute({ leagueId, ...body });
+      return reply.send({ league: toLeagueAPIDTO(league) });
+    });
+
+    // ── DELETE /api/admin/leagues/:leagueId ────────────────────────
+    fastify.delete('/api/admin/leagues/:leagueId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      await deleteLeagueUseCase.execute(leagueId);
+      return reply.status(204).send();
+    });
+
+    // ── GET /api/admin/leagues/:leagueId/teams ─────────────────────
+    fastify.get('/api/admin/leagues/:leagueId/teams', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { leagueId } = leagueParamsSchema.parse(request.params);
+      const teams = await listTeamsByLeagueUseCase.execute(leagueId);
+      return { teams: teams.map(toTeamAPIDTO) };
+    });
+
+    // ── POST /api/admin/teams ──────────────────────────────────────
+    fastify.post('/api/admin/teams', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const body = createTeamSchema.parse(request.body);
+      const team = await createTeamUseCase.execute(body);
+      return reply.status(201).send({ team: toTeamAPIDTO(team) });
+    });
+
+    // ── PATCH /api/admin/teams/:teamId ─────────────────────────────
+    fastify.patch('/api/admin/teams/:teamId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+      const body = updateTeamSchema.parse(request.body);
+      const team = await updateTeamUseCase.execute({ teamId, ...body });
+      return reply.send({ team: toTeamAPIDTO(team) });
+    });
+
+    // ── DELETE /api/admin/teams/:teamId ────────────────────────────
+    fastify.delete('/api/admin/teams/:teamId', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+      await deleteTeamUseCase.execute(teamId);
+      return reply.status(204).send();
+    });
+
+    // ── POST /api/admin/teams/:teamId/logo ─────────────────────────
+    // Shield input is either a multipart file upload (field `file`) or a
+    // JSON `{url}` (legacy download path, kept for compatibility).
+    //
+    // Error contract (design D3, spec team-registry):
+    //   - multipart, invalid format (magic-byte sniff) → 415 { message }
+    //   - multipart, oversized (>1 MiB) → 400 (FST_REQ_FILE_TOO_LARGE mapped
+    //     by the error handler), team unchanged
+    //   - multipart, store failure after valid sniff → 200 { team, stored:false }
+    //     — the client surfaces the unchanged state
+    //   - JSON, unreachable/invalid URL → 400 { message }, existing logo kept
+    //   - team not found → 404 (existing behavior)
+    // The team is ONLY updated after a successful store (use-case invariant).
+    fastify.post('/api/admin/teams/:teamId/logo', {
+      preHandler: [authMiddleware, adminMiddleware],
+    }, async (request, reply) => {
+      const { teamId } = teamParamsSchema.parse(request.params);
+
+      if (request.isMultipart()) {
+        const file = await request.file();
+        if (!file) {
+          return reply.status(400).send({
+            error: 'FILE_REQUIRED',
+            message: 'Multipart field "file" is required',
+          });
+        }
+        const bytes = await file.toBuffer();
+        if (!sniffImageType(bytes)) {
+          return reply.status(415).send({
+            error: 'UNSUPPORTED_MEDIA_TYPE',
+            message: 'Image format not supported — must be PNG, JPEG or WebP',
+          });
+        }
+        const result = await setTeamLogoUseCase.execute({ teamId, bytes });
+        return reply.send({ team: toTeamAPIDTO(result.team), stored: result.stored });
+      }
+
+      const body = setTeamLogoSchema.parse(request.body);
+      const result = await setTeamLogoUseCase.execute({ teamId, url: body.url });
+      if (!result.stored) {
+        return reply.status(400).send({
+          error: 'LOGO_STORE_FAILED',
+          message: 'Could not download or store the shield image',
+        });
+      }
+      return reply.send({ team: toTeamAPIDTO(result.team), stored: result.stored });
     });
   };
 }

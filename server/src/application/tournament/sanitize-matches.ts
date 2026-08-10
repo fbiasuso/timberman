@@ -13,6 +13,8 @@ export interface MatchDTO {
   visitorTeam: string;
   localImg: string | null;
   visitorImg: string | null;
+  localTeamId: number | null;
+  visitorTeamId: number | null;
   scheduledAt: string | null;
   result: string | null;
   score: string | null;

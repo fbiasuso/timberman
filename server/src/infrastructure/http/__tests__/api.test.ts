@@ -7,16 +7,32 @@ import type { MatchRepo } from '../../../domain/ports/match-repo.js';
 import type { TicketRepo } from '../../../domain/ports/ticket-repo.js';
 import type { AuditLogRepo } from '../../../domain/ports/audit-log-repo.js';
 import type { SystemConfigRepo } from '../../../domain/ports/system-config-repo.js';
+import type { LeagueRepo } from '../../../domain/ports/league-repo.js';
+import type { TeamRepo } from '../../../domain/ports/team-repo.js';
+import type { ImageService } from '../../../domain/ports/image-service.js';
 import type { SystemConfig } from '../../../domain/entities/system-config.js';
+import multipart from '@fastify/multipart';
 import { createRouter } from '../routes/router.js';
 import { errorHandler } from '../middlewares/error-handler.js';
+import { MAX_IMAGE_BYTES } from '../../images/image-validation.js';
 import { Ticket } from '../../../domain/entities/ticket.js';
 import { TicketPrediction } from '../../../domain/entities/ticket-prediction.js';
 import { Match } from '../../../domain/entities/match.js';
 import { MatchDate } from '../../../domain/entities/match-date.js';
 import { Tournament } from '../../../domain/entities/tournament.js';
 import { User } from '../../../domain/entities/user.js';
-import { TournamentNameAlreadyExistsError } from '../../../domain/errors/index.js';
+import { League } from '../../../domain/entities/league.js';
+import { Team } from '../../../domain/entities/team.js';
+import {
+  TournamentNameAlreadyExistsError,
+  LeagueNotFoundError,
+  LeagueNameAlreadyExistsError,
+  LeagueHasTeamsError,
+  TeamNotFoundError,
+  TeamNameAlreadyExistsError,
+  TeamNeedsLeagueError,
+  TeamReferencedByMatchesError,
+} from '../../../domain/errors/index.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -99,6 +115,32 @@ function createMockServices() {
     upsert: vi.fn(),
   };
 
+  const leagueRepo: LeagueRepo = {
+    findAll: vi.fn(),
+    findById: vi.fn(),
+    findByName: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countTeams: vi.fn(),
+  };
+
+  const teamRepo: TeamRepo = {
+    findAll: vi.fn(),
+    findById: vi.fn(),
+    findByLeagueId: vi.fn(),
+    findByName: vi.fn(),
+    save: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countMatchesReferencing: vi.fn(),
+  };
+
+  const imageService: ImageService = {
+    downloadAndStore: vi.fn(async () => 'logos/1.png'),
+    storeFromBuffer: vi.fn(async () => 'logos/1.png'),
+  };
+
   const jwtService = {
     sign: vi.fn(() => 'fake-jwt-token'),
     verify: vi.fn(),
@@ -117,7 +159,8 @@ function createMockServices() {
 
   return {
     userRepo, tournamentRepo, matchRepo, ticketRepo, auditLogRepo,
-    tournamentPointsRepo, configRepo, jwtService, bcryptService, config,
+    tournamentPointsRepo, configRepo, leagueRepo, teamRepo, imageService,
+    jwtService, bcryptService, config,
   };
 }
 
@@ -129,6 +172,9 @@ describe('API Integration Tests', () => {
     services = createMockServices();
     app = Fastify();
     app.setErrorHandler(errorHandler);
+    // Mirror the production registration (server/src/index.ts): the 1 MiB
+    // file cap must be enforced at the transport layer for upload tests.
+    await app.register(multipart, { limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } });
     await app.register(createRouter(
       services.userRepo,
       services.tournamentRepo,
@@ -140,6 +186,9 @@ describe('API Integration Tests', () => {
       services.config,
       services.configRepo,
       services.tournamentPointsRepo,
+      services.leagueRepo,
+      services.teamRepo,
+      services.imageService,
     ));
     await app.ready();
   });
@@ -1904,6 +1953,109 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(400);
       expect(services.matchRepo.save).not.toHaveBeenCalled();
     });
+
+    it('creates a match from registry team ids (201) — strings set to team names, FKs stored', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.teamRepo.findById).mockImplementation(async (id) => id === 7
+        ? Team.create({
+            id: 7,
+            name: 'River Plate',
+            aliases: null,
+            logo: null,
+            leagueIds: [1],
+            createdAt: new Date(),
+          })
+        : Team.create({
+            id: 8,
+            name: 'Boca Juniors',
+            aliases: null,
+            logo: null,
+            leagueIds: [1],
+            createdAt: new Date(),
+          }));
+      vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
+        Match.create({ ...m.toSnapshot(), id: 1 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'cualquier cosa',
+          visitorTeam: 'otra cosa',
+          localTeamId: 7,
+          visitorTeamId: 8,
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        id: 1,
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+        localTeamId: 7,
+        visitorTeamId: 8,
+      });
+    });
+
+    it('rejects an unknown team id with 422 TEAM_NOT_RESOLVABLE — no match created', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: {
+          matchDateId: 10,
+          localTeam: 'X',
+          visitorTeam: 'Y',
+          localTeamId: 999,
+        },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_RESOLVABLE');
+      expect(services.matchRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates a legacy match with null team ids when only free text is sent', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.tournamentRepo.findById).mockResolvedValue(
+        Tournament.new({ id: 1, name: 'Test' }),
+      );
+      vi.mocked(services.matchRepo.save).mockImplementation(async (m) =>
+        Match.create({ ...m.toSnapshot(), id: 1 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/matches',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { matchDateId: 10, localTeam: 'River Plate', visitorTeam: 'Boca Juniors' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.match.localTeamId).toBeNull();
+      expect(body.match.visitorTeamId).toBeNull();
+      expect(services.teamRepo.findById).not.toHaveBeenCalled();
+    });
   });
 
   describe('PATCH /api/admin/matches/:matchId', () => {
@@ -1931,6 +2083,8 @@ describe('API Integration Tests', () => {
       visitorTeam: 'Boca Juniors',
       localImg: 'river.png',
       visitorImg: 'boca.png',
+      localTeamId: null,
+      visitorTeamId: null,
       scheduledAt: new Date('2026-08-02T20:00:00Z'),
       result: null,
       score: null,
@@ -2028,6 +2182,83 @@ describe('API Integration Tests', () => {
       expect(res.statusCode).toBe(403);
       const body = JSON.parse(res.body);
       expect(body.error).toBe('FORBIDDEN');
+      expect(services.matchRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('links a registry team via localTeamId — FK stored, string set to the team name', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date(),
+      }));
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeamId: 7 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        localTeamId: 7,
+        localTeam: 'River Plate',
+        visitorTeam: 'Boca Juniors',
+      });
+    });
+
+    it('clears the FK when free text is sent without a team id', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(Match.create({
+        ...matchWithDetails.toSnapshot(),
+        localTeamId: 7,
+        visitorTeamId: 8,
+      }));
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.matchRepo.update).mockImplementation(async (m) => m);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { localTeam: 'Racing Club' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.match).toMatchObject({
+        localTeam: 'Racing Club',
+        localTeamId: null,
+        visitorTeamId: 8, // untouched side keeps its FK
+      });
+    });
+
+    it('rejects an unknown team id with 422 TEAM_NOT_RESOLVABLE — nothing written', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.matchRepo.findById).mockResolvedValue(matchWithDetails);
+      vi.mocked(services.tournamentRepo.findMatchDateById).mockResolvedValue(openDate);
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/matches/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { visitorTeamId: 999 },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_RESOLVABLE');
       expect(services.matchRepo.update).not.toHaveBeenCalled();
     });
   });
@@ -2679,6 +2910,721 @@ describe('API Integration Tests', () => {
       const body = JSON.parse(res.body);
       expect(body.error).toBe('TOURNAMENT_NAME_TAKEN');
       expect(body.message).toBe('Ya existe un torneo con ese nombre');
+    });
+  });
+
+  // ── Team registry: leagues ────────────────────────────────────────
+
+  describe('POST /api/admin/leagues', () => {
+    function mockAdmin() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    it('creates a league (201)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.leagueRepo.save).mockImplementation(async (l) =>
+        League.create({ ...l.toSnapshot(), id: 5 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Primera División', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.league.id).toBe(5);
+      expect(body.league.name).toBe('Primera División');
+      expect(body.league.format).toBe('liga');
+    });
+
+    it('returns 409 LEAGUE_NAME_TAKEN on a name collision', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+      vi.mocked(services.leagueRepo.save).mockRejectedValue(
+        new LeagueNameAlreadyExistsError('primera division'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'primera division', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NAME_TAKEN');
+    });
+
+    it('rejects a blank league name (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      mockAdmin();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: '   ', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects non-admin users (403)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'user-1',
+        role: 'user',
+        username: 'user',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Primera División', country: 'Argentina', format: 'liga' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).error).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('GET /api/admin/leagues', () => {
+    it('returns leagues with their nested member teams', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findAll).mockResolvedValue([
+        League.create({
+          id: 1,
+          name: 'Primera División',
+          country: 'Argentina',
+          format: 'liga',
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+      vi.mocked(services.teamRepo.findAll).mockResolvedValue([
+        Team.create({
+          id: 7,
+          name: 'River Plate',
+          aliases: ['El Millonario'],
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.leagues).toHaveLength(1);
+      expect(body.leagues[0].name).toBe('Primera División');
+      expect(body.leagues[0].teams[0].name).toBe('River Plate');
+    });
+  });
+
+  describe('PATCH /api/admin/leagues/:leagueId', () => {
+    it('renames a league (200)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.update).mockImplementation(async (l) =>
+        League.create({ ...l.toSnapshot(), name: 'Torneo Apertura' }),
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Torneo Apertura' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).league.name).toBe('Torneo Apertura');
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/leagues/99',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'Torneo Apertura' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/admin/leagues/:leagueId', () => {
+    it('deletes an empty league (204)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.countTeams).mockResolvedValue(0);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(services.leagueRepo.delete).toHaveBeenCalledWith(1);
+    });
+
+    it('blocks deletion of a league that still has teams (409 LEAGUE_HAS_TEAMS)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.countTeams).mockResolvedValue(3);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/leagues/1',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_HAS_TEAMS');
+    });
+  });
+
+  describe('GET /api/admin/leagues/:leagueId/teams', () => {
+    it('returns the teams of a league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.findByLeagueId).mockResolvedValue([
+        Team.create({
+          id: 7,
+          name: 'River Plate',
+          aliases: null,
+          logo: null,
+          leagueIds: [1],
+          createdAt: new Date('2026-08-01T00:00:00Z'),
+        }),
+      ]);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues/1/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.teams).toHaveLength(1);
+      expect(body.teams[0].id).toBe(7);
+      expect(body.teams[0].leagueIds).toEqual([1]);
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/admin/leagues/99/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+  });
+
+  // ── Team registry: teams ─────────────────────────────────────────
+
+  describe('POST /api/admin/teams', () => {
+    it('creates a team with memberships (201)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.save).mockImplementation(async (t) =>
+        Team.create({ ...t.toSnapshot(), id: 7 }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', aliases: ['El Millonario'], leagueIds: [1] },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.team.id).toBe(7);
+      expect(body.team.name).toBe('River Plate');
+      expect(body.team.leagueIds).toEqual([1]);
+    });
+
+    it('rejects a team with no leagueIds (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', leagueIds: [] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 404 LEAGUE_NOT_FOUND for an unknown league id', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate', leagueIds: [99] },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('LEAGUE_NOT_FOUND');
+    });
+
+    it('returns 409 TEAM_NAME_TAKEN on a global name collision', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.save).mockRejectedValue(
+        new TeamNameAlreadyExistsError('river plate'),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'river plate', leagueIds: [1] },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NAME_TAKEN');
+    });
+  });
+
+  describe('PATCH /api/admin/teams/:teamId', () => {
+    it('renames a team keeping memberships (200)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.leagueRepo.findById).mockResolvedValue(League.create({
+        id: 1,
+        name: 'Primera División',
+        country: 'Argentina',
+        format: 'liga',
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.update).mockImplementation(async (t) =>
+        Team.create({ ...t.toSnapshot(), name: 'River Plate FC' }),
+      );
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'River Plate FC' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).team.name).toBe('River Plate FC');
+    });
+
+    it('rejects removing the last membership (400 VALIDATION_ERROR)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { leagueIds: [] },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 404 TEAM_NOT_FOUND for an unknown team', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/api/admin/teams/99',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { name: 'X' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_FOUND');
+    });
+  });
+
+  describe('DELETE /api/admin/teams/:teamId', () => {
+    it('deletes an unreferenced team (204)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.countMatchesReferencing).mockResolvedValue(0);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(services.teamRepo.delete).toHaveBeenCalledWith(7);
+    });
+
+    it('blocks deletion of a match-referenced team (409 TEAM_REFERENCED_BY_MATCHES)', async () => {
+      vi.clearAllMocks();
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo: null,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+      vi.mocked(services.teamRepo.countMatchesReferencing).mockResolvedValue(2);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/admin/teams/7',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('TEAM_REFERENCED_BY_MATCHES');
+    });
+  });
+
+  describe('POST /api/admin/teams/:teamId/logo', () => {
+    // PNG magic bytes (89 50 4E 47 0D 0A 1A 0A) — passes the route sniff.
+    const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+
+    function adminAuth() {
+      vi.mocked(services.jwtService.verify).mockReturnValue({
+        sub: 'admin-1',
+        role: 'admin',
+        username: 'admin',
+      });
+    }
+
+    function mockTeam(logo: string | null = null) {
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(Team.create({
+        id: 7,
+        name: 'River Plate',
+        aliases: null,
+        logo,
+        leagueIds: [1],
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      }));
+    }
+
+    function multipartFile(fileBytes: Buffer): { payload: Buffer; headers: Record<string, string> } {
+      const boundary = '----test-boundary-7d3c9f';
+      const head = Buffer.from(
+        `--${boundary}\r\n` +
+        'Content-Disposition: form-data; name="file"; filename="shield.png"\r\n' +
+        'Content-Type: image/png\r\n' +
+        '\r\n',
+      );
+      const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+      return {
+        payload: Buffer.concat([head, fileBytes, tail]),
+        headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      };
+    }
+
+    it('updates the logo from a remote URL (JSON path, compat) — 200 stored: true', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam();
+      vi.mocked(services.imageService.downloadAndStore).mockResolvedValue('logos/7.png');
+      vi.mocked(services.teamRepo.update).mockImplementation(async (team) =>
+        Team.create({ ...team.toSnapshot(), logo: 'logos/7.png' }),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { url: 'https://example.com/shield.png' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.stored).toBe(true);
+      expect(body.team.logo).toBe('logos/7.png');
+    });
+
+    it('rejects an unreachable URL (JSON path) — 400 LOGO_STORE_FAILED, existing logo kept', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      vi.mocked(services.imageService.downloadAndStore).mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token' },
+        payload: { url: 'https://example.com/unreachable.png' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('LOGO_STORE_FAILED');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('stores a valid multipart upload — 200 stored: true, team updated', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam();
+      vi.mocked(services.imageService.storeFromBuffer).mockResolvedValue('logos/7.png');
+      vi.mocked(services.teamRepo.update).mockImplementation(async (team) =>
+        Team.create({ ...team.toSnapshot(), logo: 'logos/7.png' }),
+      );
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.body);
+      expect(json.stored).toBe(true);
+      expect(json.team.logo).toBe('logos/7.png');
+      expect(services.imageService.storeFromBuffer).toHaveBeenCalledWith(PNG_BYTES, 7);
+    });
+
+    it('rejects an oversized multipart upload — 400 FILE_TOO_LARGE, team unchanged', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      const oversized = Buffer.concat([PNG_BYTES, Buffer.alloc(MAX_IMAGE_BYTES + 1)]);
+      const body = multipartFile(oversized);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('FILE_TOO_LARGE');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-image multipart upload — 415 UNSUPPORTED_MEDIA_TYPE', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      const body = multipartFile(Buffer.from('this is definitely not an image'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(415);
+      expect(JSON.parse(res.body).error).toBe('UNSUPPORTED_MEDIA_TYPE');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the team unchanged when the store fails — 200 stored: false', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      mockTeam('logos/old.png');
+      vi.mocked(services.imageService.storeFromBuffer).mockResolvedValue(null);
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/7/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.body);
+      expect(json.stored).toBe(false);
+      expect(json.team.logo).toBe('logos/old.png');
+      expect(services.teamRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 TEAM_NOT_FOUND for an unknown team (multipart)', async () => {
+      vi.clearAllMocks();
+      adminAuth();
+      vi.mocked(services.teamRepo.findById).mockResolvedValue(null);
+      const body = multipartFile(PNG_BYTES);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/teams/999/logo',
+        headers: { authorization: 'Bearer fake-jwt-token', ...body.headers },
+        payload: body.payload,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('TEAM_NOT_FOUND');
     });
   });
 });

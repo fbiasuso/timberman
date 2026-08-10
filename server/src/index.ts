@@ -1,8 +1,13 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { env } from './config/env.js';
+import { MAX_IMAGE_BYTES } from './infrastructure/images/image-validation.js';
 import { JwtServiceImpl } from './infrastructure/auth/jwt-service.js';
 import { BcryptServiceImpl } from './infrastructure/auth/bcrypt-service.js';
 import { DrizzleUserRepo } from './infrastructure/repositories/drizzle-user-repo.js';
@@ -12,6 +17,9 @@ import { DrizzleMatchRepo } from './infrastructure/repositories/drizzle-match-re
 import { DrizzleTicketRepo } from './infrastructure/repositories/drizzle-ticket-repo.js';
 import { DrizzleAuditLogRepo } from './infrastructure/repositories/drizzle-audit-log-repo.js';
 import { DrizzleSystemConfigRepo } from './infrastructure/repositories/drizzle-system-config-repo.js';
+import { DrizzleLeagueRepo } from './infrastructure/repositories/drizzle-league-repo.js';
+import { DrizzleTeamRepo } from './infrastructure/repositories/drizzle-team-repo.js';
+import { createImageService } from './infrastructure/images/image-service-factory.js';
 import { DrizzleUnitOfWork } from './infrastructure/persistence/drizzle-unit-of-work.js';
 import { ensureInitialTournament } from './infrastructure/bootstrap.js';
 import { createRouter } from './infrastructure/http/routes/router.js';
@@ -23,6 +31,24 @@ const app = Fastify({ logger: true });
 
 // ── Plugins ──────────────────────────────────────────────────────
 await app.register(cors, { origin: true });
+
+// ── Multipart uploads ─────────────────────────────────────────────
+// Shield file uploads (design D3): the 1 MiB cap is enforced at the
+// transport layer so oversized payloads are cut before unbounded memory
+// buffering; a single `file` field is allowed.
+await app.register(multipart, { limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } });
+
+// ── Static shields ────────────────────────────────────────────────
+// Team logos live under server/public/logos (created at build time by the
+// image service). Served at /public/ with a ~30-day client cache — NOT
+// immutable: logos may be re-uploaded, so browsers must revalidate
+// (design D7; Vite dev proxy maps /public → this server).
+const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+await app.register(fastifyStatic, {
+  root: publicDir,
+  prefix: '/public/',
+  maxAge: '30d',
+});
 
 // ── Error Handler ─────────────────────────────────────────────────
 app.setErrorHandler(errorHandler);
@@ -38,6 +64,15 @@ const matchRepo = new DrizzleMatchRepo(db);
 const ticketRepo = new DrizzleTicketRepo(db);
 const auditLogRepo = new DrizzleAuditLogRepo(db);
 const systemConfigRepo = new DrizzleSystemConfigRepo(db);
+const leagueRepo = new DrizzleLeagueRepo(db);
+const teamRepo = new DrizzleTeamRepo(db);
+const imageService = createImageService({
+  storage: env.IMAGE_STORAGE,
+  supabaseUrl: env.SUPABASE_URL,
+  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+  logosDir: path.join(publicDir, 'logos'),
+  logger: app.log,
+});
 const jwtService = new JwtServiceImpl();
 const bcryptService = new BcryptServiceImpl();
 
@@ -82,6 +117,9 @@ await app.register(createRouter(
   config,
   systemConfigRepo,
   tournamentPointsRepo,
+  leagueRepo,
+  teamRepo,
+  imageService,
   uow,
 ));
 

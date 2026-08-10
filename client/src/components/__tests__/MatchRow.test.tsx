@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import MatchRow from '../admin/MatchRow';
-import type { MatchDTO } from '../../types';
+import type { MatchDTO, LeagueDTO } from '../../types';
 
 // --- Mocks ---
 
@@ -16,7 +16,20 @@ vi.mock('../../hooks/use-admin', () => ({
   })),
 }));
 
+vi.mock('../../hooks/use-teams', () => ({
+  useLeagues: vi.fn(() => ({ data: [], isLoading: false, error: null })),
+}));
+
 import { useUpdateMatchDetails } from '../../hooks/use-admin';
+import { useLeagues } from '../../hooks/use-teams';
+
+function mockLeagues(leagues: LeagueDTO[]) {
+  vi.mocked(useLeagues).mockReturnValue({
+    data: leagues,
+    isLoading: false,
+    error: null,
+  } as any);
+}
 
 afterEach(() => {
   cleanup();
@@ -26,6 +39,12 @@ afterEach(() => {
     mutate: updateDetailsMutate,
     isPending: false,
     isError: false,
+    error: null,
+  } as any);
+  vi.mocked(useLeagues).mockReset();
+  vi.mocked(useLeagues).mockReturnValue({
+    data: [],
+    isLoading: false,
     error: null,
   } as any);
 });
@@ -42,6 +61,8 @@ const openMatch: MatchDTO = {
   visitorTeam: 'Boca Juniors',
   localImg: null,
   visitorImg: null,
+  localTeamId: null,
+  visitorTeamId: null,
   scheduledAt: null,
   result: null,
   score: null,
@@ -54,9 +75,38 @@ const closedMatch: MatchDTO = {
   visitorTeam: 'Estudiantes',
   localImg: 'http://localhost/gimnasia.png',
   visitorImg: 'http://localhost/estudiantes.png',
+  localTeamId: null,
+  visitorTeamId: null,
   scheduledAt: scheduledIso,
   result: 'L',
   score: '2-1',
+};
+
+const sanLorenzo = {
+  id: 100,
+  name: 'San Lorenzo',
+  aliases: ['CASLA'],
+  logo: null,
+  leagueIds: [1],
+  createdAt: '2026-07-28T00:00:00.000Z',
+};
+
+const huracan = {
+  id: 101,
+  name: 'Huracán',
+  aliases: [],
+  logo: null,
+  leagueIds: [1],
+  createdAt: '2026-07-28T00:00:00.000Z',
+};
+
+const primera: LeagueDTO = {
+  id: 1,
+  name: 'Primera',
+  country: 'Argentina',
+  format: 'liga',
+  createdAt: '2026-07-28T00:00:00.000Z',
+  teams: [sanLorenzo, huracan],
 };
 
 // --- Tests ---
@@ -98,6 +148,12 @@ describe('MatchRow', () => {
       expect(screen.getByRole('button', { name: 'Guardar' })).toBeDefined();
     });
 
+    it('marks legacy free-text teams as unmatched below the input', () => {
+      render(<MatchRow match={openMatch} editable />);
+
+      expect(screen.getAllByText('Texto libre (sin equipo registrado)').length).toBe(2);
+    });
+
     it('keeps the save button disabled until a field changes', () => {
       render(<MatchRow match={openMatch} editable />);
       const saveBtn = screen.getByRole('button', { name: 'Guardar' }) as HTMLButtonElement;
@@ -122,6 +178,23 @@ describe('MatchRow', () => {
       expect(updateDetailsMutate).toHaveBeenCalledWith({
         matchId: 11,
         localTeam: 'San Lorenzo',
+      });
+    });
+
+    it('picking a registry team fills its id and sends {name, id} in the patch', () => {
+      mockLeagues([primera]);
+      render(<MatchRow match={openMatch} editable />);
+
+      fireEvent.change(screen.getByLabelText('Equipo Local'), {
+        target: { value: 'San' },
+      });
+      fireEvent.mouseDown(screen.getByRole('option', { name: 'San Lorenzo' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+      expect(updateDetailsMutate).toHaveBeenCalledWith({
+        matchId: 11,
+        localTeam: 'San Lorenzo',
+        localTeamId: 100,
       });
     });
 

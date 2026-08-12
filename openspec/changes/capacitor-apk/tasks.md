@@ -26,13 +26,13 @@ Chain strategy: pending
 
 ## Phase 1: Config + Deps + Web Changes (PR 1)
 
-- [ ] 1.1 Add `@capacitor/core@^8.5.0` dep; `@capacitor/cli`, `@capacitor/android`, `@capacitor/app` devDeps; `cap:sync` + `build:android` scripts to `client/package.json`. Verify: `pnpm install` updates lockfile; `tsc --noEmit` green.
-- [ ] 1.2 Create `client/capacitor.config.ts` (appId `com.timberman.prode`, appName `Timberman`, webDir `dist`). Verify: config parses; later `cap sync` uses it.
-- [ ] 1.3 Set `base: './'` in `client/vite.config.ts` (D2). Verify: `vite build` emits relative assets; Netlify build unaffected (R2).
-- [ ] 1.4 Create `client/src/constants/app-version.ts` (D3: `APP_VERSION` from `package.json`) + vitest spec asserting it equals `package.json` version (R6).
-- [ ] 1.5 Create `client/src/hooks/use-back-button.ts` (D7: native-only; `/` → `exitApp`, else `history.back()`) + vitest spec mocking `@capacitor/app`: root exits, inner navigates, non-native registers nothing (R4).
-- [ ] 1.6 Wire `useBackButton()` in `client/src/App.tsx`. Verify: full client suite + build green (R8).
-- [ ] 1.7 Create `.nvmrc` (`22`) + README Node ≥ 22 floor (D1). Verify: doc review.
+- [x] 1.1 Add `@capacitor/core@^8.5.0` dep; `@capacitor/cli`, `@capacitor/android`, `@capacitor/app` devDeps; `cap:sync` + `build:android` scripts to `client/package.json`. Verify: `pnpm install` updates lockfile; `tsc --noEmit` green.
+- [x] 1.2 Create `client/capacitor.config.ts` (appId `com.timberman.prode`, appName `Timberman`, webDir `dist`). Verify: config parses; later `cap sync` uses it.
+- [x] 1.3 Set `base: './'` in `client/vite.config.ts` (D2). Verify: `vite build` emits relative assets; Netlify build unaffected (R2).
+- [x] 1.4 Create `client/src/constants/app-version.ts` (D3: `APP_VERSION` from `package.json`) + vitest spec asserting it equals `package.json` version (R6).
+- [x] 1.5 Create `client/src/hooks/use-back-button.ts` (D7: native-only; `/` → `exitApp`, else `history.back()`) + vitest spec mocking `@capacitor/app`: root exits, inner navigates, non-native registers nothing (R4).
+- [x] 1.6 Wire `useBackButton()` in `client/src/App.tsx`. Verify: full client suite + build green (R8).
+- [x] 1.7 Create `.nvmrc` (`22`) + README Node ≥ 22 floor (D1). Verify: doc review.
 
 ## Phase 2: Android Scaffold + Signing (PR 2)
 

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand dark (bet-green) background for the native window and launch theme (D1). -->
+    <color name="brand_dark">#132421</color>
+    <!-- AppCompat base theme colors (styles.xml AppTheme). Dark brand + yellow accent
+         matching the in-app splash accent. -->
+    <color name="colorPrimary">#132421</color>
+    <color name="colorPrimaryDark">#0E1918</color>
+    <color name="colorAccent">#F5C518</color>
+</resources>

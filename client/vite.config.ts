@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // Relative base so the built assets resolve under the Capacitor WebView
+  // origin (https://localhost). The Netlify web deploy is unaffected.
+  base: './',
   server: {
     port: 5173,
     proxy: {

@@ -36,11 +36,11 @@ Chain strategy: pending
 
 ## Phase 2: Android Scaffold + Signing (PR 2)
 
-- [ ] 2.1 Generate committed `client/android/` via `pnpm --filter client exec cap add android` (D1). Verify: clean checkout → `cap sync android` regenerates cleanly (R1).
-- [ ] 2.2 Add env-driven release `signingConfig` to `client/android/app/build.gradle` (D4: `ANDROID_KEYSTORE_PATH/PASSWORD/ALIAS/KEY_PASSWORD`; absent → build fails). Verify: `assembleRelease` fails loudly without secrets, signs with them (R5).
-- [ ] 2.3 Apply dark theme `#132421` in `client/android` styles (`colors.xml`). Verify: APK windows/launch show dark background (D1).
-- [ ] 2.4 Add keystore patterns (`*.jks`, `*.keystore`, `keystore.properties`) to root `.gitignore`; README keystore custody note. Verify: `git status` shows no keystore tracked (R5).
-- [ ] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, base64 + passwords as GitHub secrets, offline backup recorded for owner. Verify: secrets set in GitHub before PR 3 (R5).
+- [x] 2.1 Generate committed `client/android/` via `pnpm --filter client exec cap add android` (D1). Verify: clean checkout → `cap sync android` regenerates cleanly (R1).
+- [x] 2.2 Add env-driven release `signingConfig` to `client/android/app/build.gradle` (D4: `ANDROID_KEYSTORE_PATH/PASSWORD/ALIAS/KEY_PASSWORD`; absent → build fails). Verify: `assembleRelease` fails loudly without secrets, signs with them (R5).
+- [x] 2.3 Apply dark theme `#132421` in `client/android` styles (`colors.xml`). Verify: APK windows/launch show dark background (D1).
+- [x] 2.4 Add keystore patterns (`*.jks`, `*.keystore`, `keystore.properties`) to root `.gitignore`; README keystore custody note. Verify: `git status` shows no keystore tracked (R5).
+- [x] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, base64 + passwords as GitHub secrets, offline backup recorded for owner — **instructions documented in README; owner execution pending before PR 3** (R5).
 
 ## Phase 3: CI Workflow + Release + /install (PR 3)
 

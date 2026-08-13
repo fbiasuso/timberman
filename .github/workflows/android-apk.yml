@@ -102,8 +102,10 @@ jobs:
       # client/android/ and referenced via the derived TIMBERMAN_KEYSTORE_PATH.
       - name: Materialize signing keystore
         working-directory: client/android
+        env:
+          TIMBERMAN_KEYSTORE_BASE64: ${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}" | base64 -d > timberman-release.keystore
+          echo "$TIMBERMAN_KEYSTORE_BASE64" | base64 -d > timberman-release.keystore
           ls -l timberman-release.keystore
 
       - name: Assemble release APK
@@ -123,6 +125,7 @@ jobs:
         with:
           name: Timberman.apk
           path: client/android/app/build/outputs/apk/release/Timberman.apk
+          retention-days: 30
 
       - name: Resolve version
         id: version

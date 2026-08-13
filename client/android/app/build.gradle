@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+// Release signing reads the keystore from environment variables (D4):
+// ANDROID_KEYSTORE_PATH / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEYSTORE_ALIAS / ANDROID_KEYSTORE_KEY_PASSWORD.
+// The keystore itself is never committed; CI supplies these via GitHub secrets and
+// local builds can set them in the shell. When they are absent, assembleRelease
+// fails loudly because the release signing config has no storeFile.
+def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+def keystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def keystoreAlias = System.getenv('ANDROID_KEYSTORE_ALIAS')
+def keystoreKeyPassword = System.getenv('ANDROID_KEYSTORE_KEY_PASSWORD')
+def releaseKeystoreConfigured = keystorePath && keystorePassword && keystoreAlias && keystoreKeyPassword
+
 android {
     namespace = "com.timberman.prode"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +27,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseKeystoreConfigured) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keystoreAlias
+                keyPassword keystoreKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

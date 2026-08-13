@@ -3,9 +3,10 @@ apply plugin: 'com.android.application'
 // Release signing reads the keystore from environment variables (D4):
 // TIMBERMAN_KEYSTORE_PATH / TIMBERMAN_KEYSTORE_PASSWORD / TIMBERMAN_KEY_ALIAS / TIMBERMAN_KEY_PASSWORD.
 // The keystore itself is never committed; CI supplies these via GitHub secrets and
-// local builds read them from the shell (see .env.local, gitignored). When they are
-// absent, any release build fails loudly (guard below) — we never emit an unsigned
-// release artifact (R5).
+// local builds must export them in the shell/CI env before running gradle
+// (no loader exists — .env.local is gitignored and never read by gradle). When
+// they are absent, any release build fails loudly (guard below) — we never emit
+// an unsigned release artifact (R5).
 def keystorePath = System.getenv('TIMBERMAN_KEYSTORE_PATH')
 def keystorePassword = System.getenv('TIMBERMAN_KEYSTORE_PASSWORD')
 def keystoreAlias = System.getenv('TIMBERMAN_KEY_ALIAS')

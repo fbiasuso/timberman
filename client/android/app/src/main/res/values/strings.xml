@@ -2,6 +2,4 @@
 <resources>
     <string name="app_name">Timberman</string>
     <string name="title_activity_main">Timberman</string>
-    <string name="package_name">com.timberman.prode</string>
-    <string name="custom_url_scheme">com.timberman.prode</string>
 </resources>

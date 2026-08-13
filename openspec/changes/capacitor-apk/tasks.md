@@ -40,14 +40,14 @@ Chain strategy: pending
 - [x] 2.2 Add env-driven release `signingConfig` to `client/android/app/build.gradle` (D4: `TIMBERMAN_KEYSTORE_PATH/PASSWORD/ALIAS/KEY_PASSWORD`; absent → build fails). Verify: `assembleRelease` fails loudly without secrets, signs with them (R5).
 - [x] 2.3 Apply dark theme `#132421` in `client/android` styles (`colors.xml`). Verify: APK windows/launch show dark background (D1).
 - [x] 2.4 Add keystore patterns (`*.jks`, `*.keystore`, `keystore.properties`) to root `.gitignore`; README keystore custody note. Verify: `git status` shows no keystore tracked (R5).
-- [x] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, base64 + passwords as GitHub secrets, offline backup recorded for owner — **instructions documented in README; owner execution pending before PR 3** (R5).
+- [x] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, keystore base64 as `TIMBERMAN_KEYSTORE_BASE64` + `TIMBERMAN_KEYSTORE_PASSWORD`/`TIMBERMAN_KEY_ALIAS`/`TIMBERMAN_KEY_PASSWORD` as GitHub secrets, offline backup recorded for owner — **instructions documented in README; owner execution pending before PR 3** (R5).
 
 ## Phase 3: CI Workflow + Release + /install (PR 3)
 
-- [ ] 3.1 Create `.github/workflows/android-apk.yml` (D5): Node 22 + pnpm 11 frozen install; secret gate (`::error::` + exit 1 when `VITE_API_URL` or keystore secrets missing); `VITE_API_URL=https://timberman-api.onrender.com` build; `cap sync android`; JDK 21 + `yes | sdkmanager --licenses`; `assembleRelease`; upload-artifact; GitHub Release (`contents: write`, tag `v{version}`, asset `Timberman.apk`, `update_release: true`). Verify: push → signed APK artifact + Release asset; secrets absent → fail, no artifact (R3, R5).
-- [ ] 3.2 Create `client/public/install.html` (D6: mobile-first, dark `#132421`, es-AR sideload steps, link to `Timberman.apk`). Verify: `vite build` copies it; mobile reachability (R7).
-- [ ] 3.3 Add `netlify.toml` redirect `/install → /install.html` BEFORE SPA fallback (D6). Verify: other routes still SPA-fallback (R8).
-- [ ] 3.4 README: install page link + "APK per UI change, bump version" cadence (R6/R7).
+- [x] 3.1 Create `.github/workflows/android-apk.yml` (D5): Node 22 + pnpm 11 frozen install; secret gate (`::error::` + exit 1 when `VITE_API_URL` or keystore secrets missing); `VITE_API_URL=https://timberman-api.onrender.com` build; `cap sync android`; JDK 21 + `yes | sdkmanager --licenses`; `assembleRelease`; upload-artifact; GitHub Release (`contents: write`, tag `v{version}`, asset `Timberman.apk`, `update_release: true`). Verify: push → signed APK artifact + Release asset; secrets absent → fail, no artifact (R3, R5).
+- [x] 3.2 Create `client/public/install.html` (D6: mobile-first, dark `#132421`, es-AR sideload steps, link to `Timberman.apk`). Verify: `vite build` copies it; mobile reachability (R7).
+- [x] 3.3 Add `netlify.toml` redirect `/install → /install.html` BEFORE SPA fallback (D6). Verify: other routes still SPA-fallback (R8).
+- [x] 3.4 README: install page link + "APK per UI change, bump version" cadence (R6/R7).
 
 ## Phase 4: Verification (device E2E + regression)
 

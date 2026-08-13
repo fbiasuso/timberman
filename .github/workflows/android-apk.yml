@@ -1,0 +1,153 @@
+# Android APK release pipeline (D5) — builds a signed release APK from the
+# Capacitor client and publishes it as a GitHub Release asset so /install can
+# link a permanent download URL.
+#
+# Triggers:
+#   - push to main
+#   - manual workflow_dispatch (e.g. to test the build on a feature branch)
+# The release job only runs on main — feature-branch dispatches exercise the
+# build + artifact upload but never publish a release.
+#
+# Secrets (fail loudly when absent — never emit an unsigned artifact):
+#   TIMBERMAN_KEYSTORE_BASE64 (base64 of the signing keystore)
+#   TIMBERMAN_KEYSTORE_PASSWORD / TIMBERMAN_KEY_ALIAS / TIMBERMAN_KEY_PASSWORD
+# The keystore file is materialized from TIMBERMAN_KEYSTORE_BASE64 during the
+# build; TIMBERMAN_KEYSTORE_PATH is derived and points at the decoded file.
+# VITE_API_URL is defined below as the production HTTPS API; the gate also
+# verifies it so an APK with the /api fallback is never produced (R3).
+
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_API_URL: https://timberman-api.onrender.com
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Secret gate: fail loudly BEFORE building when any required value is
+      # missing, so no unsigned/fallback artifact is ever produced (R3, R5).
+      # Mirrors the env names the gradle release signingConfig expects.
+      - name: Gate on required secrets
+        shell: bash
+        env:
+          TIMBERMAN_KEYSTORE_BASE64: ${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}
+          TIMBERMAN_KEYSTORE_PASSWORD: ${{ secrets.TIMBERMAN_KEYSTORE_PASSWORD }}
+          TIMBERMAN_KEY_ALIAS: ${{ secrets.TIMBERMAN_KEY_ALIAS }}
+          TIMBERMAN_KEY_PASSWORD: ${{ secrets.TIMBERMAN_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for var in VITE_API_URL TIMBERMAN_KEYSTORE_BASE64 TIMBERMAN_KEYSTORE_PASSWORD TIMBERMAN_KEY_ALIAS TIMBERMAN_KEY_PASSWORD; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::Missing required value: $var"
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Refusing to build: required secrets/env not set:$missing"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build client
+        run: pnpm --filter client build
+
+      - name: Sync Capacitor Android
+        run: pnpm --filter client exec cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Accept Android SDK licenses
+        run: |
+          # Locate sdkmanager on PATH, falling back to the runner's ANDROID_HOME.
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ] && [ -n "$ANDROID_HOME" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --licenses
+
+      # Materialize the signing keystore from its base64 secret (never committed,
+      # R5). The gate above already guaranteed the secret exists. Written under
+      # client/android/ and referenced via the derived TIMBERMAN_KEYSTORE_PATH.
+      - name: Materialize signing keystore
+        working-directory: client/android
+        env:
+          TIMBERMAN_KEYSTORE_BASE64: ${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}
+        run: |
+          echo "$TIMBERMAN_KEYSTORE_BASE64" | base64 -d > timberman-release.keystore
+          ls -l timberman-release.keystore
+
+      - name: Assemble release APK
+        working-directory: client/android
+        env:
+          TIMBERMAN_KEYSTORE_PATH: ${{ github.workspace }}/client/android/timberman-release.keystore
+          TIMBERMAN_KEYSTORE_PASSWORD: ${{ secrets.TIMBERMAN_KEYSTORE_PASSWORD }}
+          TIMBERMAN_KEY_ALIAS: ${{ secrets.TIMBERMAN_KEY_ALIAS }}
+          TIMBERMAN_KEY_PASSWORD: ${{ secrets.TIMBERMAN_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Rename APK to stable asset name
+        run: mv client/android/app/build/outputs/apk/release/app-release.apk client/android/app/build/outputs/apk/release/Timberman.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Timberman.apk
+          path: client/android/app/build/outputs/apk/release/Timberman.apk
+          retention-days: 30
+
+      - name: Resolve version
+        id: version
+        run: echo "version=$(node -p 'require("./client/package.json").version')" >> "$GITHUB_OUTPUT"
+
+  # Publish the signed APK as a GitHub Release asset (D5): tag v{version},
+  # update_release so re-runs on the same version refresh the release.
+  release:
+    if: github.ref == 'refs/heads/main'
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Timberman.apk
+          path: release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build-apk.outputs.version }}
+          files: release/Timberman.apk
+          update_release: true

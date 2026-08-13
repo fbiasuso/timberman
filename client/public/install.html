@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#132421" />
+  <title>Timberman — Instalar la app</title>
+  <style>
+    :root {
+      --fondo: #132421;
+      --superficie: #1b312d;
+      --borde: #2a4a44;
+      --texto: #ffffff;
+      --texto-suave: #c9d6d3;
+      --amarillo: #ffdf1b;
+      --enlace: #8fd3c9;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--fondo);
+      color: var(--texto);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 100vh;
+    }
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 24px 20px 40px;
+    }
+    header { text-align: center; padding: 16px 0 8px; }
+    .logo {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: var(--amarillo);
+      margin: 0;
+    }
+    .subtitulo { color: var(--texto-suave); margin: 4px 0 0; font-size: 1rem; }
+    h2 { font-size: 1.15rem; margin: 28px 0 8px; color: var(--amarillo); }
+    p { margin: 8px 0; }
+    .descripcion { color: var(--texto-suave); }
+    .boton-descarga {
+      display: block;
+      width: 100%;
+      margin: 20px 0;
+      padding: 16px;
+      background: var(--amarillo);
+      color: #132421;
+      font-size: 1.1rem;
+      font-weight: 800;
+      text-align: center;
+      text-decoration: none;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+    }
+    ol { padding-left: 22px; margin: 8px 0 0; }
+    li { margin: 10px 0; }
+    .paso { font-weight: 700; color: var(--amarillo); }
+    .nota {
+      background: var(--superficie);
+      border: 1px solid var(--borde);
+      border-radius: 10px;
+      padding: 14px;
+      margin: 20px 0;
+      color: var(--texto-suave);
+      font-size: 0.95rem;
+    }
+    .nota strong { color: var(--texto); }
+    a { color: var(--enlace); }
+    footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--borde);
+      color: var(--texto-suave);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1 class="logo">TIMBERMAN</h1>
+      <p class="subtitulo">Instalá la app en tu celular</p>
+    </header>
+
+    <p class="descripcion">
+      Timberman se instala como una app nativa (APK) en tu dispositivo Android.
+      La app necesita conexión a internet para funcionar.
+    </p>
+
+    <a class="boton-descarga" href="https://github.com/fbiasuso/timberman/releases/latest/download/Timberman.apk">
+      Descargar Timberman.apk
+    </a>
+
+    <h2>Cómo instalar</h2>
+    <ol>
+      <li>
+        <span class="paso">Descargá el APK</span> con el botón de arriba. Si tu
+        celular no deja descargarlo, tocá «Descargar de todos modos».
+      </li>
+      <li>
+        <span class="paso">Permití fuentes desconocidas</span>. La primera vez,
+        Android te va a pedir autorización para instalar apps desde tu navegador
+        o el administrador de archivos. Aceptá el permiso — es un requisito para
+        las apps que no vienen de Play Store.
+      </li>
+      <li>
+        <span class="paso">Abrí el archivo descargado</span> desde la barra de
+        notificaciones o la carpeta «Descargas».
+      </li>
+      <li>
+        <span class="paso">Confirmá la instalación</span>. Android muestra un
+        aviso de seguridad: tocá «Instalar» y esperá a que termine.
+      </li>
+      <li>
+        <span class="paso">Abrí la app</span>. Cuando termine, tocá «Abrir» o
+        buscá el ícono de Timberman en tu pantalla de inicio.
+      </li>
+    </ol>
+
+    <div class="nota">
+      <strong>Actualizaciones:</strong> cuando salga una versión nueva, descargá
+      el APK más reciente e instalalo sobre la versión anterior. Tus datos se
+      conservan (no hace falta desinstalar).
+    </div>
+
+    <div class="nota">
+      <strong>¿Problemas al instalar?</strong> Verificá que la descarga terminó
+      completa y que tu teléfono es Android 9 o superior. Si el APK no abre,
+      repetí el paso 2 habilitando el permiso para el navegador que usás.
+    </div>
+
+    <footer>
+      <a href="https://github.com/fbiasuso/timberman/releases">Ver todas las versiones publicadas</a>
+    </footer>
+  </main>
+</body>
+</html>

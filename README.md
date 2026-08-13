@@ -98,6 +98,34 @@ To add the real logo later:
 
 The splash timing already matches the legacy: fade-out at ~2.2s, unmount at ~2.8s.
 
+## Android APK (sideload)
+
+The client also ships as a signed APK built from `client/android/`, a committed Capacitor 8 Android scaffold (web assets are copied in by `cap sync`). Release builds are signed from environment variables — the keystore itself is never committed:
+
+GitHub secrets required by the `android-apk` workflow:
+
+- `TIMBERMAN_KEYSTORE_BASE64` — base64 of the signing keystore (the workflow decodes it to `client/android/timberman-release.keystore` on the runner)
+- `TIMBERMAN_KEYSTORE_PASSWORD` / `TIMBERMAN_KEY_ALIAS` / `TIMBERMAN_KEY_PASSWORD`
+- `assembleRelease` fails when they are absent; debug builds are unaffected.
+
+Local APK build: `pnpm --filter client build:android` (vite build + `cap sync android`), then from `client/android/` run `gradlew assembleRelease` with `TIMBERMAN_KEYSTORE_PATH` (path to the keystore file) plus the three signing values above set in the shell environment.
+
+### Install on a phone
+
+Open the deployed site's `/install` page on your phone for step-by-step sideload instructions (allow unknown sources, download, install) and the APK download link, or grab the latest `Timberman.apk` from the [GitHub Releases page](https://github.com/fbiasuso/timberman/releases). The APK is produced by the `android-apk` GitHub Actions workflow on every push to `main`; installs update in place over previous versions (same keystore, data preserved).
+
+### Release cadence
+
+Each APK release ships with a version bump: bump `version` in `client/package.json` (drives the `v{version}` release tag and `APP_VERSION`) and bump `versionCode` in `client/android/app/build.gradle` — in-place updates require a strictly higher `versionCode` than the installed APK.
+
+### Keystore custody (project action item)
+
+Generating the signing keystore is a manual, owner-held step (not automatable):
+
+1. Generate an RSA-2048 keystore (PKCS12): `keytool -genkeypair -v -keystore timberman-release.keystore -alias timberman -keyalg RSA -keysize 2048 -validity 10000`
+2. Provide the keystore as `TIMBERMAN_KEYSTORE_BASE64` (e.g. `base64 -w0 timberman-release.keystore`) plus `TIMBERMAN_KEYSTORE_PASSWORD`, `TIMBERMAN_KEY_ALIAS` and `TIMBERMAN_KEY_PASSWORD` to CI as GitHub secrets — the APK workflow requires them before it can publish.
+3. Keep an offline backup of the keystore and its passwords with the project owner. Losing them breaks in-place updates (users would have to uninstall before installing a new APK).
+
 ## Tests
 
 ```bash

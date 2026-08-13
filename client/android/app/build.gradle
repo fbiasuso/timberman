@@ -1,0 +1,94 @@
+apply plugin: 'com.android.application'
+
+// Release signing reads the keystore from environment variables (D4):
+// TIMBERMAN_KEYSTORE_PATH / TIMBERMAN_KEYSTORE_PASSWORD / TIMBERMAN_KEY_ALIAS / TIMBERMAN_KEY_PASSWORD.
+// The keystore itself is never committed; CI supplies these via GitHub secrets and
+// local builds must export them in the shell/CI env before running gradle
+// (no loader exists — .env.local is gitignored and never read by gradle). When
+// they are absent, any release build fails loudly (guard below) — we never emit
+// an unsigned release artifact (R5).
+def keystorePath = System.getenv('TIMBERMAN_KEYSTORE_PATH')
+def keystorePassword = System.getenv('TIMBERMAN_KEYSTORE_PASSWORD')
+def keystoreAlias = System.getenv('TIMBERMAN_KEY_ALIAS')
+def keystoreKeyPassword = System.getenv('TIMBERMAN_KEY_PASSWORD')
+def releaseKeystoreConfigured = keystorePath && keystorePassword && keystoreAlias && keystoreKeyPassword
+
+android {
+    namespace = "com.timberman.prode"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.timberman.prode"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // First release. The APK workflow bumps versionCode per release;
+        // in-place updates REQUIRE a strictly higher versionCode.
+        versionCode 1
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (releaseKeystoreConfigured) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keystoreAlias
+                keyPassword keystoreKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+// Release builds must never produce an unsigned artifact (D4/R5): fail loudly when
+// the keystore env vars are absent instead of letting AGP emit app-release-unsigned.apk.
+gradle.taskGraph.whenReady { graph ->
+    if (releaseKeystoreConfigured) return
+    def releaseTasks = graph.allTasks.findAll { it.name == 'assembleRelease' || it.name == 'bundleRelease' }
+    if (!releaseTasks.isEmpty()) {
+        throw new GradleException(
+            'Release signing is not configured. Set TIMBERMAN_KEYSTORE_PATH, TIMBERMAN_KEYSTORE_PASSWORD, ' +
+            'TIMBERMAN_KEY_ALIAS and TIMBERMAN_KEY_PASSWORD (CI supplies them via GitHub secrets). ' +
+            'Refusing to build an unsigned release artifact.'
+        )
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

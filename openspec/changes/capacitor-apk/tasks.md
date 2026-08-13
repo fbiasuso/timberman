@@ -40,7 +40,7 @@ Chain strategy: pending
 - [x] 2.2 Add env-driven release `signingConfig` to `client/android/app/build.gradle` (D4: `TIMBERMAN_KEYSTORE_PATH/PASSWORD/ALIAS/KEY_PASSWORD`; absent → build fails). Verify: `assembleRelease` fails loudly without secrets, signs with them (R5).
 - [x] 2.3 Apply dark theme `#132421` in `client/android` styles (`colors.xml`). Verify: APK windows/launch show dark background (D1).
 - [x] 2.4 Add keystore patterns (`*.jks`, `*.keystore`, `keystore.properties`) to root `.gitignore`; README keystore custody note. Verify: `git status` shows no keystore tracked (R5).
-- [x] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, base64 + passwords as GitHub secrets, offline backup recorded for owner — **instructions documented in README; owner execution pending before PR 3** (R5).
+- [x] 2.5 Project action item (manual, not automatable): `keytool` RSA-2048 keystore, keystore base64 as `TIMBERMAN_KEYSTORE_BASE64` + `TIMBERMAN_KEYSTORE_PASSWORD`/`TIMBERMAN_KEY_ALIAS`/`TIMBERMAN_KEY_PASSWORD` as GitHub secrets, offline backup recorded for owner — **instructions documented in README; owner execution pending before PR 3** (R5).
 
 ## Phase 3: CI Workflow + Release + /install (PR 3)
 

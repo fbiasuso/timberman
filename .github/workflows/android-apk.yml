@@ -9,8 +9,10 @@
 # build + artifact upload but never publish a release.
 #
 # Secrets (fail loudly when absent — never emit an unsigned artifact):
-#   TIMBERMAN_KEYSTORE_PATH / TIMBERMAN_KEYSTORE_PASSWORD
-#   TIMBERMAN_KEY_ALIAS / TIMBERMAN_KEY_PASSWORD
+#   TIMBERMAN_KEYSTORE_BASE64 (base64 of the signing keystore)
+#   TIMBERMAN_KEYSTORE_PASSWORD / TIMBERMAN_KEY_ALIAS / TIMBERMAN_KEY_PASSWORD
+# The keystore file is materialized from TIMBERMAN_KEYSTORE_BASE64 during the
+# build; TIMBERMAN_KEYSTORE_PATH is derived and points at the decoded file.
 # VITE_API_URL is defined below as the production HTTPS API; the gate also
 # verifies it so an APK with the /api fallback is never produced (R3).
 
@@ -54,13 +56,13 @@ jobs:
       - name: Gate on required secrets
         shell: bash
         env:
-          TIMBERMAN_KEYSTORE_PATH: ${{ secrets.TIMBERMAN_KEYSTORE_PATH }}
+          TIMBERMAN_KEYSTORE_BASE64: ${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}
           TIMBERMAN_KEYSTORE_PASSWORD: ${{ secrets.TIMBERMAN_KEYSTORE_PASSWORD }}
           TIMBERMAN_KEY_ALIAS: ${{ secrets.TIMBERMAN_KEY_ALIAS }}
           TIMBERMAN_KEY_PASSWORD: ${{ secrets.TIMBERMAN_KEY_PASSWORD }}
         run: |
           missing=""
-          for var in VITE_API_URL TIMBERMAN_KEYSTORE_PATH TIMBERMAN_KEYSTORE_PASSWORD TIMBERMAN_KEY_ALIAS TIMBERMAN_KEY_PASSWORD; do
+          for var in VITE_API_URL TIMBERMAN_KEYSTORE_BASE64 TIMBERMAN_KEYSTORE_PASSWORD TIMBERMAN_KEY_ALIAS TIMBERMAN_KEY_PASSWORD; do
             if [ -z "${!var:-}" ]; then
               echo "::error::Missing required value: $var"
               missing="$missing $var"
@@ -87,10 +89,30 @@ jobs:
           cache: gradle
 
       - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
+        run: |
+          # Locate sdkmanager on PATH, falling back to the runner's ANDROID_HOME.
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ] && [ -n "$ANDROID_HOME" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --licenses
+
+      # Materialize the signing keystore from its base64 secret (never committed,
+      # R5). The gate above already guaranteed the secret exists. Written under
+      # client/android/ and referenced via the derived TIMBERMAN_KEYSTORE_PATH.
+      - name: Materialize signing keystore
+        working-directory: client/android
+        run: |
+          echo "${{ secrets.TIMBERMAN_KEYSTORE_BASE64 }}" | base64 -d > timberman-release.keystore
+          ls -l timberman-release.keystore
 
       - name: Assemble release APK
         working-directory: client/android
+        env:
+          TIMBERMAN_KEYSTORE_PATH: ${{ github.workspace }}/client/android/timberman-release.keystore
+          TIMBERMAN_KEYSTORE_PASSWORD: ${{ secrets.TIMBERMAN_KEYSTORE_PASSWORD }}
+          TIMBERMAN_KEY_ALIAS: ${{ secrets.TIMBERMAN_KEY_ALIAS }}
+          TIMBERMAN_KEY_PASSWORD: ${{ secrets.TIMBERMAN_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
       - name: Rename APK to stable asset name

@@ -1,6 +1,6 @@
-package com.getcapacitor.myapp;
+package com.timberman.prode;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 

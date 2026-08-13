@@ -102,7 +102,7 @@ The splash timing already matches the legacy: fade-out at ~2.2s, unmount at ~2.8
 
 The client also ships as a signed APK built from `client/android/`, a committed Capacitor 8 Android scaffold (web assets are copied in by `cap sync`). Release builds are signed from environment variables — the keystore itself is never committed:
 
-- `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEYSTORE_ALIAS` / `ANDROID_KEYSTORE_KEY_PASSWORD`
+- `TIMBERMAN_KEYSTORE_PATH` / `TIMBERMAN_KEYSTORE_PASSWORD` / `TIMBERMAN_KEY_ALIAS` / `TIMBERMAN_KEY_PASSWORD`
 - `assembleRelease` fails when they are absent; debug builds are unaffected.
 
 Local APK build: `pnpm --filter client build:android` (vite build + `cap sync android`), then from `client/android/` run `gradlew assembleRelease` with the four variables set.
@@ -111,7 +111,7 @@ Local APK build: `pnpm --filter client build:android` (vite build + `cap sync an
 
 Generating the signing keystore is a manual, owner-held step (not automatable):
 
-1. Generate an RSA-2048 JKS keystore: `keytool -genkeypair -v -keystore timberman-release.jks -alias timberman -keyalg RSA -keysize 2048 -validity 10000`
+1. Generate an RSA-2048 keystore (PKCS12): `keytool -genkeypair -v -keystore timberman-release.keystore -alias timberman -keyalg RSA -keysize 2048 -validity 10000`
 2. Provide the keystore (base64) plus the four signing values above to CI as GitHub secrets — the APK workflow requires them before it can publish.
 3. Keep an offline backup of the keystore and its passwords with the project owner. Losing them breaks in-place updates (users would have to uninstall before installing a new APK).
 

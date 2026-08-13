@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand dark (bet-green) background for the native window and launch theme (D1). -->
+    <color name="brand_dark">#132421</color>
+</resources>

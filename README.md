@@ -11,7 +11,7 @@ Betting pool (prode) web app: users pick L/E/V outcomes on a match card, pay per
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+ (see `.nvmrc` — required by Capacitor 8)
 - pnpm 9+
 - PostgreSQL 17 running locally (see `server/.env` for the connection — that file is gitignored, do not commit real credentials)
 

@@ -9,6 +9,7 @@ import CarteleraPage from './components/matches/CarteleraPage';
 import TicketsPage from './components/bets/TicketsPage';
 import RankingPage from './components/ranking/RankingPage';
 import AdminPage from './components/admin/AdminPage';
+import { useBackButton } from './hooks/use-back-button';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +22,8 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  useBackButton();
+
   return (
     <QueryClientProvider client={queryClient}>
       <SplashScreen />

@@ -107,6 +107,14 @@ The client also ships as a signed APK built from `client/android/`, a committed 
 
 Local APK build: `pnpm --filter client build:android` (vite build + `cap sync android`), then from `client/android/` run `gradlew assembleRelease` with the four variables set.
 
+### Install on a phone
+
+Open the deployed site's `/install` page on your phone for step-by-step sideload instructions (allow unknown sources, download, install) and the APK download link, or grab the latest `Timberman.apk` from the [GitHub Releases page](https://github.com/fbiasuso/timberman/releases). The APK is produced by the `android-apk` GitHub Actions workflow on every push to `main`; installs update in place over previous versions (same keystore, data preserved).
+
+### Release cadence
+
+Each APK release ships with a version bump: bump `version` in `client/package.json` (drives the `v{version}` release tag and `APP_VERSION`) and bump `versionCode` in `client/android/app/build.gradle` — in-place updates require a strictly higher `versionCode` than the installed APK.
+
 ### Keystore custody (project action item)
 
 Generating the signing keystore is a manual, owner-held step (not automatable):

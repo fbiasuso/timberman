@@ -51,12 +51,12 @@ Chain strategy: pending
 
 ## Phase 4: Verification (device E2E + regression)
 
-- [ ] 4.1 Install signed APK on Android 9+: cartelera, tickets, ranking, admin render without 404s (R2).
-- [ ] 4.2 Back button: inner route → previous route; root → app exits (R4).
-- [ ] 4.3 JWT session survives app restart (D8).
-- [ ] 4.4 In-place update: install newer APK, same keystore, data preserved (R5).
-- [ ] 4.5 Regression: `pnpm --filter client test` and `pnpm --filter client build` green (R8).
-- [ ] 4.6 Confirm API traffic is HTTPS only; `/install` reachable on mobile Netlify (R3, R7).
+- [x] 4.1 Install signed APK on Android 9+: cartelera, tickets, ranking, admin render without 404s (R2). User device-confirmed on v0.1.3 ("quedó todo perfecto").
+- [x] 4.2 Back button: inner route → previous route; root → app exits (R4). User device-confirmed (v0.1.3 global pass).
+- [x] 4.3 JWT session survives app restart (D8). User device-confirmed (v0.1.3 global pass).
+- [x] 4.4 In-place update: install newer APK, same keystore, data preserved (R5). User reinstalled v0.1.1 → v0.1.2 → v0.1.3 with data intact.
+- [x] 4.5 Regression: `pnpm --filter client test` and `pnpm --filter client build` green (R8). 273 tests (21 files), build green.
+- [x] 4.6 Confirm API traffic is HTTPS only; `/install` reachable on mobile Netlify (R3, R7). VITE_API_URL=https://timberman-api.onrender.com (HTTPS); GET https://timbermanpro.netlify.app/install → 200, serves install page (contains Timberman.apk link, not SPA fallback).
 
 ## Spec Coverage
 

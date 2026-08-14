@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-08-14 — capacitor-apk
+
+Archived change: Android APK distribution via Capacitor 8 (sideload) on branch `feature/capacitor-apk` (chained PRs #46–#50). Planning commit `fb93eef`; implementation PRs #46 `c0edb58`, #47 `55da4a1`, #48 `b149de5`, #49 `1410d49`, #50 `34d54b3`; archived by the `docs(openspec)` archive commit (this entry).
+
+### Features
+
+- **Capacitor 8 WebView shell**: `@capacitor/core@^8.5.0` + CLI/android/app devDeps; `capacitor.config.ts` (`com.timberman.prode` / `Timberman` / `webDir dist`); committed `client/android/` scaffold (54 files) so clean checkouts build without `cap add`; dark launch theme `#132421`.
+- **Relative asset loading**: `vite.config.ts` `base: './'` so assets resolve under the WebView origin `https://localhost`; web build on Netlify unchanged.
+- **Build-time API URL**: workflow builds with `VITE_API_URL=https://timberman-api.onrender.com` (HTTPS); missing `VITE_API_URL` fails the build with no artifact.
+- **Back-button navigation**: `use-back-button.ts` via `@capacitor/app` — inner routes `history.back()`, root `exitApp()`; native-only guard keeps web tests green.
+- **Signed release APK pipeline**: GitHub Actions (Node 22 + pnpm 11 frozen install, `cap sync android`, JDK 21 + SDK licenses, `assembleRelease`) signing with the release keystore from GitHub secrets, artifact upload + GitHub Release asset `Timberman.apk` (tag `v{version}`); keystore absent fails loudly (secret gate + Gradle guard), no unsigned APK possible; in-place updates preserve data.
+- **Central app-version constant**: `APP_VERSION` from `client/package.json` (single source, tested) — hook for a future forced-update check; every release bumps the version.
+- **Install landing page**: mobile-first es-AR `client/public/install.html` (dark `#132421`, unknown-sources steps, latest APK link) with `netlify.toml` redirect `/install → /install.html` before the SPA fallback.
+
+### Scope
+
+Client + build/distribution only. Out of scope: server changes, Google Play/AAB, TWA, push notifications, native splash (no logo asset), forced-update mechanism (version constant is its hook).
+
+### Verification
+
+- Client: 273 tests passed (21 files) + `tsc && vite build` green on fresh runs.
+- Device E2E (Android 9+): features render without 404s, back navigates/exits at root, JWT session survives restart, in-place updates preserve data (v0.1.1 → v0.1.2 → v0.1.3).
+- Live: GET https://timbermanpro.netlify.app/install → 200 serving the install page.
+- Verdict: PASS — 17/17 spec scenarios compliant, zero CRITICAL/WARNING; 2 non-blocking SUGGESTIONs tracked for a future cleanup (gate Eliminar on pending save in Equipos.tsx; remove vestigial `.team-row-actions` CSS).
+
 ## 2026-08-09 — team-logos
 
 Archived change: Team Logos (Supabase Storage, File Upload, Shield Seeding) on branch `feature/teams-leagues`. Planning commit `38a6d39`; implementation PRs #39 `7a8e9bf`, #40 `84edbb7`, #41 `84c7a0d`, #42 `22f211a`, #43 `0644a40`; archived by the `docs(openspec)` archive commit (this entry).

@@ -112,11 +112,30 @@ Local APK build: `pnpm --filter client build:android` (vite build + `cap sync an
 
 ### Install on a phone
 
-Open the deployed site's `/install` page on your phone for step-by-step sideload instructions (allow unknown sources, download, install) and the APK download link, or grab the latest `Timberman.apk` from the [GitHub Releases page](https://github.com/fbiasuso/timberman/releases). The APK is produced by the `android-apk` GitHub Actions workflow on every push to `main`; installs update in place over previous versions (same keystore, data preserved).
+Open the deployed site's `/install` page on your phone for step-by-step sideload instructions (allow unknown sources, download, install). The download button points to the stable LTS URL in public Supabase Storage — `https://uwjcgmitaedkawgaqrfk.supabase.co/storage/v1/object/public/apk/timberman.apk` — so the link never changes between releases. The APK is produced by the `android-apk` GitHub Actions workflow on every push to `main`; GitHub Releases keep publishing automatically as backup/version history, but `/install` is the user-facing download. Installs update in place over previous versions (same keystore, data preserved).
 
 ### Release cadence
 
 Each APK release ships with a version bump: bump `version` in `client/package.json` (drives the `v{version}` release tag and `APP_VERSION`) and bump `versionCode` in `client/android/app/build.gradle` — in-place updates require a strictly higher `versionCode` than the installed APK.
+
+### Manual upload to the LTS bucket
+
+After CI builds the APK (the `android-apk` workflow artifact, or a local `assembleRelease` build), upload `Timberman.apk` to the LTS bucket so the `/install` download link serves the new version. The object is upserted at the same path, so the URL never changes:
+
+- **Bucket**: `apk` — **Object path**: `timberman.apk`
+- **Object headers**: `Cache-Control: no-cache` (browsers revalidate and never serve a stale APK) and content type `application/vnd.android.package-archive`
+
+**Dashboard path**: Supabase dashboard → Storage → bucket `apk` → upload/overwrite `timberman.apk` with the new build, then edit the object's metadata to set the headers above.
+
+**Storage API** (run from the repo root with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` loaded from `server/.env`):
+
+```bash
+curl -X POST "$SUPABASE_URL/storage/v1/object/apk/timberman.apk?upsert=true" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/vnd.android.package-archive" \
+  -H "Cache-Control: no-cache" \
+  --data-binary @client/android/app/build/outputs/apk/release/app-release.apk
+```
 
 ### Keystore custody (project action item)
 

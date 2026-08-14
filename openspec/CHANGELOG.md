@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-08-14 — apk-lts-automation
+
+Archived change: APK LTS Automation on branch `feat/apk-lts-automation` (PR #70, merge `159d165`). Planning commit `06363f5`; implementation commits `82377a3`, `d3cc506`, `92c62b0`, `4f06509`, `850577f`, `4100744`; archived by the `docs(openspec)` archive commit (this entry).
+
+### Features
+
+- **CI upload job (`upload-lts`)**: ADD-only job in `.github/workflows/android-apk.yml` — runs only on pushes to `main`, `needs: build-apk`, no checkout; downloads the `Timberman.apk` artifact, gates on `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` secrets (fail-loud `::error::` + `exit 1`), writes `version.txt` from `needs.build-apk.outputs.version` (no `v`, no newline), and upserts `version.txt` + `timberman.apk` to bucket `apk` via the Supabase Storage API (`x-upsert: true`, `cacheControl=no-cache`) with a bash retry loop (3 attempts, backoff, final `::warning::` + success). `release` job untouched and never gated by the upload.
+- **`version.txt` object**: public bucket object containing only the version, upserted on every main push with `cacheControl=no-cache` — live body `0.1.4` verified post-merge.
+- **Dynamic version on `/install`**: `client/public/install.html` inline fetch of the public `version.txt` URL (`AbortController` 5s timeout, trimmed), rendered under the download button and in the footer; hardcoded `v0.1.4` fallback on fetch failure (`FALLBACK` constant + explicit catch re-set).
+- **In-app version display**: splash (`SplashScreen.tsx` + `global.css` `.splash-version` bottom-center, fades with the overlay) and login/register (`LoginPage.tsx`, visible on both tabs) render `v{APP_VERSION}` from the existing central constant (`client/src/constants/app-version.ts` ← `package.json` via `resolveJsonModule`) — no new plumbing.
+- **README LTS distribution docs**: "Android APK (sideload)" documents automated CI upload as primary, dashboard + Storage API curl as emergency fallback, required GitHub secrets, `Cache-Control: no-cache` + `application/vnd.android.package-archive`.
+
+### Scope
+
+CI + client + docs. Out of scope: touching the `release` job (hard constraint), per-version bucket objects (stable `timberman.apk` only), forced-update/version-gating, Play Store publishing, Netlify workflow changes.
+
+### Verification
+
+- Tests: 826 passed / 0 failed (client 275 incl. 2 new version-label tests; server 551); `tsc && vite build` + `Assemble release APK` green.
+- Live CI run 31771081525: `build-apk` ✅, `upload-lts` ✅, `release` ✅ (v0.1.4 re-published, asset replaced).
+- Live bucket/site: `version.txt` HTTP 200 body `0.1.4`; `timberman.apk` HTTP 200 with correct content-type + `Cache-Control: no-cache`; `/install` served byte-identical to source; CORS open.
+- Verdict: PASS — 23/23 spec scenarios compliant, zero CRITICAL; the one WARNING (human E2E of splash + login/register version labels) was CONFIRMED by the user on a real device ("Se ven perfectamente"). Non-blocking SUGGESTIONs: README fallback curl form alignment (`?upsert=true` → `x-upsert: true`), and keeping the `install.html` fallback `0.1.4` in sync with `package.json` on future bumps.
+
 ## 2026-08-14 — apk-lts-hosting
 
 Archived change: LTS APK Hosting on Supabase Storage on branch `feat/apk-lts-hosting` (PR #61). Planning commits `0b2d604`, `ec7ff1b`, `064ea6e`; implementation via PR #61 (merge `38265d4`); archived by the `docs(openspec)` archive commit (this entry).

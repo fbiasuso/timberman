@@ -86,13 +86,14 @@ body {
 /* Mobile-only adjustments (<640px): fixes the APK + mobile web without touching desktop.
    Breakpoint matches the project's useIsMobile() hook (client/src/hooks/use-is-mobile.ts). */
 @media (max-width: 640px) {
-  /* Nav: wrap to a 2x2 grid so every link is visible, no dead space */
+  /* Nav: all links on a single line (Cartelera / Tickets / Ranking / Admin) */
   .app-nav {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .app-nav-link {
-    padding: 12px 8px;
-    flex: 1 1 50%;
+    padding: 12px 4px;
+    flex: 1 1 auto;
+    white-space: nowrap;
     text-align: center;
   }
 

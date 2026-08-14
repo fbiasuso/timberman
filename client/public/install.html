@@ -102,7 +102,7 @@
       Descargar Timberman.apk
     </a>
 
-    <p class="version">v0.1.4</p>
+    <p class="version" id="install-version">v0.1.4</p>
 
     <h2>Cómo instalar</h2>
     <ol>
@@ -143,8 +143,39 @@
     </div>
 
     <footer>
-      Versión estable v0.1.4
+      Versión estable <span id="footer-version">v0.1.4</span>
     </footer>
   </main>
+  <script>
+    // Versión en vivo desde el bucket LTS; v0.1.4 hardcodeada es el fallback
+    // offline si version.txt no responde dentro de los 5s de espera.
+    (function () {
+      const FALLBACK = '0.1.4';
+      const VERSION_URL = 'https://uwjcgmitaedkawgaqrfk.supabase.co/storage/v1/object/public/apk/version.txt';
+      const installVersion = document.getElementById('install-version');
+      const footerVersion = document.getElementById('footer-version');
+      if (!installVersion || !footerVersion) return;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+
+      fetch(VERSION_URL, { signal: controller.signal, cache: 'no-store' })
+        .then((res) => {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then((text) => {
+          const version = text.trim();
+          if (!version) return;
+          installVersion.textContent = 'v' + version;
+          footerVersion.textContent = 'v' + version;
+        })
+        .catch(() => {
+          installVersion.textContent = 'v' + FALLBACK;
+          footerVersion.textContent = 'v' + FALLBACK;
+        })
+        .finally(() => clearTimeout(timer));
+    })();
+  </script>
 </body>
 </html>

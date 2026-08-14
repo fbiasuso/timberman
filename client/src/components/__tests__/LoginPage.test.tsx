@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from '../auth/LoginPage';
+import { APP_VERSION } from '../../constants/app-version';
 
 // Mock dependencies
 const loginMutate = vi.fn();
@@ -50,5 +51,18 @@ describe('LoginPage', () => {
     render(<LoginPage />);
     await user.click(screen.getByText('Registrarse'));
     expect(screen.getByText('Confirmar contraseña')).toBeDefined();
+  });
+
+  it('shows the version label on the login tab', () => {
+    render(<LoginPage />);
+    expect(screen.getByText(`v${APP_VERSION}`)).toBeDefined();
+  });
+
+  it('keeps the version label visible on the register tab', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await user.click(screen.getByText('Registrarse'));
+    expect(screen.getByText('Confirmar contraseña')).toBeDefined();
+    expect(screen.getByText(`v${APP_VERSION}`)).toBeDefined();
   });
 });

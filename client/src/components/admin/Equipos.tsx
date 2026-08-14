@@ -275,6 +275,10 @@ interface TeamFormProps {
   uploadError?: string | null;
   submitLabel: string;
   onCancel?: () => void;
+  /** Edit mode only: delete the team from inside the form (full-width button). */
+  onDelete?: () => void;
+  /** Pending state for the in-form delete button. */
+  deletePending?: boolean;
   /** Two-step save (design D4): team payload first, then the selected file. */
   onSubmit: (payload: CreateTeamPayload | UpdateTeamPayload, file?: File) => void;
 }
@@ -289,6 +293,8 @@ function TeamForm({
   uploadError,
   submitLabel,
   onCancel,
+  onDelete,
+  deletePending = false,
   onSubmit,
 }: TeamFormProps) {
   const isEdit = initial != null;
@@ -466,6 +472,29 @@ function TeamForm({
         <div style={errorBox}>{localError ?? serverError}</div>
       )}
       {uploadError && <div style={errorBox}>{uploadError}</div>}
+
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deletePending}
+          style={{
+            width: '100%',
+            marginTop: 24,
+            padding: '10px 0',
+            border: 'none',
+            borderRadius: 8,
+            background: theme.rojo,
+            color: theme.blanco,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: deletePending ? 'not-allowed' : 'pointer',
+            opacity: deletePending ? 0.7 : 1,
+          }}
+        >
+          {deletePending ? 'Eliminando...' : 'Eliminar equipo'}
+        </button>
+      )}
     </form>
   );
 }
@@ -495,7 +524,9 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
   const handleDeleteTeam = (team: TeamDTO) => {
     // Blocked deletes (409 referenced by matches) surface here — the list
     // state is untouched because invalidation only runs on success.
-    deleteTeam.mutate(team.id);
+    deleteTeam.mutate(team.id, {
+      onSuccess: () => setEditingTeamId(null),
+    });
   };
 
   /** Two-step save (design D4): the chained shield upload runs after the team
@@ -615,9 +646,6 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
                     >
                       Editar
                     </button>
-                    <button type="button" style={dangerBtn} onClick={() => handleDeleteTeam(team)}>
-                      Eliminar
-                    </button>
                   </div>
                 </div>
 
@@ -631,6 +659,8 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
                     uploadError={uploadError}
                     submitLabel="Guardar equipo"
                     onCancel={() => setEditingTeamId(null)}
+                    onDelete={() => handleDeleteTeam(team)}
+                    deletePending={deleteTeam.isPending}
                     onSubmit={(payload, file) =>
                       handleUpdateSubmit(team, payload as UpdateTeamPayload, file)
                     }

@@ -69,11 +69,11 @@ Revert the branch (client-only; Netlify deploy untouched). Installed APKs keep w
 
 ## Success Criteria
 
-- [ ] Workflow emits a signed release APK from clean checkout
-- [ ] APK installs; cartelera, tickets, ranking, admin work
-- [ ] Back navigates history; JWT session survives restart
-- [ ] Netlify deploy + client tests unchanged, green
-- [ ] Install page live
+- [x] Workflow emits a signed release APK from clean checkout
+- [x] APK installs; cartelera, tickets, ranking, admin work
+- [x] Back navigates history; JWT session survives restart
+- [x] Netlify deploy + client tests unchanged, green
+- [x] Install page live
 
 ## Proposal question round
 

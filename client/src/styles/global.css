@@ -76,8 +76,9 @@ body {
   gap: 12px;
 }
 
-/* Mobile-only adjustments (<500px): fixes the APK + mobile web without touching desktop */
-@media (max-width: 500px) {
+/* Mobile-only adjustments (<640px): fixes the APK + mobile web without touching desktop.
+   Breakpoint matches the project's useIsMobile() hook (client/src/hooks/use-is-mobile.ts). */
+@media (max-width: 640px) {
   /* Nav: wrap to a 2x2 grid so every link is visible, no dead space */
   .app-nav {
     flex-wrap: wrap;

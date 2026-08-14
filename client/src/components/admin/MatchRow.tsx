@@ -89,7 +89,6 @@ const input: React.CSSProperties = {
 
 const grid: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
   gap: 12,
   width: '100%',
 };
@@ -320,7 +319,7 @@ function EditableRow({ match }: { match: MatchDTO }) {
           </select>
         </div>
 
-        <div style={grid}>
+        <div className="admin-grid" style={grid}>
           <div>
             <label style={label} htmlFor={`row-local-${match.id}`}>
               Equipo Local

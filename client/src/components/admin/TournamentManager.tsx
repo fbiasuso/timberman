@@ -135,7 +135,7 @@ export default function TournamentManager() {
 
         {tournaments && tournaments.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${theme.border}`, color: theme.textoSecundario }}>
                   <th style={thStyle}>Nombre</th>

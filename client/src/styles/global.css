@@ -99,6 +99,12 @@ body {
     min-width: 640px;
   }
 
+  /* Admin table scroll wrappers: a fixed right-edge fade hints that more
+     columns are reachable by swiping (scrollbars are hidden on mobile). */
+  .admin-table-scroll {
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.45), transparent) right / 28px 100% no-repeat scroll;
+  }
+
   /* Equipos: stack Editar / Eliminar vertically with a clear gap */
   .team-row-actions {
     flex-direction: column;

@@ -1,9 +1,16 @@
 import axios from 'axios';
 
-// VITE_API_URL lets a hosted build point the client at the deployed API
-// (e.g. https://api.example.com). Falls back to '/api', which the Vite dev
-// server proxies to http://localhost:3001.
-const apiBaseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
+// VITE_API_URL is the API origin (e.g. https://timberman-api.onrender.com).
+// Every server route lives under /api/*, so the client appends the prefix
+// unless the value already includes it. Without VITE_API_URL it falls back to
+// a relative '/api', which the Vite dev server proxies to the local API.
+export function resolveApiBaseURL(raw: string | undefined): string {
+  if (!raw) return '/api';
+  const origin = raw.replace(/\/+$/, '');
+  return origin.endsWith('/api') ? origin : `${origin}/api`;
+}
+
+const apiBaseURL = resolveApiBaseURL(import.meta.env.VITE_API_URL as string | undefined);
 
 const client = axios.create({
   baseURL: apiBaseURL,

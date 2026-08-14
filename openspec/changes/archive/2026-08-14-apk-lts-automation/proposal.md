@@ -65,7 +65,7 @@ Revert workflow ADD + install.html/app changes in a commit. If a bad upload land
 
 ## Success Criteria
 
-- [ ] Push to main: both public URLs serve new APK + version.txt
-- [ ] install.html shows live version; fallback renders on fetch failure
-- [ ] APK splash + login/register show `v{current}`
-- [ ] `release` job diff = zero; GitHub Release still publishes
+- [x] Push to main: both public URLs serve new APK + version.txt — verified live post-merge (CI run 31771081525): `version.txt` HTTP 200 body `0.1.4`; `timberman.apk` HTTP 200, fresh ETag/Last-Modified
+- [x] install.html shows live version; fallback renders on fetch failure — served HTML byte-identical to source with inline fetch script (`FALLBACK = '0.1.4'`, AbortController 5s, catch → fallback); live `version.txt` reachable with CORS open
+- [x] APK splash + login/register show `v{current}` — human E2E CONFIRMED on device by user ("Se ven perfectamente"); 2 new LoginPage tests pass; splash span + CSS code-level evidence green
+- [x] `release` job diff = zero; GitHub Release still publishes — `git diff 159d165^1` shows only the ADDED `upload-lts` job; release job succeeded live and re-published v0.1.4 with asset

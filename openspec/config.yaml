@@ -76,3 +76,8 @@ archive:
     status: complete
     total_tests: 0
     prs: 1
+  apk-lts-automation:
+    archived_at: "2026-08-14"
+    status: complete
+    total_tests: 826
+    prs: 1

@@ -48,6 +48,16 @@ body {
   margin-top: 24px;
 }
 
+.splash-version {
+  position: absolute;
+  bottom: 28px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #a3b8b5; /* theme.textoSecundario */
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(0.96); opacity: 0.8; }
   50% { transform: scale(1.02); opacity: 1; }

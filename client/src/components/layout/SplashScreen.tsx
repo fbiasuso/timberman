@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { APP_VERSION } from '../../constants/app-version';
 
 /**
  * SplashScreen — full-screen loading overlay shown on app start.
@@ -27,6 +28,7 @@ export default function SplashScreen() {
     <div className={`splash-screen${hidden ? ' hidden' : ''}`}>
       <div className="splash-logo">TIMBERMAN</div>
       <div className="splash-spinner" />
+      <span className="splash-version">v{APP_VERSION}</span>
     </div>
   );
 }

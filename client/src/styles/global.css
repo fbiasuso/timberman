@@ -76,13 +76,6 @@ body {
   min-height: 100dvh;
 }
 
-/* Team row actions (Editar / Eliminar) side by side on desktop */
-.team-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 /* Mobile-only adjustments (<640px): fixes the APK + mobile web without touching desktop.
    Breakpoint matches the project's useIsMobile() hook (client/src/hooks/use-is-mobile.ts). */
 @media (max-width: 640px) {
@@ -113,10 +106,4 @@ body {
     background: linear-gradient(to left, rgba(0, 0, 0, 0.45), transparent) right / 28px 100% no-repeat scroll;
   }
 
-  /* Equipos: stack Editar / Eliminar vertically with a clear gap */
-  .team-row-actions {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
   }
-}

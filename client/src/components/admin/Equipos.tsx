@@ -452,9 +452,9 @@ function TeamForm({
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
         <button
           type="submit"
-          disabled={isPending || uploading || createMissingLeague || !!logoError}
+          disabled={isPending || uploading || createMissingLeague || !!logoError || deletePending}
           style={
-            isPending || uploading || createMissingLeague || !!logoError
+            isPending || uploading || createMissingLeague || !!logoError || deletePending
               ? primaryBtnDisabled
               : primaryBtn
           }

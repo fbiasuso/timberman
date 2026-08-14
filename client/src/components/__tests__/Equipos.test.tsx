@@ -291,8 +291,14 @@ describe('Equipos', () => {
     expandLeague();
 
     const bocaRow = teamRow('Boca Juniors');
-    fireEvent.click(within(bocaRow).getByRole('button', { name: 'Eliminar' }));
-    expect(deleteTeamMutate).toHaveBeenCalledWith(boca.id);
+    // Rows offer ONLY Editar — delete lives inside the edit form
+    expect(within(bocaRow).queryByRole('button', { name: 'Eliminar' })).toBeNull();
+    expect(within(bocaRow).getByRole('button', { name: 'Editar' })).toBeDefined();
+
+    fireEvent.click(within(bocaRow).getByRole('button', { name: 'Editar' }));
+    const form = screen.getByRole('button', { name: 'Guardar equipo' }).closest('form') as HTMLElement;
+    fireEvent.click(within(form).getByRole('button', { name: 'Eliminar equipo' }));
+    expect(deleteTeamMutate).toHaveBeenCalledWith(boca.id, expect.anything());
 
     // The server rejects with 409 (team referenced by a match)
     deleteTeamState.isError = true;
@@ -302,6 +308,23 @@ describe('Equipos', () => {
     expect(screen.getByText('El equipo está referenciado por partidos')).toBeDefined();
     // The team remains in the list — the invalidated refetch never ran
     expect(screen.getByText('Boca Juniors')).toBeDefined();
+  });
+
+  it('deletes a team from the edit form and closes the form on success', () => {
+    mockLeagues([liga]);
+    const view = render(<Equipos />);
+    expandLeague();
+
+    const riverRow = teamRow('River Plate');
+    fireEvent.click(within(riverRow).getByRole('button', { name: 'Editar' }));
+    const form = screen.getByRole('button', { name: 'Guardar equipo' }).closest('form') as HTMLElement;
+    expect(within(form).getByRole('button', { name: 'Eliminar equipo' })).toBeDefined();
+
+    // The delete resolves server-side → the edit form closes
+    deleteTeamMutate.mockImplementation((_id, opts) => opts?.onSuccess?.());
+    fireEvent.click(within(form).getByRole('button', { name: 'Eliminar equipo' }));
+    expect(deleteTeamMutate).toHaveBeenCalledWith(river.id, expect.anything());
+    expect(screen.queryByRole('button', { name: 'Guardar equipo' })).toBeNull();
   });
 
   it('renders the shield as a file picker restricted to images', () => {

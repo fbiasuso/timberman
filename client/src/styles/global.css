@@ -69,6 +69,13 @@ body {
   grid-template-columns: 1fr 1fr;
 }
 
+/* Login page: fill the viewport and center the card vertically (100dvh
+   fallback for mobile browsers whose URL bar collapses the 100vh viewport) */
+.login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 /* Team row actions (Editar / Eliminar) side by side on desktop */
 .team-row-actions {
   display: flex;

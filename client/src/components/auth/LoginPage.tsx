@@ -15,8 +15,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: '0 16px', background: theme.fondo, minHeight: '100vh', color: theme.blanco }}>
-      <h1 style={{ textAlign: 'center', marginBottom: 32 }}>Timberman</h1>
+    <div
+      className="login-page"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        background: theme.fondo,
+        color: theme.blanco,
+      }}
+    >
+      <div style={{ maxWidth: 400, width: '100%', margin: 'auto', padding: '0 16px' }}>
+        <h1 style={{ textAlign: 'center', marginBottom: 32 }}>Timberman</h1>
 
       {/* Tabs */}
       <div style={{ display: 'flex', marginBottom: 24 }}>
@@ -54,6 +63,7 @@ export default function LoginPage() {
 
       {/* Form */}
       {tab === 'login' ? <LoginForm /> : <RegisterForm />}
+      </div>
     </div>
   );
 }

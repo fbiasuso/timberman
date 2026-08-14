@@ -131,8 +131,9 @@ jobs:
         id: version
         run: echo "version=$(node -p 'require("./client/package.json").version')" >> "$GITHUB_OUTPUT"
 
-  # Publish the signed APK as a GitHub Release asset (D5): tag v{version},
-  # update_release so re-runs on the same version refresh the release.
+  # Publish the signed APK as a GitHub Release asset (D5): tag v{version}.
+  # Re-runs on an existing tag overwrite the release assets (softprops
+  # action-gh-release@v2 replaces files on the same tag by default).
   release:
     if: github.ref == 'refs/heads/main'
     needs: build-apk
@@ -150,4 +151,3 @@ jobs:
         with:
           tag_name: v${{ needs.build-apk.outputs.version }}
           files: release/Timberman.apk
-          update_release: true

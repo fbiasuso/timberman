@@ -18,6 +18,7 @@ export default function NavTabs() {
 
   return (
     <nav
+      className="app-nav"
       style={{
         display: 'flex',
         borderBottom: `1px solid ${theme.border}`,
@@ -29,8 +30,8 @@ export default function NavTabs() {
           key={tab.path}
           to={tab.path}
           end={tab.path === '/'}
+          className="app-nav-link"
           style={({ isActive }) => ({
-            padding: '12px 24px',
             textDecoration: 'none',
             color: isActive ? theme.amarilloBet : theme.textoSecundario,
             fontWeight: isActive ? 600 : 400,

@@ -47,7 +47,6 @@ const input: React.CSSProperties = {
 
 const grid: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
   gap: 16,
 };
 
@@ -198,7 +197,7 @@ function CreateLeagueForm() {
       <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: theme.blanco }}>
         Nueva liga
       </h4>
-      <div style={grid}>
+      <div className="admin-grid" style={grid}>
         <div>
           <label style={label} htmlFor="league-name">
             Nombre
@@ -356,7 +355,7 @@ function TeamForm({
 
   return (
     <form onSubmit={handleSubmit} style={{ padding: '12px 16px' }}>
-      <div style={grid}>
+      <div className="admin-grid" style={grid}>
         <div>
           <label style={label} htmlFor={`team-name-${initial?.id ?? 'new'}`}>
             Nombre
@@ -606,18 +605,20 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    style={smallBtn}
-                    onClick={() =>
-                      setEditingTeamId((id) => (id === team.id ? null : team.id))
-                    }
-                  >
-                    Editar
-                  </button>
-                  <button type="button" style={dangerBtn} onClick={() => handleDeleteTeam(team)}>
-                    Eliminar
-                  </button>
+                  <div className="team-row-actions">
+                    <button
+                      type="button"
+                      style={smallBtn}
+                      onClick={() =>
+                        setEditingTeamId((id) => (id === team.id ? null : team.id))
+                      }
+                    >
+                      Editar
+                    </button>
+                    <button type="button" style={dangerBtn} onClick={() => handleDeleteTeam(team)}>
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
 
                 {editingTeamId === team.id && (

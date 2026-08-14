@@ -625,14 +625,14 @@ describe('ResultsEntry', () => {
 });
 
 describe('ResultsEntry mobile layout', () => {
-  it('renders a two-column card with inputs below the teams line on mobile', () => {
+  it('stacks a single-column card: teams, score inputs, then actions', () => {
     mockUseIsMobile.mockReturnValue(true);
     mockTournaments([openDate]);
     mockCurrent(openDate, openMatches);
 
     render(<ResultsEntry />);
 
-    // Teams line renders above the score inputs
+    // Teams line renders first
     const teamsRow = screen.getAllByTestId('results-teams-row')[0];
     expect(screen.getByText(/River Plate/)).toBeDefined();
     expect(screen.getByText(/Boca Juniors/)).toBeDefined();
@@ -644,23 +644,21 @@ describe('ResultsEntry mobile layout', () => {
     expect(inputsGrid.contains(screen.getAllByPlaceholderText('2')[0])).toBe(true);
     expect(inputsGrid.contains(screen.getAllByPlaceholderText('1')[0])).toBe(true);
 
-    // Left column stacks the teams row first, the inputs grid below it
-    const leftCol = screen.getAllByTestId('results-left-col')[0];
-    expect(leftCol.children[0]).toBe(teamsRow);
-    expect(leftCol.children[1]).toBe(inputsGrid);
-
-    // The actions column sits beside the content column
-    expect(screen.getAllByTestId('results-actions')[0]).toBeDefined();
+    // One column with three lines in order: teams, inputs, actions
+    const card = teamsRow.parentElement as HTMLElement;
+    expect(card.children[0]).toBe(teamsRow);
+    expect(card.children[1]).toBe(inputsGrid);
+    expect(card.children[2]).toBe(screen.getAllByTestId('results-actions')[0]);
   });
 
-  it('keeps the single-row layout on desktop with no mobile columns', () => {
+  it('keeps the single-row layout on desktop with no mobile structure', () => {
     mockTournaments([openDate]);
     mockCurrent(openDate, openMatches);
 
     render(<ResultsEntry />);
 
     // Desktop path: no mobile-specific structure
-    expect(screen.queryByTestId('results-left-col')).toBeNull();
+    expect(screen.queryByTestId('results-teams-row')).toBeNull();
     expect(screen.queryByTestId('results-inputs-grid')).toBeNull();
     expect(screen.queryByTestId('results-actions')).toBeNull();
     // Inputs render as before
@@ -668,7 +666,7 @@ describe('ResultsEntry mobile layout', () => {
     expect(screen.getAllByPlaceholderText('1')).toHaveLength(2);
   });
 
-  it('keeps Guardar inside the right column on mobile', () => {
+  it('keeps Guardar inside the actions line on mobile', () => {
     mockUseIsMobile.mockReturnValue(true);
     mockTournaments([closedDate]);
     mockCurrent(null);
@@ -679,11 +677,11 @@ describe('ResultsEntry mobile layout', () => {
     fireEvent.change(screen.getByPlaceholderText('2'), { target: { value: '2' } });
     fireEvent.change(screen.getByPlaceholderText('1'), { target: { value: '1' } });
 
-    const actionsCol = screen.getByTestId('results-actions');
-    expect(actionsCol.contains(screen.getByRole('button', { name: 'Guardar' }))).toBe(true);
+    const actionsRow = screen.getByTestId('results-actions');
+    expect(actionsRow.contains(screen.getByRole('button', { name: 'Guardar' }))).toBe(true);
   });
 
-  it('stacks the checkmark above Limpiar in the right column on mobile', () => {
+  it('places the checkmark before Limpiar in the actions line on mobile', () => {
     mockUseIsMobile.mockReturnValue(true);
     mockTournaments([closedDate]);
     mockCurrent(null);
@@ -691,13 +689,13 @@ describe('ResultsEntry mobile layout', () => {
 
     render(<ResultsEntry />);
 
-    const actionsCol = screen.getByTestId('results-actions');
+    const actionsRow = screen.getByTestId('results-actions');
     const checkmark = screen.getByText('✓');
     const limpiar = screen.getByRole('button', { name: 'Limpiar' });
-    expect(actionsCol.contains(checkmark)).toBe(true);
-    expect(actionsCol.contains(limpiar)).toBe(true);
-    // Stacked column order: checkmark on top, Limpiar below it
-    const children = Array.from(actionsCol.children);
+    expect(actionsRow.contains(checkmark)).toBe(true);
+    expect(actionsRow.contains(limpiar)).toBe(true);
+    // Row order: checkmark first, Limpiar after it
+    const children = Array.from(actionsRow.children);
     expect(children.indexOf(checkmark)).toBeLessThan(children.indexOf(limpiar));
   });
 });

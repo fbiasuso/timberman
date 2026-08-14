@@ -152,22 +152,13 @@ const inlineError: React.CSSProperties = {
   padding: '6px 10px',
 };
 
-// ─── Mobile layout (mirrors the cartelera two-column pattern) ──────────────
+// ─── Mobile layout (single column, three stacked lines) ────────────────────
 
-/** Mobile match card: content column left, actions column right */
+/** Mobile match card: teams / scores / actions stacked in one column */
 const matchCardMobile: React.CSSProperties = {
   ...matchCard,
-  flexWrap: 'nowrap',
-  alignItems: 'stretch',
-};
-
-/** Mobile left column: teams line on top, score inputs below it */
-const mobileLeftCol: React.CSSProperties = {
-  flex: 1,
-  display: 'flex',
   flexDirection: 'column',
-  gap: 12,
-  minWidth: 0,
+  alignItems: 'stretch',
 };
 
 /** Mobile score inputs — same 3-column template as the cartelera teams grid */
@@ -183,13 +174,12 @@ const mobileInput: React.CSSProperties = {
   width: '100%',
 };
 
-/** Mobile right column: Guardar / ✓ + Limpiar stacked and centered */
-const mobileActionsCol: React.CSSProperties = {
+/** Mobile actions line: Guardar / ✓ + Limpiar on one row, wraps if tight */
+const mobileActionsRow: React.CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
+  flexWrap: 'wrap',
   alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
+  gap: 12,
 };
 
 /**
@@ -256,8 +246,8 @@ export default function ResultsEntry() {
   const setResult = useSetMatchResult();
   const closeDate = useCloseDate();
   const publishResults = usePublishResults();
-  // Mobile viewport — switches each match card to the two-column layout
-  // (content left, actions right) mirroring the cartelera pattern.
+  // Mobile viewport — stacks each match card into one column (teams line, score
+  // inputs, then the actions line), mirroring the cartelera pattern.
   const isMobile = useIsMobile();
 
   // Per-match result entry state (design D6) — initialized from parseScoreToInputs
@@ -477,7 +467,7 @@ export default function ResultsEntry() {
           const hasSavedResult = match.result != null || entry.status === 'saved';
 
           // Shared per-match pieces — the desktop row and the mobile
-          // two-column layout render the SAME content, only the placement
+          // single-column layout render the SAME content, only the placement
           // differs (no logic or behavior change).
           const teamsLine = (
             <div style={{ fontWeight: 600, fontSize: 14, color: theme.blanco }}>
@@ -553,15 +543,13 @@ export default function ResultsEntry() {
             <div key={match.id}>
               {isMobile ? (
                 <div style={matchCardMobile}>
-                  <div style={mobileLeftCol} data-testid="results-left-col">
-                    <div data-testid="results-teams-row">{teamsLine}</div>
-                    <div style={mobileInputsGrid} data-testid="results-inputs-grid">
-                      {localField}
-                      <div />
-                      {visitorField}
-                    </div>
+                  <div data-testid="results-teams-row">{teamsLine}</div>
+                  <div style={mobileInputsGrid} data-testid="results-inputs-grid">
+                    {localField}
+                    <div />
+                    {visitorField}
                   </div>
-                  <div style={mobileActionsCol} data-testid="results-actions">
+                  <div style={mobileActionsRow} data-testid="results-actions">
                     {actions}
                   </div>
                 </div>

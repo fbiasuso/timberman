@@ -59,7 +59,6 @@ const input: React.CSSProperties = {
 
 const grid: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
   gap: 16,
 };
 
@@ -179,7 +178,7 @@ export default function AddMatchForm({ dateId }: AddMatchFormProps) {
         </select>
       </div>
 
-      <div style={grid}>
+      <div className="admin-grid" style={grid}>
         <div>
           <label style={label} htmlFor="add-match-local">
             Equipo Local

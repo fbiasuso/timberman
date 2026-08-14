@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-08-14 — apk-lts-hosting
+
+Archived change: LTS APK Hosting on Supabase Storage on branch `feat/apk-lts-hosting` (PR #61). Planning commits `0b2d604`, `ec7ff1b`, `064ea6e`; implementation via PR #61 (merge `38265d4`); archived by the `docs(openspec)` archive commit (this entry).
+
+### Features
+
+- **LTS download link on `/install`**: `client/public/install.html` download button href → `https://uwjcgmitaedkawgaqrfk.supabase.co/storage/v1/object/public/apk/timberman.apk` (public Supabase Storage bucket `apk`, path `timberman.apk`); no GitHub Releases link.
+- **GitHub-free install page**: footer "Ver todas las versiones publicadas" link removed; footer renders plain text `Versión estable — actualizada manualmente`; `git grep github.com` → 0 matches.
+- **README LTS distribution docs**: "Android APK (sideload)" section documents the LTS URL as download source and the manual per-release upload procedure — Supabase dashboard (Storage → bucket `apk` → overwrite + headers) or Storage API curl with `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` from `server/.env` (`upsert=true`, `Cache-Control: no-cache`, content type `application/vnd.android.package-archive`); keystore custody and version-bump cadence kept.
+- **GitHub Releases untouched**: `.github/workflows/android-apk.yml` and `netlify.toml` have no diff vs main; releases preserved as backup, never linked from `/install`.
+
+### Scope
+
+Static change only: `client/public/install.html` + `README.md`. Out of scope: workflow/CI changes, automated bucket upload (manual per release is a deliberate design choice), server/client app code.
+
+### Verification
+
+- Static greps + `git diff origin/main...feat/apk-lts-hosting` scope check green; live `HEAD` on the LTS URL → HTTP 200 (`application/vnd.android.package-archive`, ~3.3 MB).
+- Verdict: PASS WITH WARNINGS — 4/4 spec requirements compliant, zero CRITICAL; 1 non-blocking open follow-up: task 3.2 manual device E2E (install-over-previous-version on real Android) remains for the human release owner.
+
 ## 2026-08-14 — capacitor-apk
 
 Archived change: Android APK distribution via Capacitor 8 (sideload) on branch `feature/capacitor-apk` (chained PRs #46–#50). Planning commit `fb93eef`; implementation PRs #46 `c0edb58`, #47 `55da4a1`, #48 `b149de5`, #49 `1410d49`, #50 `34d54b3`; archived by the `docs(openspec)` archive commit (this entry).

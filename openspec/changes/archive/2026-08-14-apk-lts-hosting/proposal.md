@@ -60,7 +60,7 @@ Revert the branch (2 files). `/install` links back to GitHub Releases as before;
 
 ## Success Criteria
 
-- [ ] `/install` download button resolves to the LTS URL and downloads the APK
-- [ ] No `github.com` link in `client/public/install.html`
-- [ ] README documents LTS URL, manual upload steps, Cache-Control/content-type
-- [ ] `git diff` shows only `install.html` + `README.md` — workflow untouched
+- [ ] `/install` download button resolves to the LTS URL and downloads the APK — href + live HEAD verified (HTTP 200, `application/vnd.android.package-archive`); full install-over-previous-version on a real device remains as open follow-up task 3.2
+- [x] No `github.com` link in `client/public/install.html` — `git grep github.com` → 0 matches
+- [x] README documents LTS URL, manual upload steps, Cache-Control/content-type — "Android APK (sideload)" + "Manual upload to the LTS bucket" sections
+- [x] `git diff` shows only `install.html` + `README.md` — workflow untouched

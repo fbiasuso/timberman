@@ -71,3 +71,8 @@ archive:
     status: complete
     total_tests: 273
     prs: 5
+  apk-lts-hosting:
+    archived_at: "2026-08-14"
+    status: complete
+    total_tests: 0
+    prs: 1

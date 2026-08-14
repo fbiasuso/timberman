@@ -203,7 +203,7 @@ jobs:
         run: |
           retry_upload() { local file="$1" ctype="$2" url="$3"
             for i in 1 2 3; do
-              if curl -fsS -X POST "$url?cacheControl=no-cache" \
+              if curl -fsS --max-time 60 -X POST "$url?cacheControl=no-cache" \
                 -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
                 -H "Content-Type: $ctype" -H "x-upsert: true" \
                 --data-binary "@$file"; then return 0; fi
@@ -222,7 +222,7 @@ jobs:
         run: |
           retry_upload() { local file="$1" ctype="$2" url="$3"
             for i in 1 2 3; do
-              if curl -fsS -X POST "$url?cacheControl=no-cache" \
+              if curl -fsS --max-time 60 -X POST "$url?cacheControl=no-cache" \
                 -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
                 -H "Content-Type: $ctype" -H "x-upsert: true" \
                 --data-binary "@$file"; then return 0; fi

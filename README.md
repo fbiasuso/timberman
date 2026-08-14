@@ -106,6 +106,7 @@ GitHub secrets required by the `android-apk` workflow:
 
 - `TIMBERMAN_KEYSTORE_BASE64` — base64 of the signing keystore (the workflow decodes it to `client/android/timberman-release.keystore` on the runner)
 - `TIMBERMAN_KEYSTORE_PASSWORD` / `TIMBERMAN_KEY_ALIAS` / `TIMBERMAN_KEY_PASSWORD`
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — Supabase project credentials used by the `upload-lts` job to push the APK + `version.txt` to the public LTS bucket; the job fails loudly when they are absent.
 - `assembleRelease` fails when they are absent; debug builds are unaffected.
 
 Local APK build: `pnpm --filter client build:android` (vite build + `cap sync android`), then from `client/android/` run `gradlew assembleRelease` with `TIMBERMAN_KEYSTORE_PATH` (path to the keystore file) plus the three signing values above set in the shell environment.
@@ -118,12 +119,17 @@ Open the deployed site's `/install` page on your phone for step-by-step sideload
 
 Each APK release ships with a version bump: bump `version` in `client/package.json` (drives the `v{version}` release tag and `APP_VERSION`) and bump `versionCode` in `client/android/app/build.gradle` — in-place updates require a strictly higher `versionCode` than the installed APK.
 
-### Manual upload to the LTS bucket
+### Automated upload (CI)
 
-After CI builds the APK (the `android-apk` workflow artifact, or a local `assembleRelease` build), upload `Timberman.apk` to the LTS bucket so the `/install` download link serves the new version. The object is upserted at the same path, so the URL never changes:
+Every push to `main` runs the `android-apk` workflow, which builds the signed APK and — via the `upload-lts` job — upserts `timberman.apk` and `version.txt` to the LTS bucket, so the `/install` download link serves the new version automatically. Both objects are upserted at the same paths, so the URLs never change:
 
-- **Bucket**: `apk` — **Object path**: `timberman.apk`
-- **Object headers**: `Cache-Control: no-cache` (browsers revalidate and never serve a stale APK) and content type `application/vnd.android.package-archive`
+- **Bucket**: `apk` — **Object paths**: `timberman.apk` and `version.txt`
+- **Object headers**: `Cache-Control: no-cache` (browsers revalidate and never serve a stale APK) and content type `application/vnd.android.package-archive` for the APK
+- **version.txt**: plain text with the release version (from `client/package.json`), upserted on every main push; `/install` fetches it live to show the current version under the download button and in the footer.
+
+The `upload-lts` job is fail-soft: each upload retries up to 3 times, and if storage is unreachable it logs a warning and lets the workflow finish so `release` is never blocked — the LTS objects keep the previous version until the next push.
+
+**Emergency fallback** (only if the CI upload fails):
 
 **Dashboard path**: Supabase dashboard → Storage → bucket `apk` → upload/overwrite `timberman.apk` with the new build, then edit the object's metadata to set the headers above.
 

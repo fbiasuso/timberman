@@ -151,3 +151,83 @@ jobs:
         with:
           tag_name: v${{ needs.build-apk.outputs.version }}
           files: release/Timberman.apk
+
+  # Upload the signed APK + version.txt to the public LTS bucket so /install
+  # serves the latest release at a stable URL (no GitHub Release round-trip).
+  # Runs only on pushes to main — workflow_dispatch re-runs must never clobber
+  # the LTS objects. Uploads are fail-soft (3 attempts, then warn + exit 0) so
+  # release is never blocked by a storage outage; the secrets gate below is the
+  # hard-fail boundary for misconfiguration (uploads nothing when absent).
+  upload-lts:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-apk
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK artifact
+        id: download-apk
+        uses: actions/download-artifact@v4
+        with:
+          name: Timberman.apk
+          path: release
+
+      - name: Gate on Supabase secrets
+        id: gate-on-supabase-secrets
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=""
+          for var in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::Missing required value: $var"
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Refusing to upload: Supabase secrets not set:$missing"
+            exit 1
+          fi
+
+      - name: Write version.txt
+        id: write-version-txt
+        shell: bash
+        run: printf '%s' "${{ needs.build-apk.outputs.version }}" > version.txt
+
+      - name: Upload version.txt
+        id: upload-version-txt
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          retry_upload() { local file="$1" ctype="$2" url="$3"
+            for i in 1 2 3; do
+              if curl -fsS -X POST "$url?cacheControl=no-cache" \
+                -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+                -H "Content-Type: $ctype" -H "x-upsert: true" \
+                --data-binary "@$file"; then return 0; fi
+              [ "$i" -lt 3 ] && sleep $((i * 5))
+            done
+            echo "::warning::upload-lts failed after 3 attempts: $file — LTS keeps previous version"
+            return 0; }
+          retry_upload version.txt text/plain "$SUPABASE_URL/storage/v1/object/apk/version.txt"
+
+      - name: Upload APK
+        id: upload-apk
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          retry_upload() { local file="$1" ctype="$2" url="$3"
+            for i in 1 2 3; do
+              if curl -fsS -X POST "$url?cacheControl=no-cache" \
+                -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+                -H "Content-Type: $ctype" -H "x-upsert: true" \
+                --data-binary "@$file"; then return 0; fi
+              [ "$i" -lt 3 ] && sleep $((i * 5))
+            done
+            echo "::warning::upload-lts failed after 3 attempts: $file — LTS keeps previous version"
+            return 0; }
+          retry_upload release/Timberman.apk application/vnd.android.package-archive "$SUPABASE_URL/storage/v1/object/apk/timberman.apk"

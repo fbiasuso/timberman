@@ -8,6 +8,7 @@ Full-stack betting pool (prode) application: React + Vite + TypeScript client, F
 
 - `admin-operations`: Admin functions — user management, balance adjustments, match results entry, system configuration, Partidos date accordion with match editing, Equipos tab for league/team registry CRUD, tournament lifecycle UI, team shield upload via native file picker (preview + client-side validation).
 - `android-apk-distribution`: Capacitor 8 WebView shell (appId `com.timberman.prode`, committed `client/android/`), hardware back-button navigation, signed release APK pipeline via GitHub Actions (keystore from secrets, HTTPS `VITE_API_URL` at build), central app-version constant, and a Netlify `/install` sideload page.
+- `apk-lts-distribution`: Stable LTS APK URL in a public Supabase Storage bucket (`apk/timberman.apk`, `Cache-Control: no-cache`) as the `/install` download source — GitHub-free install page, README-documented manual per-release upload (dashboard or Storage API curl with service role key), GitHub Releases untouched as backup.
 - `betting-engine`: Bet placement, validation, pozo (prize pool) calculation, and commission configuration.
 - `date-history`: Read-only access to historical tournament dates and matches with server-side sanitization of unpublished results.
 - `prize-payouts`: Winner determination, equal pozo split, balance credits, unpaid-pozo carryover, and payout visibility.

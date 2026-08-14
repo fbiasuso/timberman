@@ -75,7 +75,9 @@ export default function MatchCard({ match, isExpired, lockBetting = false }: Mat
         flexDirection: isMobile ? 'column' : 'row',
         alignItems: isMobile ? 'stretch' : 'center',
         gap: isMobile ? 12 : 16,
-        padding: '16px 20px',
+        // On mobile the absolute date/expired badges (top: 8) must not overlap
+        // the team shields: give the content enough top clearance below them.
+        padding: isMobile ? '40px 20px 16px' : '16px 20px',
         background: theme.tarjeta,
         borderRadius: 12,
         border: `1px solid ${theme.border}`,

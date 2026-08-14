@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useLogin, useRegister } from '../../hooks/use-auth';
 import { useAuthStore } from '../../stores/auth-store';
 import theme from '../../styles/theme';
+import { APP_VERSION } from '../../constants/app-version';
 
 type AuthTab = 'login' | 'register';
 
@@ -63,6 +64,9 @@ export default function LoginPage() {
 
       {/* Form */}
       {tab === 'login' ? <LoginForm /> : <RegisterForm />}
+
+      {/* Version label — outside the tab conditional, visible on both tabs */}
+      <p style={{ textAlign: 'center', color: theme.textoSecundario, fontSize: 12, marginTop: 24 }}>v{APP_VERSION}</p>
       </div>
     </div>
   );

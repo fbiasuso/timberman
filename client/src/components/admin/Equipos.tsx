@@ -477,7 +477,7 @@ function TeamForm({
         <button
           type="button"
           onClick={onDelete}
-          disabled={deletePending}
+          disabled={deletePending || isPending || uploading}
           style={{
             width: '100%',
             marginTop: 24,
@@ -488,8 +488,8 @@ function TeamForm({
             color: theme.blanco,
             fontSize: 14,
             fontWeight: 600,
-            cursor: deletePending ? 'not-allowed' : 'pointer',
-            opacity: deletePending ? 0.7 : 1,
+            cursor: (deletePending || isPending || uploading) ? 'not-allowed' : 'pointer',
+            opacity: (deletePending || isPending || uploading) ? 0.7 : 1,
           }}
         >
           {deletePending ? 'Eliminando...' : 'Eliminar equipo'}
@@ -636,17 +636,15 @@ function LeagueCard({ league, allLeagues }: { league: LeagueDTO; allLeagues: Lea
                       </div>
                     )}
                   </div>
-                  <div className="team-row-actions">
-                    <button
-                      type="button"
-                      style={smallBtn}
-                      onClick={() =>
-                        setEditingTeamId((id) => (id === team.id ? null : team.id))
-                      }
-                    >
-                      Editar
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    style={smallBtn}
+                    onClick={() =>
+                      setEditingTeamId((id) => (id === team.id ? null : team.id))
+                    }
+                  >
+                    Editar
+                  </button>
                 </div>
 
                 {editingTeamId === team.id && (
